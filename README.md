@@ -1,244 +1,71 @@
-# ECE-26.1-Winter-River
+# Winter River: Modular Data Center Simulation Platform
 
-IoT Environmental Monitoring System with MQTT and Grafana Visualization
+A hands-on educational tool that brings AWS data center infrastructure to life through physical hardware simulation.
 
 ## Overview
 
-ECE-26.1-Winter-River is a distributed environmental monitoring system that uses ESP32 microcontrollers to collect temperature, humidity, and other sensor data, transmits it via MQTT protocol to a Python-based broker running on a Raspberry Pi, and visualizes the data in real-time using Grafana dashboards.
+Winter River is a tabletop-scale modular simulation platform designed to teach data center infrastructure concepts through interactive hardware. Built for Seattle University's engineering lab, this system uses ESP32 microcontrollers as "nodes" representing different data center components (servers, PDUs, UPS units, cooling systems, generators) that communicate via MQTT protocol with a Raspberry Pi simulation engine.
+
+## Key Features
+
+- **Modular Architecture**: Plug-and-play components with USB-C connections and custom PCB baseplates
+- **Real-Time Visualization**: OLED displays on each node show live status and metrics
+- **MQTT Communication**: Industry-standard publish/subscribe messaging for scalable sensor networks
+- **Component-Specific Enclosures**: 3D-printed housings with unique shapes for easy identification
+- **Power Distribution Simulation**: Models real AWS data center power topology with dual-path redundancy
+- **Educational Focus**: Designed for student training and faculty demonstrations
 
 ## System Architecture
 
-```text
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   ESP32     │────▶│   MQTT      │────▶│  Grafana    │
-│  Sensors    │     │   Broker    │     │  Dashboard  │
-│  (Node 1-3) │     │ (Raspberry) │     │             │
-└─────────────┘     └─────────────┘     └─────────────┘
+```
+Utility Power → Transformers → Generators/UPS → PDUs → Server Racks
+                     ↓
+            Raspberry Pi (MQTT Broker)
+                     ↓
+    ESP32 Nodes (WiFi) ← → Simulation Engine
 ```
 
-### Components
+## Components
 
-- **ESP32 Nodes**: Three ESP32 microcontrollers equipped with DHT22/BME280 sensors
-- **MQTT Broker**: Custom Python broker with PostgreSQL storage running on Raspberry Pi
-- **Grafana**: Real-time data visualization with customizable dashboards
-- **CI/CD**: Automated testing and deployment via GitHub Actions
-
-## Features
-
-- Real-time environmental monitoring (temperature, humidity, pressure)
-- MQTT communication protocol for reliable data transmission
-- PostgreSQL database for historical data storage
-- Grafana dashboards with configurable alerts
-- Automatic service management with systemd
-- Remote deployment and updates via GitHub Actions
-
-## Quick Start
-
-### Prerequisites
-
-- Raspberry Pi (4 or newer recommended) with Raspberry Pi OS
-- 3x ESP32 development boards
-- DHT22 or BME280 sensors
-- WiFi network
-- Python 3.9+
-- Docker and Docker Compose (for Grafana)
-
-### Installation
-
-1. Clone the repository:
-
-```bash
-git clone https://github.com/yourusername/ECE-26.1-Winter-River.git
-cd ECE-26.1-Winter-River
-```
-
-2. Set up the Raspberry Pi broker:
-
-```bash
-cd scripts
-chmod +x setup_pi.sh
-./setup_pi.sh
-```
-
-3. Configure the ESP32 nodes:
-
-```bash
-cd esp/node1
-# Edit src/config.h with your WiFi credentials and broker IP
-pio run -t upload
-```
-
-4. Deploy Grafana:
-
-```bash
-cd grafana
-docker-compose up -d
-```
-
-5. Access Grafana at `http://raspberry-pi-ip:3000`
-   - Default credentials: `admin` / `admin`
+- **Hardware**: ESP32-WROOM-32 microcontrollers, OLED displays, Raspberry Pi 5, custom PCB baseplates
+- **Communication**: MQTT over WiFi
+- **Power**: USB-C connections, custom PCB power distribution
+- **Enclosures**: 3D-printed PLA housings
 
 ## Project Structure
 
-```text
-ECE-26.1-Winter-River/
-├── broker/              # Python MQTT broker
-│   ├── src/            # Source code
-│   ├── tests/          # Unit tests
-│   └── requirements.txt
-├── esp/                # ESP32 firmware
-│   ├── node1/          # Node 1 PlatformIO project
-│   ├── node2/          # Node 2 PlatformIO project
-│   └── node3/          # Node 3 PlatformIO project
-├── grafana/            # Grafana configuration
-│   ├── dashboards/     # Dashboard JSON files
-│   ├── provisioning/   # Data source configs
-│   └── docker-compose.yml
-├── deploy/             # Deployment configs
-│   └── broker.service  # systemd service file
-├── scripts/            # Setup and deployment scripts
-│   ├── setup_pi.sh     # Raspberry Pi setup
-│   └── deploy.sh       # Deployment script
-├── docs/               # Documentation
-│   ├── architecture.md # System architecture
-│   ├── deployment.md   # Deployment guide
-│   └── api.md          # API reference
-└── .github/            # CI/CD workflows
-    └── workflows/
-```
+- **Phase 1 (Fall 2025)**: Architecture design, MQTT infrastructure, initial prototyping
+- **Phase 2 (Winter 2026)**: Firmware development, PCB design, physical integration
+- **Phase 3 (Spring 2026)**: Full system assembly, simulation logic, testing and deployment
 
-## Configuration
+## Team
 
-### Broker Configuration
+**Seattle University ECE 26.1 Senior Capstone**
+- Leilani Gonzalez (CompE)
+- Ton Dam Lam/Adam (EE)
+- William McDonald (EE)
+- Ezekiel Mitchell (CompE)
+- Keshav Verma (EE)
 
-Edit `broker/config.yaml`:
+**Sponsor**: Amazon Web Services  
+**Liaison**: Eric Crompton, Senior Product Design Engineer  
+**Advisor**: Dr. Agnieszka Miguel, Seattle University ECE Department
 
-```yaml
-mqtt:
-  host: "0.0.0.0"
-  port: 1883
-database:
-  host: "localhost"
-  port: 5432
-  name: "sensor_data"
-```
+## Documentation
 
-### ESP32 Configuration
+- [Project Proposal](ECE_26_1_Proposal_Draft_2.pdf) - Comprehensive technical proposal
+- [AWS Sponsor Brief](AWS_WinterRiver.pdf) - Overview presentation
+- [Project Schedule](ECE_26_1_Schedule.pdf) - Development timeline
 
-Edit `esp/nodeX/src/config.h`:
+## Goals
 
-```cpp
-#define WIFI_SSID "YourWiFiSSID"
-#define WIFI_PASSWORD "YourPassword"
-#define MQTT_BROKER "192.168.1.100"
-#define MQTT_PORT 1883
-```
+Create an effective hands-on learning tool that makes complex data center infrastructure concepts tangible and interactive, supporting AWS infrastructure training and Seattle University engineering education.
 
-## Development
+## Status
 
-### Running Tests
+**Current Phase**: MQTT Infrastructure Development (Winter 2026)  
+**Target Deployment**: Spring Quarter 2026
 
-```bash
-cd broker
-python -m pytest tests/
-```
+---
 
-### Building ESP32 Firmware
-
-```bash
-cd esp/node1
-pio run
-```
-
-### Local Broker Development
-
-```bash
-cd broker
-pip install -r requirements.txt
-python src/main.py
-```
-
-## Deployment
-
-### Manual Deployment
-
-```bash
-./scripts/deploy.sh
-```
-
-### Automated Deployment
-
-Push to the `main` branch to trigger automatic deployment via GitHub Actions.
-
-## Monitoring
-
-### System Status
-
-Check broker service status:
-```bash
-sudo systemctl status mqtt-broker
-```
-
-View logs:
-```bash
-sudo journalctl -u mqtt-broker -f
-```
-
-### Grafana Dashboards
-
-Access dashboards at `http://raspberry-pi-ip:3000`:
-
-- **Overview**: System-wide metrics
-- **Node 1-3**: Individual node details
-- **Alerts**: Active alerts and notifications
-
-## Troubleshooting
-
-### Broker won't start
-
-```bash
-# Check logs
-sudo journalctl -u mqtt-broker -n 50
-
-# Verify Python dependencies
-cd broker
-pip install -r requirements.txt
-```
-
-### ESP32 connection issues
-
-1. Verify WiFi credentials in `config.h`
-2. Check broker IP address and port
-3. Monitor serial output: `pio device monitor`
-
-### Grafana data source connection
-
-1. Verify PostgreSQL is running: `sudo systemctl status postgresql`
-2. Check database credentials in Grafana data source settings
-3. Test connection from Grafana UI
-
-## Contributing
-
-Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- Built for ECE 26.1 course project
-- Inspired by modern IoT architectures
-- Thanks to the ESP-IDF and PlatformIO communities
-
-## Contact
-
-For questions or support, please open an issue on GitHub or contact the project maintainers.
-
-## Roadmap
-
-- [ ] Add support for additional sensor types
-- [ ] Implement OTA (Over-The-Air) firmware updates
-- [ ] Add mobile app for remote monitoring
-- [ ] Implement machine learning for anomaly detection
-- [ ] Add support for more ESP32 nodes (scalability)
+*Powered by AWS | Seattle University College of Science and Engineering*
