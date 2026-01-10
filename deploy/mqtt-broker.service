@@ -1,0 +1,31 @@
+[Unit]
+Description=MQTT Broker Management Service
+After=network.target mosquitto.service
+Requires=mosquitto.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/iot-mqtt-project
+Environment="PATH=/home/pi/iot-mqtt-project/venv/bin"
+ExecStart=/home/pi/iot-mqtt-project/venv/bin/python -m broker.main
+
+# Restart policy
+Restart=on-failure
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mqtt-broker-mgmt
+
+[Install]
+WantedBy=multi-user.target
+
+# Instructions:
+# 1. Update User, WorkingDirectory, and ExecStart paths to match your setup
+# 2. Copy this file to /etc/systemd/system/mqtt-broker.service
+# 3. Run: sudo systemctl daemon-reload
+# 4. Run: sudo systemctl enable mqtt-broker
+# 5. Run: sudo systemctl start mqtt-broker
+# 6. Check status: sudo systemctl status mqtt-broker

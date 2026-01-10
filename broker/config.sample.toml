@@ -1,0 +1,25 @@
+# Sample Configuration for MQTT Broker Management
+# Copy this file to config.toml (which is git-ignored) and customize
+
+[mqtt]
+broker_host = "localhost"
+broker_port = 1883
+# username = "your_mqtt_user"
+# password = "your_mqtt_password"
+keepalive = 60
+
+[topics]
+# Define your MQTT topic structure
+base_topic = "iot"
+node_prefix = "node"
+telemetry_suffix = "telemetry"
+command_suffix = "command"
+
+[logging]
+level = "INFO"
+format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# Instructions:
+# 1. Copy this file to broker/config.toml
+# 2. Update values according to your setup
+# 3. Never commit config.toml to version control

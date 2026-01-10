@@ -1,0 +1,131 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "InfluxDB-MQTT"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "fillOpacity": 80,
+            "gradientMode": "none"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {},
+      "title": "Active MQTT Connections",
+      "type": "timeseries",
+      "description": "TODO: Add Flux query to display active broker connections over time"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "InfluxDB-MQTT"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
+      },
+      "title": "Messages Published (Total)",
+      "type": "stat",
+      "description": "TODO: Add Flux query to count total published messages"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "InfluxDB-MQTT"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "title": "Message Throughput (msg/sec)",
+      "type": "timeseries",
+      "description": "TODO: Add Flux query to calculate message rate"
+    }
+  ],
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["mqtt", "broker", "mosquitto"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "MQTT Broker Overview",
+  "uid": "mqtt-broker-overview",
+  "version": 1,
+  "weekStart": "",
+  "description": "TODO: Implement complete dashboard with mosquitto metrics. Add panels for subscriptions, client list, topics, error rates."
+}
