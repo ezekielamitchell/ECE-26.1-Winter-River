@@ -1,0 +1,22 @@
+# Grafana Data Source Provisioning
+# Automatically configure InfluxDB data source on startup
+
+apiVersion: 1
+
+datasources:
+  - name: InfluxDB-MQTT
+    type: influxdb
+    access: proxy
+    url: http://influxdb:8086
+    jsonData:
+      version: Flux
+      organization: iot-project
+      defaultBucket: mqtt_metrics
+      tlsSkipVerify: true
+    secureJsonData:
+      token: my-super-secret-auth-token
+    isDefault: true
+    editable: true
+
+# TODO: Update token to match your InfluxDB setup
+# TODO: Add additional data sources if needed

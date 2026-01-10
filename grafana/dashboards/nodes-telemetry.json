@@ -1,0 +1,240 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": true,
+  "panels": [
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "InfluxDB-MQTT"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "id": 10,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        }
+      },
+      "title": "Node 01 - Status",
+      "type": "stat",
+      "description": "TODO: Add query filtering for node_id='node_01' status field"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "InfluxDB-MQTT"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
+      "id": 11,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        }
+      },
+      "title": "Node 02 - Status",
+      "type": "stat",
+      "description": "TODO: Add query filtering for node_id='node_02' status field"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "InfluxDB-MQTT"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "id": 12,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        }
+      },
+      "title": "Node 03 - Status",
+      "type": "stat",
+      "description": "TODO: Add query filtering for node_id='node_03' status field"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "InfluxDB-MQTT"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 6
+      },
+      "id": 20,
+      "title": "Node 01 - Sensor Data",
+      "type": "timeseries",
+      "description": "TODO: Add Flux query for node_01 telemetry (temperature, humidity, etc.)"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "InfluxDB-MQTT"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 6
+      },
+      "id": 21,
+      "title": "Node 02 - Sensor Data",
+      "type": "timeseries",
+      "description": "TODO: Add Flux query for node_02 telemetry"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "InfluxDB-MQTT"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 6
+      },
+      "id": 22,
+      "title": "Node 03 - Sensor Data",
+      "type": "timeseries",
+      "description": "TODO: Add Flux query for node_03 telemetry"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "InfluxDB-MQTT"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 14
+      },
+      "id": 30,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        }
+      },
+      "title": "Node 01 - WiFi RSSI",
+      "type": "gauge",
+      "description": "TODO: Add query for WiFi signal strength (RSSI) for node_01"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "InfluxDB-MQTT"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 8,
+        "y": 14
+      },
+      "id": 31,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        }
+      },
+      "title": "Node 02 - WiFi RSSI",
+      "type": "gauge",
+      "description": "TODO: Add query for WiFi signal strength (RSSI) for node_02"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "InfluxDB-MQTT"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 14
+      },
+      "id": 32,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        }
+      },
+      "title": "Node 03 - WiFi RSSI",
+      "type": "gauge",
+      "description": "TODO: Add query for WiFi signal strength (RSSI) for node_03"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["mqtt", "esp32", "nodes", "telemetry"],
+  "templating": {
+    "list": [
+      {
+        "name": "node_id",
+        "type": "custom",
+        "options": [
+          {"text": "Node 01", "value": "node_01"},
+          {"text": "Node 02", "value": "node_02"},
+          {"text": "Node 03", "value": "node_03"}
+        ],
+        "description": "TODO: Extend this list for scaling to more nodes (up to 20)"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "ESP32 Nodes Telemetry",
+  "uid": "esp32-nodes-telemetry",
+  "version": 1,
+  "weekStart": "",
+  "description": "TODO: Complete dashboard for 3 ESP32 nodes. Add uptime, error counts, message latency panels. Implement panel repeating for scaling to 20 nodes."
+}
