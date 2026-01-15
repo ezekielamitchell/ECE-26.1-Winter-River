@@ -1,3 +1,3 @@
 # Table of contents
 
-* [Page](README.md)
+* [ECE 26.1 Winter River](README.md)
