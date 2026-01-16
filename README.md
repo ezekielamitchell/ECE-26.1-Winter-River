@@ -1,5 +1,18 @@
 ---
-description: A Modular Data Center Design, Seattle University class of 2026
+layout:
+  width: wide
+  title:
+    visible: true
+  description:
+    visible: false
+  tableOfContents:
+    visible: true
+  outline:
+    visible: true
+  pagination:
+    visible: true
+  metadata:
+    visible: true
 ---
 
 # ECE 26.1 Winter River
@@ -8,7 +21,7 @@ description: A Modular Data Center Design, Seattle University class of 2026
 
 <p align="center"><strong>Seattle University - College of Science and Engineering</strong><br>sponsored by:<br><strong>Amazon Web Services (AWS)</strong></p>
 
-<p align="center">Leilani Gonzalez, Ton Dam Lam (Adam), William McDonald, Ezekiel A. Mitchell, Keshav Verma<br>{lgonzalez1, tlam, wmcdonald, emitchell4, kverma1}@seattleu.edu</p>
+<p align="center">Team: Leilani Gonzalez, Ton Dam Lam (Adam), William McDonald, Ezekiel A. Mitchell, Keshav Verma<br>{lgonzalez1, tlam, wmcdonald, emitchell4, kverma1}@seattleu.edu</p>
 
 <p align="center"><a href="https://github.com/ezekielamitchell/GUARDEN/blob/main/LICENSE/README.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a> <a href="https://www.espressif.com/en/products/socs/esp32-c3"><img src="https://img.shields.io/badge/platform-ESP32--C3-green.svg" alt="Platform"></a> <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.8+-blue.svg" alt="Python"></a></p>
 
