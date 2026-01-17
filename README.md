@@ -1,21 +1,5 @@
----
-layout:
-  width: default
-  title:
-    visible: true
-  description:
-    visible: true
-  tableOfContents:
-    visible: false
-  outline:
-    visible: true
-  pagination:
-    visible: true
-  metadata:
-    visible: true
----
 
-# ECE 26.1 Winter River
+# <div align="center" data-with-frame="true">ECE 26.1 Winter River</div>
 
 <div align="center" data-with-frame="true"><figure><picture><source srcset=".gitbook/assets/WR_1_B.png" media="(prefers-color-scheme: dark)"><img src=".gitbook/assets/WR_1.png" alt=""></picture><figcaption><p>image [1] logo</p></figcaption></figure></div>
 
