@@ -54,7 +54,18 @@ By combining physical modularity (plug-and-play components on a custom PCB basep
 
 ## Technical Specifications
 
-<table data-full-width="true"><thead><tr><th>Component</th><th>Specification</th><th>Performance</th><th>Power</th></tr></thead><tbody><tr><td><strong>Processor</strong></td><td></td><td></td><td></td></tr><tr><td><strong>Camera</strong></td><td></td><td></td><td></td></tr><tr><td><strong>AI Model</strong></td><td></td><td></td><td></td></tr><tr><td><strong>Motion Sensor</strong></td><td></td><td></td><td></td></tr><tr><td><strong>Sleep Mode</strong></td><td></td><td></td><td></td></tr><tr><td><strong>Connectivity</strong></td><td></td><td></td><td></td></tr><tr><td><strong>Storage</strong></td><td></td><td></td><td></td></tr><tr><td><strong>Power</strong></td><td></td><td></td><td></td></tr></tbody></table>
+| Component              | Specification                  | Details                                                                         |
+| ---------------------- | ------------------------------ | ------------------------------------------------------------------------------- |
+| Microcontroller        | ESP-32 Development Board USB-C | Dual-core, WiFi/BLE, integrated OLED display interface                          |
+| Central Controller     | Raspberry Pi 5                 | Simulation engine, Mosquitto MQTT broker, system-wide calculations              |
+| Communication Protocol | MQTT Publish-Subscribe         | Industry-standard, scalable, low-bandwidth IoT communication                    |
+| Display                | OLED per component             | Real-time operational parameters (voltage, current, power, temperature, status) |
+| PCB Architecture       | Custom modular baseplate       | USB-C connectors at each node, plug-and-play components                         |
+| Power Topology         | 2N Redundancy                  | OCP Open Rack V3 specifications, dual power paths                               |
+| Component Types        | 15-20 modules (stretch 30)     | Generators, transformers, switchgear, UPS units, PDUs, server racks             |
+| Simulation Features    | Real-time system states        | Power flow, thermal modeling, failure propagation, hot-swap detection           |
+| Development Platform   | PlatformIO + Python            | ESP32 firmware, Raspberry Pi controller scripts, GitHub CI/CD                   |
+| Visualization          | Grafana Dashboard              | Real-time metrics, system topology view, historical data analysis               |
 
 ***
 
