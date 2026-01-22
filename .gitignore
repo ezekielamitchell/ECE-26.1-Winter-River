@@ -88,3 +88,6 @@ config/secrets.yaml
 # Backup files
 *.bak
 *.backup
+
+# Agents
+*.claude/
