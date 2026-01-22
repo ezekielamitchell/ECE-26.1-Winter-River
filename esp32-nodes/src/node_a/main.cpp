@@ -16,6 +16,10 @@ const char *mqtt_server = "10.0.0.75"; // change to broker ip
 WiFiClient espClient;
 PubSubClient mqtt(espClient);
 
+// ** Voltage Read
+const int ADC_PIN = 34;
+
+
 // ** LCD Init (16 columns, 2 rows, I2C address 0x27 - try 0x3F if this doesn't work)
 LiquidCrystal_I2C lcd(0x3F, 16, 2);
 int message_count = 0;
@@ -23,6 +27,9 @@ int message_count = 0;
 void setup() {
   Serial.begin(115200);
   WiFi.begin(ssid, password);
+
+  adcAttachPin(ADC_PIN); // Configure ADC pin, default is ADC_11b (0-3.3V)
+  analogSetPinAttenuation(ADC_PIN, ADC_11db); // *ESP32
 
   // Initialize LCD
   lcd.init();
@@ -55,17 +62,28 @@ void loop() {
       return;
     }
   }
+
+  // Average multiple readings to reduce noise
+  long sum = 0;
+  for (int i = 0; i < 64; i++) {
+    sum += analogRead(ADC_PIN);
+  }
+  int esp_raw_value = sum / 64;
+  double voltage = esp_raw_value * (3.3 / 4095.0);
+
   
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print("Node: A | ct: ");
-  lcd.print(message_count);
+  lcd.print("Node: A | ");
+  lcd.print(voltage);
+  lcd.print("V");
   message_count++;
   lcd.setCursor(0, 1);
+  lcd.print("IP: ");
   lcd.print(WiFi.localIP());
 
   mqtt.loop();
   mqtt.publish("winter-river", "MQTT Relay Successful: NodeA");
   Serial.println("Message sent");
-  delay(5000);
+  delay(1000);
 }
