@@ -5,7 +5,7 @@
 #include <LiquidCrystal_I2C.h>
 
 // ** NODE
-const char *node_id = "pdu_a";
+const char *node_id = "pdu_b";
 const int voltage_rating = 480;
 
 

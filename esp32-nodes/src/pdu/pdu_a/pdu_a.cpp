@@ -5,21 +5,18 @@
 #include <LiquidCrystal_I2C.h>
 
 // ** NODE
-const char *node_id = "transformer_a";
-const int voltage_rating = 480;
-
+const char *node_id = "pdu_a";
+const int voltage_rating = 480;// volts
 
 // ** NETWORK
 const char *ssid = "endr";       // change to local wifi ssid
 const char *password = "SeattleUniversity01$$"; // change to local wifi pass
+
+// ** MQTT BROKER
 const char *mqtt_server = "10.0.0.75"; // change to broker ip
 
 WiFiClient espClient;
 PubSubClient mqtt(espClient);
-
-// ** Voltage Read
-const int ADC_PIN = 34;
-
 
 // ** LCD Init (16 columns, 2 rows, I2C address 0x27 - try 0x3F if this doesn't work)
 LiquidCrystal_I2C lcd(0x3F, 16, 2);
@@ -28,9 +25,6 @@ int message_count = 0;
 void setup() {
   Serial.begin(115200);
   WiFi.begin(ssid, password);
-
-  adcAttachPin(ADC_PIN); // Configure ADC pin, default is ADC_11b (0-3.3V)
-  analogSetPinAttenuation(ADC_PIN, ADC_11db); // *ESP32
 
   // Initialize LCD
   lcd.init();
@@ -64,15 +58,6 @@ void loop() {
       return;
     }
   }
-
-  // Average multiple readings to reduce noise
-  long sum = 0;
-  for (int i = 0; i < 64; i++) {
-    sum += analogRead(ADC_PIN);
-  }
-  int esp_raw_value = sum / 64;
-  double voltage = esp_raw_value * (3.3 / 4095.0);
-
   
   lcd.clear();
   lcd.setCursor(0, 0);

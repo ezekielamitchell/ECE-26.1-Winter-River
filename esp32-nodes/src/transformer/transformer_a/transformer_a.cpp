@@ -5,7 +5,7 @@
 #include <LiquidCrystal_I2C.h>
 
 // ** NODE
-const char *node_id = "server";
+const char *node_id = "transformer_a";
 const int voltage_rating = 480;// volts
 
 // ** NETWORK
