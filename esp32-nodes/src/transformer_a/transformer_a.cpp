@@ -5,7 +5,8 @@
 #include <LiquidCrystal_I2C.h>
 
 // ** NODE
-const char *node_id = "A";
+const char *node_id = "transformer_a";
+const int voltage_rating = 480;
 
 
 // ** NETWORK
@@ -44,7 +45,8 @@ void setup() {
 
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print("NODE_A Connected");
+  lcd.print(node_id);
+  lcd.print(" OK");
 
   Serial.println("\nWiFi connected");
 
@@ -54,7 +56,7 @@ void setup() {
 void loop() {
   if (!mqtt.connected()) {
     Serial.print("MQTT connecting...");
-    if (mqtt.connect("ESP32")) {
+    if (mqtt.connect(node_id)) {
       Serial.println("connected");
     } else {
       Serial.println("failed");
@@ -74,16 +76,16 @@ void loop() {
   
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print("Node: A | ");
-  lcd.print(voltage);
-  lcd.print("V");
+  lcd.print(node_id);
   message_count++;
   lcd.setCursor(0, 1);
-  lcd.print("IP: ");
   lcd.print(WiFi.localIP());
+  lcd.print(" ");
+  lcd.print(voltage_rating);
 
   mqtt.loop();
-  mqtt.publish("winter-river", "MQTT Relay Successful: NodeA");
+  String msg = String("MQTT Relay Successful: ") + node_id;
+  mqtt.publish("winter-river", msg.c_str());
   Serial.println("Message sent");
   delay(1000);
 }
