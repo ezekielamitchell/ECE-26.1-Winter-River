@@ -9,10 +9,18 @@
 const char *node_id = "transformer_a";
 const int voltage_rating = 480;// volts
 
-// ** NETWORK (WPA2-Enterprise)
-const char *ssid = "SU-secure";
-const char *eap_username = "emitchell4";
-const char *eap_password = "EndrCompany0702$$";
+// ** NETWORK CONFIG
+// Set to true for SU-SECURE (WPA2-Enterprise), false for iPhone hotspot (WPA2-Personal)
+#define USE_ENTERPRISE_WIFI false
+
+#if USE_ENTERPRISE_WIFI
+  const char *ssid = "SU-secure";
+  const char *eap_username = "emitchell4";
+  const char *eap_password = "EndrCompany0702$$";
+#else
+  const char *ssid = "Ezekiel's iPhone";
+  const char *wifi_password = "01082022";
+#endif
 
 // ** MQTT BROKER
 const char *mqtt_server = "10.0.0.75"; // change to broker ip
@@ -33,14 +41,21 @@ void setup() {
   lcd.setCursor(0, 0);
   lcd.print("Connecting...");
 
-  // WPA2-Enterprise setup
+  // WiFi setup
   WiFi.disconnect(true);
   WiFi.mode(WIFI_STA);
+
+#if USE_ENTERPRISE_WIFI
+  // WPA2-Enterprise (SU-SECURE)
   esp_wifi_sta_wpa2_ent_set_identity((uint8_t *)eap_username, strlen(eap_username));
   esp_wifi_sta_wpa2_ent_set_username((uint8_t *)eap_username, strlen(eap_username));
   esp_wifi_sta_wpa2_ent_set_password((uint8_t *)eap_password, strlen(eap_password));
   esp_wifi_sta_wpa2_ent_enable();
   WiFi.begin(ssid);
+#else
+  // WPA2-Personal (iPhone hotspot)
+  WiFi.begin(ssid, wifi_password);
+#endif
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
