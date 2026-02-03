@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <PubSubClient.h>
 #include <WiFi.h>
+#include <esp_wpa2.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
@@ -8,9 +9,10 @@
 const char *node_id = "transformer_a";
 const int voltage_rating = 480;// volts
 
-// ** NETWORK
-const char *ssid = "endr";       // change to local wifi ssid
-const char *password = "SeattleUniversity01$$"; // change to local wifi pass
+// ** NETWORK (WPA2-Enterprise)
+const char *ssid = "SU-secure";
+const char *eap_username = "emitchell4";
+const char *eap_password = "EndrCompany0702$$";
 
 // ** MQTT BROKER
 const char *mqtt_server = "10.0.0.75"; // change to broker ip
@@ -24,13 +26,21 @@ int message_count = 0;
 
 void setup() {
   Serial.begin(115200);
-  WiFi.begin(ssid, password);
 
   // Initialize LCD
   lcd.init();
   lcd.backlight();
   lcd.setCursor(0, 0);
   lcd.print("Connecting...");
+
+  // WPA2-Enterprise setup
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_STA);
+  esp_wifi_sta_wpa2_ent_set_identity((uint8_t *)eap_username, strlen(eap_username));
+  esp_wifi_sta_wpa2_ent_set_username((uint8_t *)eap_username, strlen(eap_username));
+  esp_wifi_sta_wpa2_ent_set_password((uint8_t *)eap_password, strlen(eap_password));
+  esp_wifi_sta_wpa2_ent_enable();
+  WiFi.begin(ssid);
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
