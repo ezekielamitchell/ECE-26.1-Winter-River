@@ -4,7 +4,7 @@ ESP32 node simulating Power Distribution Unit B.
 
 ## Features
 - Publishes status to MQTT broker
-- Downstream of transformer_a
+- Downstream of transformer_b
 
 ## Build
 ```bash
