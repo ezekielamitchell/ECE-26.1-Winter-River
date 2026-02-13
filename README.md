@@ -67,41 +67,54 @@ By combining physical modularity (plug-and-play components on a custom PCB basep
 
 ```md
 ECE-26.1-Winter-River/
-├── .github/
-│   └── workflows/
-│       └── ci.yml                    # CI/CD pipeline
+├── .github/workflows/
+│   └── ci.yml                         # CI/CD pipeline
 ├── broker/
-│   ├── __init__.py                    # Python package init
-│   ├── config.sample.toml             # Configuration template
-│   ├── main.py                        # MQTT broker main entry
+│   ├── main.py                        # MQTT broker entry point
+│   ├── config.sample.toml             # Config template
 │   ├── pyproject.toml                 # Python project config
-│   ├── requirements-dev.txt           # Development dependencies
-│   ├── requirements.txt               # Production dependencies
-│   └── README.md                      # Broker documentation
+│   ├── requirements.txt               # Production deps
+│   ├── requirements-dev.txt           # Dev deps
+│   └── README.md
 ├── deploy/
-│   ├── mosquitto_setup.sh             # Mosquitto MQTT setup script
-│   └── mqtt-broker.service            # Systemd service file
+│   ├── mosquitto_setup.sh             # Mosquitto install/config
+│   └── mqtt-broker.service            # Systemd service
 ├── docs/
-│   ├── architecture.md                # System architecture docs
-│   └── deployment.md                  # Deployment guide
+│   ├── architecture.md
+│   └── deployment.md
 ├── esp32-nodes/
-│   ├── include/                       # Header files
-│   ├── src/                           # ESP32 source code
-│   ├── test/                          # Unit tests
-│   ├── .gitignore                     # Git ignore for ESP32
-│   └── platformio.ini                 # PlatformIO configuration
+│   ├── src/
+│   │   ├── transformer/
+│   │   │   └── transformer_a/
+│   │   │       └── transformer_a.cpp  # Transformer node (LWT, MQTT, OLED)
+│   │   ├── pdu/
+│   │   │   ├── pdu_a/pdu_a.cpp        # PDU A node
+│   │   │   └── pdu_b/pdu_b.cpp        # PDU B node
+│   │   └── server/
+│   │       └── server.cpp             # Server rack node
+│   ├── test/
+│   │   └── wifi_connection_test.cpp
+│   ├── platformio.ini                 # Multi-env PlatformIO config
+│   ├── TROUBLESHOOTING.md
+│   └── README.md                      # MQTT + LWT node guide
 ├── grafana/
-│   ├── dashboards/                    # Grafana dashboard definitions
-│   ├── provisioning/                  # Auto-provisioning configs
-│   ├── .env.sample                    # Environment variables template
-│   ├── docker-compose.yml             # Grafana + data source containers
-│   ├── grafana.ini                    # Grafana configuration
-│   ├── telegraf.conf                  # Telegraf metrics collector
-│   └── README.md                      # Grafana setup documentation
+│   ├── dashboards/
+│   │   ├── broker-overview.json
+│   │   └── nodes-telemetry.json
+│   ├── provisioning/
+│   │   ├── dashboards/dashboard.yml
+│   │   └── datasources/datasource.yml
+│   ├── docker-compose.yml             # Grafana + Telegraf stack
+│   ├── grafana.ini
+│   ├── telegraf.conf                  # MQTT → InfluxDB bridge
+│   ├── .env.sample
+│   └── README.md
 ├── scripts/
-│   └── setup_pi.sh                    # Raspberry Pi setup script
-├── .gitignore                         # Root git ignore
-├── CONTRIBUTING.md                    # Contribution guidelines
-├── LICENSE                            # MIT license
-└── README.md                          # Project overview
+│   ├── setup_pi.sh                    # Raspberry Pi bootstrap
+│   └── init_db.sql                    # Database schema
+├── config.toml                        # Global project config
+├── CONTRIBUTING.md
+├── SUMMARY.md
+├── LICENSE
+└── README.md
 ```
