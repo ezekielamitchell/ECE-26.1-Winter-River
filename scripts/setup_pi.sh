@@ -14,7 +14,8 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-PROJECT_DIR="/home/pi/ECE-26.1-Winter-River"
+ACTUAL_USER="${SUDO_USER:-pi}"
+PROJECT_DIR="/home/$ACTUAL_USER/ECE-26.1-Winter-River"
 
 # Update system packages
 echo "Updating system packages..."
@@ -24,11 +25,7 @@ apt update && apt upgrade -y
 echo "Installing system dependencies..."
 apt install -y git python3 python3-pip python3-venv \
     mosquitto mosquitto-clients \
-    docker.io docker-compose \
     ntpdate ntp
-
-# Add pi user to docker group
-usermod -aG docker pi
 
 # Verify project directory exists
 if [ ! -d "$PROJECT_DIR" ]; then
@@ -76,21 +73,13 @@ systemctl restart ntp || systemctl restart ntpd || true
 # Set up systemd service for broker management
 echo "Setting up systemd service..."
 # Update the service file paths to match this installation
-sed "s|/home/pi/iot-mqtt-project|$PROJECT_DIR|g" \
+sed -e "s|/home/pi/ECE-26.1-Winter-River|$PROJECT_DIR|g" \
+    -e "s|User=pi|User=$ACTUAL_USER|g" \
     "$PROJECT_DIR/deploy/mqtt-broker.service" \
     > /etc/systemd/system/mqtt-broker.service
 systemctl daemon-reload
 systemctl enable mqtt-broker
 systemctl start mqtt-broker
-
-# Set up Grafana stack (optional — requires Docker)
-echo "Setting up Grafana stack..."
-if [ -f "$PROJECT_DIR/grafana/.env.sample" ] && [ ! -f "$PROJECT_DIR/grafana/.env" ]; then
-    cp "$PROJECT_DIR/grafana/.env.sample" "$PROJECT_DIR/grafana/.env"
-    echo "grafana/.env created from sample — edit credentials before use"
-fi
-cd "$PROJECT_DIR/grafana"
-docker-compose up -d || echo "WARNING: Grafana stack failed to start — check grafana/.env"
 
 echo ""
 echo "========================================="
@@ -105,6 +94,5 @@ systemctl is-active ntp         && echo "  ntp:           RUNNING" || \
 echo ""
 echo "Hotspot: SSID=WinterRiver-AP  Password=winterriver  Gateway=192.168.4.1"
 echo "MQTT broker listening on 192.168.4.1:1883"
-echo "Grafana: http://$(hostname -I | awk '{print $1}'):3000"
 echo ""
 echo "Next: Flash ESP32 nodes with PlatformIO, then power them on."
