@@ -89,12 +89,27 @@ void setup() {
   display.println("Connecting...");
   display.display();
 
-  // WiFi setup
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_STA);
+  // WiFi setup — full radio reset before connecting
+  WiFi.mode(WIFI_OFF);       // power down radio
+  delay(100);                // let it settle
+  WiFi.mode(WIFI_STA);       // back to station mode
+  WiFi.disconnect(true);     // clear any cached credentials
+  delay(100);
   WiFi.begin(ssid, wifi_password);
 
+  unsigned long wifi_start = millis();
   while (WiFi.status() != WL_CONNECTED) {
+    if (millis() - wifi_start > 15000) {  // 15 s timeout
+      Serial.println("\nWiFi failed (status=" + String(WiFi.status()) + ") — restarting in 3 s");
+      display.clearDisplay();
+      display.setCursor(0, 0);
+      display.println("WiFi FAILED");
+      display.println("status=" + String(WiFi.status()));
+      display.println("Restarting...");
+      display.display();
+      delay(3000);
+      ESP.restart();
+    }
     delay(500);
     Serial.print(".");
   }
@@ -102,10 +117,10 @@ void setup() {
   display.clearDisplay();
   display.setCursor(0, 0);
   display.println(node_id);
-  display.println("OK");
+  display.println("WiFi OK");
   display.display();
 
-  Serial.println("\nWiFi connected");
+  Serial.println("\nWiFi connected: " + WiFi.localIP().toString());
 
   // Sync time with NTP server
   configTime(gmt_offset_sec, daylight_offset_sec, ntp_server);

@@ -27,6 +27,13 @@ int message_count = 0;
 
 void setup() {
   Serial.begin(115200);
+
+  // WiFi setup — full radio reset before connecting
+  WiFi.mode(WIFI_OFF);       // power down radio
+  delay(100);                // let it settle
+  WiFi.mode(WIFI_STA);       // back to station mode
+  WiFi.disconnect(true);     // clear any cached credentials
+  delay(100);
   WiFi.begin(ssid, password);
 
   adcAttachPin(ADC_PIN); // Configure ADC pin, default is ADC_11b (0-3.3V)
@@ -38,7 +45,18 @@ void setup() {
   lcd.setCursor(0, 0);
   lcd.print("Connecting...");
 
+  unsigned long wifi_start = millis();
   while (WiFi.status() != WL_CONNECTED) {
+    if (millis() - wifi_start > 15000) {  // 15 s timeout
+      Serial.println("\nWiFi failed (status=" + String(WiFi.status()) + ") — restarting in 3 s");
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("WiFi FAILED");
+      lcd.setCursor(0, 1);
+      lcd.print("status=" + String(WiFi.status()));
+      delay(3000);
+      ESP.restart();
+    }
     delay(500);
     Serial.print(".");
   }
@@ -48,7 +66,7 @@ void setup() {
   lcd.print(node_id);
   lcd.print(" OK");
 
-  Serial.println("\nWiFi connected");
+  Serial.println("\nWiFi connected: " + WiFi.localIP().toString());
 
   mqtt.setServer(mqtt_server, 1883);
 }
