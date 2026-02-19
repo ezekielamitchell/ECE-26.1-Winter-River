@@ -2,7 +2,7 @@
 # Raspberry Pi Initial Setup Script
 # Sets up the complete IoT system on Raspberry Pi
 
-set -e  # Exit on error
+set -euo pipefail
 
 echo "========================================="
 echo "Raspberry Pi IoT System Setup"
@@ -14,69 +14,97 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# TODO: Update system packages
+PROJECT_DIR="/home/pi/ECE-26.1-Winter-River"
+
+# Update system packages
 echo "Updating system packages..."
-# apt update && apt upgrade -y
+apt update && apt upgrade -y
 
-# TODO: Install system dependencies
+# Install system dependencies
 echo "Installing system dependencies..."
-# apt install -y git python3 python3-pip python3-venv \
-#     mosquitto mosquitto-clients \
-#     docker.io docker-compose
+apt install -y git python3 python3-pip python3-venv \
+    mosquitto mosquitto-clients \
+    docker.io docker-compose \
+    ntpdate ntp
 
-# TODO: Add user to docker group
-# usermod -aG docker pi
+# Add pi user to docker group
+usermod -aG docker pi
 
-# TODO: Set up project directory
-echo "Setting up project directory..."
-# PROJECT_DIR="/home/pi/iot-mqtt-project"
-# if [ ! -d "$PROJECT_DIR" ]; then
-#     echo "Please clone the repository to $PROJECT_DIR first"
-#     exit 1
-# fi
+# Verify project directory exists
+if [ ! -d "$PROJECT_DIR" ]; then
+    echo "ERROR: Project directory not found at $PROJECT_DIR"
+    echo "Please clone the repository first:"
+    echo "  git clone <repo-url> $PROJECT_DIR"
+    exit 1
+fi
 
-# TODO: Set up Python virtual environment
+# Set up Python virtual environment
 echo "Setting up Python virtual environment..."
-# cd "$PROJECT_DIR"
-# python3 -m venv venv
-# source venv/bin/activate
-# pip install -r requirements.txt
-# pip install -r requirements-dev.txt
+cd "$PROJECT_DIR"
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r broker/requirements.txt
 
-# TODO: Configure broker
+# Configure broker
 echo "Configuring MQTT broker..."
-# cd "$PROJECT_DIR/broker"
-# cp config.sample.toml config.toml
-# echo "Please edit broker/config.toml with your settings"
+if [ ! -f "$PROJECT_DIR/broker/config.toml" ]; then
+    cp "$PROJECT_DIR/broker/config.sample.toml" "$PROJECT_DIR/broker/config.toml"
+    echo "broker/config.toml created from sample — review if needed"
+fi
 
-# TODO: Run mosquitto setup
+# Run mosquitto setup
 echo "Setting up mosquitto broker..."
-# cd "$PROJECT_DIR/deploy"
-# chmod +x mosquitto_setup.sh
-# ./mosquitto_setup.sh
+cd "$PROJECT_DIR/deploy"
+chmod +x mosquitto_setup.sh
+./mosquitto_setup.sh
 
-# TODO: Set up Grafana stack
+# Set up WiFi hotspot
+echo "Setting up WiFi hotspot..."
+cd "$PROJECT_DIR/scripts"
+chmod +x setup_hotspot.sh
+./setup_hotspot.sh start
+
+# Configure NTP server so ESP32 nodes can sync time from the Pi
+echo "Configuring NTP server..."
+# Allow LAN clients (192.168.4.0/24) to query the Pi's NTP service
+if ! grep -q "192.168.4.0" /etc/ntp.conf 2>/dev/null; then
+    echo "restrict 192.168.4.0 mask 255.255.255.0 nomodify notrap" >> /etc/ntp.conf
+fi
+systemctl restart ntp || systemctl restart ntpd || true
+
+# Set up systemd service for broker management
+echo "Setting up systemd service..."
+# Update the service file paths to match this installation
+sed "s|/home/pi/iot-mqtt-project|$PROJECT_DIR|g" \
+    "$PROJECT_DIR/deploy/mqtt-broker.service" \
+    > /etc/systemd/system/mqtt-broker.service
+systemctl daemon-reload
+systemctl enable mqtt-broker
+systemctl start mqtt-broker
+
+# Set up Grafana stack (optional — requires Docker)
 echo "Setting up Grafana stack..."
-# cd "$PROJECT_DIR/grafana"
-# cp .env.sample .env
-# echo "Please edit grafana/.env with your settings"
-# docker-compose up -d
-
-# TODO: Set up systemd service (optional)
-# cp "$PROJECT_DIR/deploy/mqtt-broker.service" /etc/systemd/system/
-# systemctl daemon-reload
-# systemctl enable mqtt-broker
-# systemctl start mqtt-broker
+if [ -f "$PROJECT_DIR/grafana/.env.sample" ] && [ ! -f "$PROJECT_DIR/grafana/.env" ]; then
+    cp "$PROJECT_DIR/grafana/.env.sample" "$PROJECT_DIR/grafana/.env"
+    echo "grafana/.env created from sample — edit credentials before use"
+fi
+cd "$PROJECT_DIR/grafana"
+docker-compose up -d || echo "WARNING: Grafana stack failed to start — check grafana/.env"
 
 echo ""
 echo "========================================="
-echo "Setup Script Complete!"
+echo "Setup Complete!"
 echo "========================================="
-echo "TODO: Uncomment and implement the setup steps above"
 echo ""
-echo "Next steps:"
-echo "1. Edit broker/config.toml with your MQTT settings"
-echo "2. Edit grafana/.env with your credentials"
-echo "3. Configure ESP32 nodes with WiFi and broker IP"
-echo "4. Deploy ESP32 firmware using PlatformIO"
-echo "5. Access Grafana at http://$(hostname -I | awk '{print $1}'):3000"
+echo "Services status:"
+systemctl is-active mosquitto   && echo "  mosquitto:     RUNNING" || echo "  mosquitto:     STOPPED"
+systemctl is-active mqtt-broker && echo "  mqtt-broker:   RUNNING" || echo "  mqtt-broker:   STOPPED"
+systemctl is-active ntp         && echo "  ntp:           RUNNING" || \
+    (systemctl is-active ntpd   && echo "  ntpd:          RUNNING" || echo "  ntp:           STOPPED")
+echo ""
+echo "Hotspot: SSID=WinterRiver-AP  Password=winterriver  Gateway=192.168.4.1"
+echo "MQTT broker listening on 192.168.4.1:1883"
+echo "Grafana: http://$(hostname -I | awk '{print $1}'):3000"
+echo ""
+echo "Next: Flash ESP32 nodes with PlatformIO, then power them on."

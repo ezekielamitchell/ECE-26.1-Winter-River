@@ -25,7 +25,7 @@ const char *wifi_password = "winterriver";
 const char *mqtt_server = "192.168.4.1"; // Pi hotspot gateway
 
 // ** NTP CONFIG
-const char* ntp_server = "pool.ntp.org";
+const char* ntp_server = "192.168.4.1";  // Pi acts as local NTP server
 const long gmt_offset_sec = -28800;  // PST = UTC-8 (adjust for your timezone)
 const int daylight_offset_sec = 3600; // DST offset
 
@@ -111,11 +111,17 @@ void setup() {
   configTime(gmt_offset_sec, daylight_offset_sec, ntp_server);
   Serial.println("Waiting for NTP time sync...");
   struct tm timeinfo;
-  while (!getLocalTime(&timeinfo)) {
+  int ntp_retries = 0;
+  while (!getLocalTime(&timeinfo) && ntp_retries < 10) {
     delay(500);
     Serial.print(".");
+    ntp_retries++;
   }
-  Serial.println("\nTime synced: " + getTimestamp());
+  if (ntp_retries >= 10) {
+    Serial.println("\nNTP sync failed, continuing without time");
+  } else {
+    Serial.println("\nTime synced: " + getTimestamp());
+  }
 
   mqtt.setServer(mqtt_server, 1883);
   mqtt.setCallback(mqttCallback);
@@ -125,8 +131,7 @@ void loop() {
   if (!mqtt.connected()) {
     Serial.print("MQTT connecting...");
     // Last Will and Testament - broker publishes this if node disconnects unexpectedly
-    // String lwt_topic = String("winter-river/") + node_id + "/status";
-    String lwt_topic = "test/topic";
+    String lwt_topic = String("winter-river/") + node_id + "/status";
     String lwt_message = String("{\"node\":\"") + node_id + "\",\"status\":\"OFFLINE\"}";
     if (mqtt.connect(node_id, lwt_topic.c_str(), 1, true, lwt_message.c_str())) {
       Serial.println("connected");
@@ -136,8 +141,7 @@ void loop() {
       mqtt.publish(lwt_topic.c_str(), online_msg.c_str(), true);  // retained
 
       // Subscribe to control topic for this node
-      // String control_topic = String("winter-river/") + node_id + "/control";
-      String control_topic = "test/topic";
+      String control_topic = String("winter-river/") + node_id + "/control";
       mqtt.subscribe(control_topic.c_str());
       Serial.print("Subscribed to: ");
       Serial.println(control_topic);
@@ -190,8 +194,7 @@ void loop() {
   mqtt.loop();
 
   // Publish status JSON to telemetry topic
-  // String status_topic = String("winter-river/") + node_id + "/status";
-  String status_topic = "test/topic";
+  String status_topic = String("winter-river/") + node_id + "/status";
   String payload = String("{\"ts\":\"") + getTimestamp() +
                    "\",\"load\":" + load_percent +
                    ",\"power_kva\":" + power_kva +
