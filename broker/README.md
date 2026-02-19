@@ -1,6 +1,8 @@
 # MQTT Broker
 
-Python-based MQTT broker for the ECE-26.1 IoT Environmental Monitoring System.
+Python utilities for the ECE-26.1 Winter River data center training simulator.
+
+> **Note:** The primary MQTT broker is **Mosquitto**, running on the Raspberry Pi at `192.168.4.1:1883`. `main.py` is a stub for future Python subscriber/processing utilities.
 
 ## Features
 
@@ -180,10 +182,9 @@ ESP32 → MQTT → Validator → Database → Grafana
 
 ## MQTT Topics
 
-- `sensor/{node_id}/temperature` - Temperature readings (°C)
-- `sensor/{node_id}/humidity` - Humidity readings (%)
-- `sensor/{node_id}/pressure` - Pressure readings (hPa)
-- `sensor/{node_id}/status` - Node status messages
+- `winter-river/{node_id}/status` - Node telemetry JSON (load, temp, voltage, status)
+- `winter-river/{node_id}/control` - Commands to node (`LOAD:xx`, `TEMP:xx`, `STATUS:xxxx`)
+- `winter-river` - General publish topic (pdu_a, pdu_b, server nodes)
 
 ## Database Schema
 

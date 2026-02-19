@@ -9,11 +9,11 @@ const char *node_id = "pdu_a";
 const int voltage_rating = 480;// volts
 
 // ** NETWORK
-const char *ssid = "endr";       // change to local wifi ssid
-const char *password = "SeattleUniversity01$$"; // change to local wifi pass
+const char *ssid = "WinterRiver-AP";
+const char *password = "winterriver";
 
 // ** MQTT BROKER
-const char *mqtt_server = "10.0.0.75"; // change to broker ip
+const char *mqtt_server = "192.168.4.1"; // Pi hotspot gateway
 
 WiFiClient espClient;
 PubSubClient mqtt(espClient);

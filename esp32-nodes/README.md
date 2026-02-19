@@ -2,6 +2,20 @@
 
 Guide for creating multiple ESP32 nodes with isolated MQTT topics and automatic offline detection using LWT. Reference implementation: `src/transformer/transformer_a/transformer_a.cpp`.
 
+## Network Configuration
+
+All nodes connect to the Raspberry Pi hotspot. Set these values at the top of each node's `.cpp` file:
+
+| Constant | Value |
+|----------|-------|
+| `ssid` | `WinterRiver-AP` |
+| `password` | `winterriver` |
+| `mqtt_server` | `192.168.4.1` |
+
+The Pi must be running its hotspot (`sudo ./scripts/setup_hotspot.sh`) and Mosquitto before flashing nodes.
+
+---
+
 ## Topic Structure
 
 Each node uses three dedicated topics under a shared prefix:

@@ -18,11 +18,11 @@ int temp_f = 108;         // winding temperature (°F)
 String status_str = "NORMAL";   // NORMAL, WARNING, FAULT
 
 // ** NETWORK CONFIG
-const char *ssid = "endr";
-const char *wifi_password = "SeattleUniversity01$$";
+const char *ssid = "WinterRiver-AP";
+const char *wifi_password = "winterriver";
 
 // ** MQTT BROKER
-const char *mqtt_server = "10.0.0.18"; // change to broker ip
+const char *mqtt_server = "192.168.4.1"; // Pi hotspot gateway
 
 // ** NTP CONFIG
 const char* ntp_server = "pool.ntp.org";

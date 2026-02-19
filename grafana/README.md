@@ -56,7 +56,7 @@ cd grafana
 docker-compose up -d
 ```
 
-Grafana will be available at `http://<raspberry-pi-ip>:3000`
+Grafana will be available at `http://192.168.4.1:3000`
 
 Default credentials:
 - Username: `admin`
@@ -131,7 +131,7 @@ GF_SECURITY_ADMIN_PASSWORD=changeme
 GF_INSTALL_PLUGINS=
 
 # MQTT Broker
-MQTT_BROKER_HOST=localhost
+MQTT_BROKER_HOST=192.168.4.1
 MQTT_BROKER_PORT=1883
 ```
 

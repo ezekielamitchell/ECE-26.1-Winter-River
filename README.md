@@ -111,6 +111,7 @@ ECE-26.1-Winter-River/
 │   └── README.md
 ├── scripts/
 │   ├── setup_pi.sh                    # Raspberry Pi bootstrap
+│   ├── setup_hotspot.sh               # WiFi hotspot setup (SSID: WinterRiver-AP)
 │   └── init_db.sql                    # Database schema
 ├── config.toml                        # Global project config
 ├── CONTRIBUTING.md
