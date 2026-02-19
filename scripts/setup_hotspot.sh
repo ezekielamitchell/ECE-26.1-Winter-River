@@ -30,40 +30,33 @@ check_interface() {
 
 start_hotspot() {
     check_interface
-    echo "Setting up WiFi hotspot..."
+    echo "Setting up WiFi hotspot (2.4 GHz, channel 6)..."
 
-    # First attempt: use nmcli's simpler hotspot helper (handles backend details)
-    if nmcli device wifi hotspot ifname "$IFACE" ssid "$SSID" password "$PASSWORD"; then
-        # Capture the active connection name for stop/remove actions
-        NEW_CON_NAME=$(nmcli -t -f NAME,DEVICE connection show --active | awk -F: -v dev="$IFACE" '$2==dev{print $1; exit}') || true
-        if [ -n "$NEW_CON_NAME" ]; then
-            CON_NAME="$NEW_CON_NAME"
-        fi
-    else
-        echo "nmcli hotspot helper failed, falling back to explicit connection profile..."
-        # Remove existing connection with the same name if it exists
-        nmcli connection delete "$CON_NAME" 2>/dev/null || true
+    # Tear down any leftover connection with the same name
+    nmcli connection delete "$CON_NAME" 2>/dev/null || true
 
-        # Create the hotspot connection (fallback)
-        nmcli connection add \
-            type wifi \
-            ifname "$IFACE" \
-            con-name "$CON_NAME" \
-            ssid "$SSID" \
-            autoconnect no \
-            wifi.mode ap \
-            wifi.band bg \
-            wifi.channel 6 \
-            wifi-sec.key-mgmt wpa-psk \
-            wifi-sec.psk "$PASSWORD" \
-            ipv4.method shared \
-            ipv4.addresses "$IP_ADDR"
+    # Build the connection profile directly so every parameter is explicit.
+    # We do NOT use "nmcli device wifi hotspot" because that command does not
+    # accept a band/channel argument on all NM versions, causing NetworkManager
+    # to pick 5 GHz by default — which ESP32 hardware cannot connect to.
+    nmcli connection add \
+        type wifi \
+        ifname "$IFACE" \
+        con-name "$CON_NAME" \
+        ssid "$SSID" \
+        autoconnect no \
+        wifi.mode ap \
+        wifi.band bg \
+        wifi.channel 6 \
+        wifi-sec.key-mgmt wpa-psk \
+        wifi-sec.psk "$PASSWORD" \
+        ipv4.method shared \
+        ipv4.addresses "$IP_ADDR"
 
-        # Bring it up with visible error output
-        if ! nmcli connection up "$CON_NAME"; then
-            echo "ERROR: Failed to bring up hotspot. Check: journalctl -u NetworkManager -n 50"
-            exit 1
-        fi
+    if ! nmcli connection up "$CON_NAME"; then
+        echo "ERROR: Failed to bring up hotspot."
+        echo "Check: journalctl -u NetworkManager -n 50"
+        exit 1
     fi
 
     echo ""
@@ -82,8 +75,10 @@ start_hotspot() {
 
 stop_hotspot() {
     echo "Stopping hotspot..."
-    nmcli connection down "$CON_NAME" 2>/dev/null || true
+    nmcli connection down   "$CON_NAME" 2>/dev/null || true
     nmcli connection delete "$CON_NAME" 2>/dev/null || true
+    # Bring wlan0 back to managed mode so normal WiFi can resume
+    nmcli device set "$IFACE" managed yes 2>/dev/null || true
     echo "Hotspot stopped."
 }
 
@@ -91,11 +86,16 @@ show_status() {
     if nmcli connection show --active | grep -q "$CON_NAME"; then
         echo "Hotspot is ACTIVE"
         echo ""
-        # Use device status for reliable output across NM versions
         nmcli -f GENERAL.STATE,IP4.ADDRESS,IP4.GATEWAY device show "$IFACE" 2>/dev/null || true
         echo ""
+        # Show band/channel so we can confirm 2.4 GHz is in use
+        echo -n "  Band/Channel: "
+        nmcli -g 802-11-wireless.band,802-11-wireless.channel \
+              connection show "$CON_NAME" 2>/dev/null \
+              | tr '\n' '  ' || true
+        echo ""
+        echo ""
         echo "Connected clients:"
-        # arp can miss clients; check dnsmasq leases if available
         if [ -f /var/lib/misc/dnsmasq.leases ]; then
             awk '{print "  "$3"\t"$4}' /var/lib/misc/dnsmasq.leases || echo "  (none)"
         else

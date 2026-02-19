@@ -14,6 +14,8 @@ All nodes connect to the Raspberry Pi hotspot. Set these values at the top of ea
 
 The Pi must be running its hotspot (`sudo ./scripts/setup_hotspot.sh`) and Mosquitto before flashing nodes.
 
+> **2.4 GHz required:** The ESP32 is a 2.4 GHz-only chip. The hotspot script forces `wifi.band bg` on channel 6 so nodes can always find the network. If nodes show zero signal bars, confirm the hotspot is on 2.4 GHz with `sudo ./scripts/setup_hotspot.sh status`.
+
 ---
 
 ## Topic Structure
@@ -179,3 +181,14 @@ pio device monitor                 # serial output
 ```
 
 Available environments: `transformer_a`, `pdu_a`, `pdu_b`, `server`.
+
+### Libraries (`platformio.ini`)
+
+| Library | Used by |
+|---------|---------|
+| `knolleary/PubSubClient@^2.8` | All nodes — MQTT client |
+| `adafruit/Adafruit SSD1306@^2.5.7` | `transformer_a` — 128×64 OLED |
+| `adafruit/Adafruit GFX Library@^1.11.5` | `transformer_a` — OLED graphics |
+| `marcoschwartz/LiquidCrystal_I2C@^1.1.4` | `pdu_a`, `pdu_b`, `server` — 16×2 LCD |
+
+All libraries are declared in the shared `[env]` block so every environment has access to them.
