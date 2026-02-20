@@ -20,34 +20,51 @@ apt update
 apt install -y mosquitto mosquitto-clients
 
 # Create mosquitto configuration
+# We overwrite the main mosquitto.conf entirely to avoid duplicate listener
+# directives that occur when conf.d drop-ins conflict with the default config.
 echo "Creating mosquitto configuration..."
-mkdir -p /etc/mosquitto/conf.d
-cat > /etc/mosquitto/conf.d/winter-river.conf <<EOF
+mkdir -p /var/lib/mosquitto /var/log/mosquitto /run/mosquitto
+chown mosquitto:mosquitto /var/lib/mosquitto /var/log/mosquitto /run/mosquitto
+
+cat > /etc/mosquitto/mosquitto.conf <<EOF
 # Winter River MQTT Broker Configuration
-listener 1883
+# Managed by deploy/mosquitto_setup.sh — do not edit manually
+
+pid_file /run/mosquitto/mosquitto.pid
+
+# Listen on all interfaces, port 1883
+listener 1883 0.0.0.0
 allow_anonymous true
 
-# Persistence
+# Persistence — retain messages across restarts
 persistence true
 persistence_location /var/lib/mosquitto/
 
 # Logging
 log_dest file /var/log/mosquitto/mosquitto.log
-log_dest stdout
-log_type all
+log_type error
+log_type warning
+log_type notice
+log_type information
+log_timestamp true
 EOF
-
-# Ensure log directory exists with correct ownership
-mkdir -p /var/log/mosquitto
-chown mosquitto:mosquitto /var/log/mosquitto
 
 # Enable and start mosquitto
 echo "Enabling and starting mosquitto service..."
 systemctl enable mosquitto
-systemctl restart mosquitto
+# Stop first cleanly in case it was already running with old config
+systemctl stop mosquitto 2>/dev/null || true
+sleep 1
+systemctl start mosquitto
 
 # Verify service is running
 echo "Verifying mosquitto service status..."
+sleep 1
+if ! systemctl is-active --quiet mosquitto; then
+    echo "ERROR: mosquitto failed to start. Full log:"
+    journalctl -u mosquitto -n 30 --no-pager
+    exit 1
+fi
 systemctl status mosquitto --no-pager
 
 # Test MQTT broker
