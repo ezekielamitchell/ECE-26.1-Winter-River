@@ -60,9 +60,19 @@ String getTimestamp() {
 WiFiClient   espClient;
 PubSubClient mqtt(espClient);
 
-// ── LCD (16x2 I2C — try 0x27 if 0x3F shows no text) ─────────────────────────
-LiquidCrystal_I2C lcd(0x3F, 16, 2);
+// ── LCD (16x2 I2C) — address auto-detected at boot (0x27 or 0x3F) ────────────
+uint8_t lcd_addr = 0x3F;
+LiquidCrystal_I2C lcd(lcd_addr, 16, 2);
 int message_count = 0;
+
+// Scan both common LCD backpack addresses; fall back to 0x3F if neither found
+uint8_t detectLCDAddr() {
+  for (uint8_t addr : {0x27, 0x3F}) {
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() == 0) return addr;
+  }
+  return 0x3F;
+}
 
 // ── MQTT callback — accepts control commands ──────────────────────────────────
 // Commands:
@@ -106,6 +116,8 @@ void setup() {
 
   // LCD first — before WiFi radio to avoid I2C interference
   Wire.begin();
+  lcd_addr = detectLCDAddr();
+  lcd = LiquidCrystal_I2C(lcd_addr, 16, 2);
   lcd.init();
   lcd.backlight();
   lcd.setCursor(0, 0);

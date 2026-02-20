@@ -18,15 +18,27 @@ const char *mqtt_server = "192.168.4.1"; // Pi hotspot gateway
 WiFiClient espClient;
 PubSubClient mqtt(espClient);
 
-// ** LCD Init (16 columns, 2 rows, I2C address 0x27 - try 0x3F if this doesn't work)
-LiquidCrystal_I2C lcd(0x3F, 16, 2);
+// ** LCD (16x2, I2C) — address auto-detected at boot (0x27 or 0x3F)
+uint8_t lcd_addr = 0x3F;
+LiquidCrystal_I2C lcd(lcd_addr, 16, 2);
 int message_count = 0;
+
+// Scan both common LCD backpack addresses; fall back to 0x3F if neither found
+uint8_t detectLCDAddr() {
+  for (uint8_t addr : {0x27, 0x3F}) {
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() == 0) return addr;
+  }
+  return 0x3F;
+}
 
 void setup() {
   Serial.begin(115200);
 
   // Initialize LCD first — before WiFi radio starts to avoid I2C interference
   Wire.begin();
+  lcd_addr = detectLCDAddr();
+  lcd = LiquidCrystal_I2C(lcd_addr, 16, 2);
   lcd.init();
   lcd.backlight();
   lcd.setCursor(0, 0);
