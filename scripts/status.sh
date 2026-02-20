@@ -22,10 +22,21 @@ bold()   { echo -e "\033[1m$*\033[0m"; }
 
 svc_status() {
     local name="$1"
-    if systemctl is-active --quiet "$name" 2>/dev/null; then
+    # is-active covers normal services; for Type=oneshot with RemainAfterExit
+    # the state is "active" only if it completed successfully — check both
+    local state
+    state=$(systemctl is-active "$name" 2>/dev/null || true)
+    if [ "$state" = "active" ]; then
         green  "  ✔  $name: RUNNING"
     else
-        red    "  ✘  $name: STOPPED"
+        # For oneshot services, also accept if the unit completed (exited 0)
+        local sub
+        sub=$(systemctl show -p SubState --value "$name" 2>/dev/null || true)
+        if [ "$sub" = "exited" ]; then
+            green  "  ✔  $name: OK (oneshot completed)"
+        else
+            red    "  ✘  $name: STOPPED (state=$state)"
+        fi
     fi
 }
 
@@ -93,11 +104,11 @@ else
 fi
 echo ""
 
-# MQTT broker ping
+# MQTT broker ping — use 127.0.0.1 to avoid IPv6 resolution issues
 bold "MQTT broker ($BROKER:$MQTT_PORT):"
 if command -v mosquitto_pub &>/dev/null; then
-    if timeout 2 mosquitto_pub -h "$BROKER" -p "$MQTT_PORT" \
-        -t "winter-river/status-check" -m "ping" -q 0 2>/dev/null; then
+    if timeout 3 mosquitto_pub -h 127.0.0.1 -p "$MQTT_PORT" \
+        -t "winter-river/status-check" -m "ping" 2>/dev/null; then
         green "  ✔  Reachable"
     else
         red   "  ✘  Not reachable — check: sudo systemctl status mosquitto"
@@ -112,7 +123,7 @@ bold "Last node telemetry (retained MQTT):"
 if command -v mosquitto_sub &>/dev/null; then
     NODES=(trf_a pdu_a ups_a gen_a sw_a srv_a)
     for node in "${NODES[@]}"; do
-        MSG=$(timeout 1 mosquitto_sub -h "$BROKER" -p "$MQTT_PORT" \
+        MSG=$(timeout 2 mosquitto_sub -h 127.0.0.1 -p "$MQTT_PORT" \
             -t "winter-river/${node}/status" -C 1 2>/dev/null || echo "")
         if [ -n "$MSG" ]; then
             # Extract status field from JSON
