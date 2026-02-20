@@ -20,11 +20,15 @@ apt update
 apt install -y mosquitto mosquitto-clients
 
 # Create mosquitto configuration
-# We overwrite the main mosquitto.conf entirely to avoid duplicate listener
-# directives that occur when conf.d drop-ins conflict with the default config.
+# We overwrite the main mosquitto.conf entirely and remove any conf.d drop-ins
+# to avoid duplicate directive errors (persistence_location, listener, etc.)
 echo "Creating mosquitto configuration..."
 mkdir -p /var/lib/mosquitto /var/log/mosquitto /run/mosquitto
 chown mosquitto:mosquitto /var/lib/mosquitto /var/log/mosquitto /run/mosquitto
+
+# Remove any leftover conf.d files from previous installs
+rm -f /etc/mosquitto/conf.d/winter-river.conf
+rm -f /etc/mosquitto/conf.d/*.conf 2>/dev/null || true
 
 cat > /etc/mosquitto/mosquitto.conf <<EOF
 # Winter River MQTT Broker Configuration
