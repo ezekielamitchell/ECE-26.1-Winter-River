@@ -2,7 +2,8 @@
 #include <PubSubClient.h>
 #include <WiFi.h>
 #include <Wire.h>
-#include <LiquidCrystal_I2C.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 #include <time.h>
 
 // ** NODE
@@ -10,11 +11,11 @@ const char *node_id = "gen_a";
 const int voltage_rating = 480; // volts output
 
 // ** SIMULATED METRICS (controllable via MQTT)
-int   fuel_pct    = 85;         // fuel tank level %
-int   rpm         = 0;          // engine RPM (0 = off)
-float output_v    = 0.0;        // generator output voltage
-int   load_pct    = 0;          // output load %
-String run_state  = "STANDBY";  // STANDBY, STARTING, RUNNING, FAULT
+int   fuel_pct   = 85;        // fuel tank level %
+int   rpm        = 0;         // engine RPM (0 = off)
+float output_v   = 0.0;       // generator output voltage
+int   load_pct   = 0;         // output load %
+String run_state = "STANDBY"; // STANDBY, STARTING, RUNNING, FAULT
 
 // ** NETWORK
 const char *ssid        = "WinterRiver-AP";
@@ -37,17 +38,11 @@ String getTimestamp() {
 WiFiClient espClient;
 PubSubClient mqtt(espClient);
 
-// ** LCD — pointer, allocated in setup() after I2C address scan
-LiquidCrystal_I2C *lcd = nullptr;
-
-uint8_t detectLCDAddr() {
-  for (uint8_t addr : {0x27, 0x3F}) {
-    Wire.beginTransmission(addr);
-    if (Wire.endTransmission() == 0) return addr;
-  }
-  return 0x3F;
-}
-
+// ** OLED (128x64 SSD1306, I2C address 0x3C)
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 int message_count = 0;
 
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
@@ -66,7 +61,6 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     run_state = msg.substring(7);
   }
 
-  // Auto-thresholds
   if (fuel_pct < 5 || (run_state == "RUNNING" && rpm < 800)) {
     run_state = "FAULT";
   } else if (rpm > 1500) {
@@ -83,13 +77,15 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 void setup() {
   Serial.begin(115200);
 
-  // Initialize LCD first — before WiFi radio starts to avoid I2C interference
+  // OLED first — before WiFi radio to avoid I2C interference
   Wire.begin();
-  lcd = new LiquidCrystal_I2C(detectLCDAddr(), 16, 2);
-  lcd->init();
-  lcd->backlight();
-  lcd->setCursor(0, 0);
-  lcd->print("Connecting...");
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.println("Connecting...");
+  display.display();
 
   // WiFi — full radio reset
   WiFi.persistent(false);
@@ -106,18 +102,19 @@ void setup() {
     if (millis() - wifi_start > 20000) {
       int s = WiFi.status();
       Serial.println("\nWiFi failed (status=" + String(s) + ") — waiting 30 s for hotspot then restarting");
-      lcd->clear(); lcd->setCursor(0,0); lcd->print("WiFi FAILED s="); lcd->print(s);
-      lcd->setCursor(0,1); lcd->print("Wait 30s...");
+      display.clearDisplay(); display.setCursor(0, 0);
+      display.println("WiFi FAILED"); display.println("status=" + String(s)); display.println("Wait 30s...");
+      display.display();
       delay(30000); ESP.restart();
     }
     delay(500); Serial.print(".");
   }
 
-  lcd->clear(); lcd->setCursor(0,0);
-  lcd->print(node_id); lcd->print(" OK");
+  display.clearDisplay(); display.setCursor(0, 0);
+  display.println(node_id); display.println("WiFi OK");
+  display.display();
   Serial.println("\nWiFi connected: " + WiFi.localIP().toString());
 
-  // NTP sync
   configTime(gmt_offset_sec, daylight_offset_sec, ntp_server);
   struct tm timeinfo;
   int retries = 0;
@@ -139,29 +136,29 @@ void loop() {
       mqtt.publish(lwt_topic.c_str(), online.c_str(), true);
       String ctrl = String("winter-river/") + node_id + "/control";
       mqtt.subscribe(ctrl.c_str());
-      Serial.println("Subscribed to: " + ctrl);
     } else {
       Serial.println("failed, state=" + String(mqtt.state()));
+      display.clearDisplay(); display.setCursor(0, 0);
+      display.println("MQTT FAILED"); display.println("state=" + String(mqtt.state()));
+      display.display();
       delay(2000); return;
     }
   }
 
-  // LCD display
-  lcd->clear();
-  lcd->setCursor(0, 0);
-  lcd->print(node_id);
-  lcd->print(" F:");
-  lcd->print(fuel_pct);
-  lcd->print("%");
-  lcd->setCursor(0, 1);
-  lcd->print(run_state.substring(0, 8));
-  lcd->print(" ");
-  lcd->print(rpm);
-  lcd->print("rpm");
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.print(node_id); display.print(" ["); display.print(run_state); display.println("]");
+  display.print("IP:"); display.print(WiFi.localIP()); display.print(" "); display.print(WiFi.RSSI()); display.println("dB");
+  display.print("Fuel: "); display.print(fuel_pct); display.println("%");
+  display.print("RPM:  "); display.println(rpm);
+  display.print("Vout: "); display.print((int)output_v); display.println("V");
+  display.print("MQTT:"); display.print(mqtt.connected() ? "OK" : "DISC");
+  display.print(" Msgs:"); display.println(message_count);
+  display.display();
+  message_count++;
 
   mqtt.loop();
 
-  // Telemetry
   String topic   = String("winter-river/") + node_id + "/status";
   String payload = String("{\"ts\":\"") + getTimestamp() +
                    "\",\"fuel_pct\":"  + fuel_pct  +
@@ -172,6 +169,5 @@ void loop() {
                    "\",\"voltage\":"   + voltage_rating + "}";
   mqtt.publish(topic.c_str(), payload.c_str());
   Serial.println("Published: " + payload);
-  message_count++;
   delay(5000);
 }

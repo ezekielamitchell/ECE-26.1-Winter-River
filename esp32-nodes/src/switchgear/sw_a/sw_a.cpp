@@ -2,7 +2,8 @@
 #include <PubSubClient.h>
 #include <WiFi.h>
 #include <Wire.h>
-#include <LiquidCrystal_I2C.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 #include <time.h>
 
 // ** NODE
@@ -37,18 +38,11 @@ String getTimestamp() {
 WiFiClient espClient;
 PubSubClient mqtt(espClient);
 
-// ** LCD — pointer, allocated in setup() after I2C address scan
-// Scanning 0x27 and 0x3F covers both common PCF8574 backpack variants
-LiquidCrystal_I2C *lcd = nullptr;
-
-uint8_t detectLCDAddr() {
-  for (uint8_t addr : {0x27, 0x3F}) {
-    Wire.beginTransmission(addr);
-    if (Wire.endTransmission() == 0) return addr;
-  }
-  return 0x3F; // fallback
-}
-
+// ** OLED (128x64 SSD1306, I2C address 0x3C)
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 int message_count = 0;
 
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
@@ -64,13 +58,12 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     sw_state = "CLOSED";
   } else if (msg.startsWith("LOAD:")) {
     load_pct  = msg.substring(5).toInt();
-    load_kw   = load_pct * 2.47;   // scale to rated kW
+    load_kw   = load_pct * 2.47;
     current_a = (load_kw * 1000.0) / voltage_rating;
   } else if (msg.startsWith("STATUS:")) {
     sw_state = msg.substring(7);
   }
 
-  // Auto-thresholds
   if (current_a > 280.0 || load_pct > 95) {
     sw_state       = "TRIPPED";
     breaker_closed = false;
@@ -82,13 +75,15 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 void setup() {
   Serial.begin(115200);
 
-  // Initialize LCD first — before WiFi radio starts to avoid I2C interference
+  // OLED first — before WiFi radio to avoid I2C interference
   Wire.begin();
-  lcd = new LiquidCrystal_I2C(detectLCDAddr(), 16, 2);
-  lcd->init();
-  lcd->backlight();
-  lcd->setCursor(0, 0);
-  lcd->print("Connecting...");
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.println("Connecting...");
+  display.display();
 
   // WiFi — full radio reset
   WiFi.persistent(false);
@@ -105,18 +100,19 @@ void setup() {
     if (millis() - wifi_start > 20000) {
       int s = WiFi.status();
       Serial.println("\nWiFi failed (status=" + String(s) + ") — waiting 30 s for hotspot then restarting");
-      lcd->clear(); lcd->setCursor(0,0); lcd->print("WiFi FAILED s="); lcd->print(s);
-      lcd->setCursor(0,1); lcd->print("Wait 30s...");
+      display.clearDisplay(); display.setCursor(0, 0);
+      display.println("WiFi FAILED"); display.println("status=" + String(s)); display.println("Wait 30s...");
+      display.display();
       delay(30000); ESP.restart();
     }
     delay(500); Serial.print(".");
   }
 
-  lcd->clear(); lcd->setCursor(0,0);
-  lcd->print(node_id); lcd->print(" OK");
+  display.clearDisplay(); display.setCursor(0, 0);
+  display.println(node_id); display.println("WiFi OK");
+  display.display();
   Serial.println("\nWiFi connected: " + WiFi.localIP().toString());
 
-  // NTP sync
   configTime(gmt_offset_sec, daylight_offset_sec, ntp_server);
   struct tm timeinfo;
   int retries = 0;
@@ -138,38 +134,38 @@ void loop() {
       mqtt.publish(lwt_topic.c_str(), online.c_str(), true);
       String ctrl = String("winter-river/") + node_id + "/control";
       mqtt.subscribe(ctrl.c_str());
-      Serial.println("Subscribed to: " + ctrl);
     } else {
       Serial.println("failed, state=" + String(mqtt.state()));
+      display.clearDisplay(); display.setCursor(0, 0);
+      display.println("MQTT FAILED"); display.println("state=" + String(mqtt.state()));
+      display.display();
       delay(2000); return;
     }
   }
 
-  // LCD display
-  lcd->clear();
-  lcd->setCursor(0, 0);
-  lcd->print(node_id);
-  lcd->print(" ");
-  lcd->print(sw_state.substring(0, 7));
-  lcd->setCursor(0, 1);
-  lcd->print((int)current_a);
-  lcd->print("A ");
-  lcd->print(load_pct);
-  lcd->print("%");
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.print(node_id); display.print(" ["); display.print(sw_state); display.println("]");
+  display.print("IP:"); display.print(WiFi.localIP()); display.print(" "); display.print(WiFi.RSSI()); display.println("dB");
+  display.print("Current: "); display.print((int)current_a); display.println("A");
+  display.print("Load:    "); display.print(load_pct); display.println("%");
+  display.print("Power:   "); display.print((int)load_kw); display.println("kW");
+  display.print("MQTT:"); display.print(mqtt.connected() ? "OK" : "DISC");
+  display.print(" Msgs:"); display.println(message_count);
+  display.display();
+  message_count++;
 
   mqtt.loop();
 
-  // Telemetry
   String topic   = String("winter-river/") + node_id + "/status";
   String payload = String("{\"ts\":\"") + getTimestamp() +
-                   "\",\"breaker\":"   + (breaker_closed ? "true" : "false") +
-                   ",\"current_a\":"   + current_a +
-                   ",\"load_kw\":"     + load_kw   +
-                   ",\"load_pct\":"    + load_pct  +
-                   ",\"state\":\""     + sw_state  +
-                   "\",\"voltage\":"   + voltage_rating + "}";
+                   "\",\"breaker\":"  + (breaker_closed ? "true" : "false") +
+                   ",\"current_a\":"  + current_a +
+                   ",\"load_kw\":"    + load_kw   +
+                   ",\"load_pct\":"   + load_pct  +
+                   ",\"state\":\""    + sw_state  +
+                   "\",\"voltage\":"  + voltage_rating + "}";
   mqtt.publish(topic.c_str(), payload.c_str());
   Serial.println("Published: " + payload);
-  message_count++;
   delay(5000);
 }

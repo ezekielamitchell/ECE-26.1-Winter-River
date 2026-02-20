@@ -2,62 +2,39 @@
 #include <PubSubClient.h>
 #include <WiFi.h>
 #include <Wire.h>
-#include <LiquidCrystal_I2C.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 #include <time.h>
 
 // ─── NODE IDENTITY ────────────────────────────────────────────────────────────
 // dist_a: Main LV Distribution Board — Side A
-//
-// Role:    480 V distribution hub. Receives power from the Main LV Switchgear
-//          (sw_a) and distributes it to the UPS (ups_a) and mechanical loads
-//          (HVAC, lighting, etc.).  The ATS decision (utility vs. generator)
-//          has already been made upstream in sw_a; dist_a simply passes through
-//          whichever 480 V source the ATS selected.
-//
-// Position in chain:
-//   util_a → trf_a → sw_a → [dist_a] → ups_a → pdu_a → srv_a
-//                    gen_a ↗
-//
-// Electrical parameters:
-//   Vin  : 480 V  (3-phase, from sw_a / ATS output)
-//   Vout : 480 V  (pass-through to UPS + mechanical loads)
-//   Rated: 800 A  (384 kVA @ 480 V, 3-phase)
-//   Breakers: UPS feed + mechanical (HVAC / lighting) branches
-//
-// Metrics tracked:
-//   input_v       — measured 480 V bus voltage
-//   ups_load_kw   — power delivered to UPS branch
-//   mech_load_kw  — power delivered to mechanical branch (HVAC etc.)
-//   total_load_kw — sum of all branch loads
-//   load_pct      — total as % of 384 kW rated capacity
-//   power_source  — which upstream source is active: UTILITY | GENERATOR | NONE
-//   dist_state    — NORMAL | OVERLOAD | FAULT | NO_INPUT
+// 480 V distribution hub between sw_a/gen_a ATS output and ups_a.
+// Chain: util_a → trf_a → sw_a → [dist_a] → ups_a → pdu_a → srv_a
+//                         gen_a ↗
+// Rated: 480 V, 800 A, 384 kW (0.9 PF)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const char *node_id = "dist_a";
 
-// Board ratings — 480 V, 3-phase, 800 A main breaker
-const float RATED_VOLTAGE   = 480.0;  // V
-const float RATED_CURRENT_A = 800.0;  // A (main breaker)
-const float RATED_POWER_KW  = 384.0;  // kW (480 V × 800 A × √3 ≈ 665 kVA; ~384 kW at 0.9 PF)
+const float RATED_VOLTAGE  = 480.0;
+const float RATED_POWER_KW = 384.0;
 
-// ── Simulated metrics (can be overridden via MQTT control commands) ───────────
-float  input_v       = 480.0;    // measured bus voltage (V)
-float  ups_load_kw   = 95.0;    // UPS branch load (kW) — ~25% of rated
-float  mech_load_kw  = 42.0;    // mechanical branch (HVAC/lighting) load (kW)
-float  total_load_kw = 137.0;   // total distribution load (kW)
-int    load_pct      = 36;      // total load as % of rated
-String power_source  = "UTILITY"; // UTILITY | GENERATOR | NONE
-String dist_state    = "NORMAL";  // NORMAL | OVERLOAD | FAULT | NO_INPUT
+float  input_v      = 480.0;
+float  ups_load_kw  = 95.0;
+float  mech_load_kw = 42.0;
+float  total_load_kw = 137.0;
+int    load_pct     = 36;
+String power_source = "UTILITY"; // UTILITY | GENERATOR | NONE
+String dist_state   = "NORMAL";  // NORMAL | OVERLOAD | FAULT | NO_INPUT
 
-// ── Network ───────────────────────────────────────────────────────────────────
+// ** NETWORK
 const char *ssid        = "WinterRiver-AP";
 const char *password    = "winterriver";
 const char *mqtt_server = "192.168.4.1";
 
-// ── NTP ───────────────────────────────────────────────────────────────────────
+// ** NTP
 const char* ntp_server          = "192.168.4.1";
-const long  gmt_offset_sec      = -28800;  // PST = UTC-8
+const long  gmt_offset_sec      = -28800;
 const int   daylight_offset_sec = 3600;
 
 String getTimestamp() {
@@ -71,28 +48,14 @@ String getTimestamp() {
 WiFiClient   espClient;
 PubSubClient mqtt(espClient);
 
-// ── LCD — pointer, allocated in setup() after I2C address scan ───────────────
-LiquidCrystal_I2C *lcd = nullptr;
-
-uint8_t detectLCDAddr() {
-  for (uint8_t addr : {0x27, 0x3F}) {
-    Wire.beginTransmission(addr);
-    if (Wire.endTransmission() == 0) return addr;
-  }
-  return 0x3F;
-}
-
+// ** OLED (128x64 SSD1306, I2C address 0x3C)
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 int message_count = 0;
 
-// ── MQTT callback — accepts control commands ──────────────────────────────────
-// Commands:
-//   INPUT:xxx.x     → set bus voltage (V) — set to 0 to simulate upstream loss
-//   UPS:xxx.x       → set UPS branch load (kW)
-//   MECH:xxx.x      → set mechanical branch load (kW)
-//   SOURCE:UTILITY  → mark active source as utility feed
-//   SOURCE:GENERATOR→ mark active source as generator feed
-//   SOURCE:NONE     → mark as de-energised (both sources lost)
-//   STATUS:NORMAL / OVERLOAD / FAULT / NO_INPUT
+// Commands: INPUT:xxx | UPS:xxx | MECH:xxx | SOURCE:UTILITY/GENERATOR/NONE | STATUS:xxx
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   String msg;
   for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
@@ -100,12 +63,8 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
   if (msg.startsWith("INPUT:")) {
     input_v = msg.substring(6).toFloat();
-    if (input_v < RATED_VOLTAGE * 0.10) {
-      dist_state   = "NO_INPUT";
-      power_source = "NONE";
-    } else if (input_v >= RATED_VOLTAGE * 0.90 && dist_state == "NO_INPUT") {
-      dist_state = "NORMAL";
-    }
+    if (input_v < RATED_VOLTAGE * 0.10) { dist_state = "NO_INPUT"; power_source = "NONE"; }
+    else if (input_v >= RATED_VOLTAGE * 0.90 && dist_state == "NO_INPUT") dist_state = "NORMAL";
   } else if (msg.startsWith("UPS:")) {
     ups_load_kw   = msg.substring(4).toFloat();
     total_load_kw = ups_load_kw + mech_load_kw;
@@ -116,35 +75,30 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     load_pct      = (int)((total_load_kw / RATED_POWER_KW) * 100.0);
   } else if (msg.startsWith("SOURCE:")) {
     power_source = msg.substring(7);
-    if (power_source == "NONE") {
-      dist_state = "NO_INPUT";
-      input_v    = 0.0;
-    } else if (dist_state == "NO_INPUT") {
-      dist_state = "NORMAL";
-      input_v    = RATED_VOLTAGE;
-    }
+    if (power_source == "NONE") { dist_state = "NO_INPUT"; input_v = 0.0; }
+    else if (dist_state == "NO_INPUT") { dist_state = "NORMAL"; input_v = RATED_VOLTAGE; }
   } else if (msg.startsWith("STATUS:")) {
     dist_state = msg.substring(7);
   }
 
-  // Auto-thresholds
   if      (input_v < RATED_VOLTAGE * 0.10) dist_state = "NO_INPUT";
   else if (load_pct > 95)                   dist_state = "OVERLOAD";
   else if (load_pct > 85)                   dist_state = "FAULT";
   else if (dist_state != "NO_INPUT")        dist_state = "NORMAL";
 }
 
-// ── setup ─────────────────────────────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
 
-  // LCD first — before WiFi radio to avoid I2C interference
+  // OLED first — before WiFi radio to avoid I2C interference
   Wire.begin();
-  lcd = new LiquidCrystal_I2C(detectLCDAddr(), 16, 2);
-  lcd->init();
-  lcd->backlight();
-  lcd->setCursor(0, 0);
-  lcd->print("Connecting...");
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.println("Connecting...");
+  display.display();
 
   // WiFi — full radio reset
   WiFi.persistent(false);
@@ -161,20 +115,19 @@ void setup() {
     if (millis() - wifi_start > 20000) {
       int s = WiFi.status();
       Serial.println("\nWiFi failed (status=" + String(s) + ") — waiting 30 s for hotspot then restarting");
-      lcd->clear(); lcd->setCursor(0, 0); lcd->print("WiFi FAILED s="); lcd->print(s);
-      lcd->setCursor(0, 1); lcd->print("Wait 30s...");
-      delay(30000);
-      ESP.restart();
+      display.clearDisplay(); display.setCursor(0, 0);
+      display.println("WiFi FAILED"); display.println("status=" + String(s)); display.println("Wait 30s...");
+      display.display();
+      delay(30000); ESP.restart();
     }
-    delay(500);
-    Serial.print(".");
+    delay(500); Serial.print(".");
   }
 
-  lcd->clear(); lcd->setCursor(0, 0);
-  lcd->print(node_id); lcd->print(" OK");
+  display.clearDisplay(); display.setCursor(0, 0);
+  display.println(node_id); display.println("WiFi OK");
+  display.display();
   Serial.println("\nWiFi connected: " + WiFi.localIP().toString());
 
-  // NTP sync
   configTime(gmt_offset_sec, daylight_offset_sec, ntp_server);
   struct tm timeinfo;
   int retries = 0;
@@ -185,7 +138,6 @@ void setup() {
   mqtt.setCallback(mqttCallback);
 }
 
-// ── loop ──────────────────────────────────────────────────────────────────────
 void loop() {
   if (!mqtt.connected()) {
     Serial.print("MQTT connecting...");
@@ -193,43 +145,33 @@ void loop() {
     String lwt_msg   = String("{\"node\":\"") + node_id + "\",\"status\":\"OFFLINE\"}";
     if (mqtt.connect(node_id, lwt_topic.c_str(), 1, true, lwt_msg.c_str())) {
       Serial.println("connected");
-      String online = String("{\"ts\":\"") + getTimestamp() +
-                      "\",\"node\":\"" + node_id +
-                      "\",\"status\":\"ONLINE\"}";
+      String online = String("{\"ts\":\"") + getTimestamp() + "\",\"node\":\"" + node_id + "\",\"status\":\"ONLINE\"}";
       mqtt.publish(lwt_topic.c_str(), online.c_str(), true);
       String ctrl = String("winter-river/") + node_id + "/control";
       mqtt.subscribe(ctrl.c_str());
-      Serial.println("Subscribed to: " + ctrl);
     } else {
       Serial.println("failed, state=" + String(mqtt.state()));
-      lcd->clear(); lcd->setCursor(0, 0); lcd->print("MQTT FAIL");
-      lcd->setCursor(0, 1); lcd->print("st="); lcd->print(mqtt.state());
-      delay(2000);
-      return;
+      display.clearDisplay(); display.setCursor(0, 0);
+      display.println("MQTT FAILED"); display.println("state=" + String(mqtt.state()));
+      display.display();
+      delay(2000); return;
     }
   }
 
-  // ── LCD display ──────────────────────────────────────────────────────────────
-  // Line 0: "dist_a NORMAL"
-  // Line 1: "480V 137kW 36%"
-  lcd->clear();
-  lcd->setCursor(0, 0);
-  lcd->print(node_id);
-  lcd->print(" ");
-  String state_short = (dist_state == "NO_INPUT") ? "NO_INP" : dist_state.substring(0, 8);
-  lcd->print(state_short);
-
-  lcd->setCursor(0, 1);
-  lcd->print((int)input_v);
-  lcd->print("V ");
-  lcd->print((int)total_load_kw);
-  lcd->print("kW ");
-  lcd->print(load_pct);
-  lcd->print("%");
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.print(node_id); display.print(" ["); display.print(dist_state); display.println("]");
+  display.print("IP:"); display.print(WiFi.localIP()); display.print(" "); display.print(WiFi.RSSI()); display.println("dB");
+  display.print("Vin:  "); display.print((int)input_v); display.println("V");
+  display.print("Load: "); display.print((int)total_load_kw); display.print("kW "); display.print(load_pct); display.println("%");
+  display.print("Src:  "); display.println(power_source);
+  display.print("MQTT:"); display.print(mqtt.connected() ? "OK" : "DISC");
+  display.print(" Msgs:"); display.println(message_count);
+  display.display();
+  message_count++;
 
   mqtt.loop();
 
-  // ── Publish telemetry ─────────────────────────────────────────────────────────
   String topic   = String("winter-river/") + node_id + "/status";
   String payload = String("{\"ts\":\"")      + getTimestamp()  +
                    "\",\"input_v\":"         + input_v         +
@@ -243,6 +185,5 @@ void loop() {
   mqtt.publish(topic.c_str(), payload.c_str());
   Serial.println("Published: " + payload);
   message_count++;
-
   delay(5000);
 }
