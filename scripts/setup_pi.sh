@@ -22,10 +22,11 @@ echo "Updating system packages..."
 apt update && apt upgrade -y
 
 # Install system dependencies
+# Note: Debian Trixie replaced ntp/ntpdate with ntpsec
 echo "Installing system dependencies..."
 apt install -y git python3 python3-pip python3-venv \
     mosquitto mosquitto-clients \
-    ntpdate ntp
+    ntpsec ntpsec-ntpdate
 
 # Verify project directory exists
 if [ ! -d "$PROJECT_DIR" ]; then
@@ -68,12 +69,18 @@ echo "Starting WiFi hotspot..."
 "$PROJECT_DIR/scripts/setup_hotspot.sh" start
 
 # Configure NTP server so ESP32 nodes can sync time from the Pi
+# Debian Trixie uses ntpsec — config file is /etc/ntpsec/ntp.conf
 echo "Configuring NTP server..."
-# Allow LAN clients (192.168.4.0/24) to query the Pi's NTP service
-if ! grep -q "192.168.4.0" /etc/ntp.conf 2>/dev/null; then
-    echo "restrict 192.168.4.0 mask 255.255.255.0 nomodify notrap" >> /etc/ntp.conf
+NTP_CONF=""
+if [ -f /etc/ntpsec/ntp.conf ]; then
+    NTP_CONF="/etc/ntpsec/ntp.conf"
+elif [ -f /etc/ntp.conf ]; then
+    NTP_CONF="/etc/ntp.conf"
 fi
-systemctl restart ntp || systemctl restart ntpd || true
+if [ -n "$NTP_CONF" ] && ! grep -q "192.168.4.0" "$NTP_CONF"; then
+    echo "restrict 192.168.4.0 mask 255.255.255.0 nomodify notrap" >> "$NTP_CONF"
+fi
+systemctl restart ntpsec 2>/dev/null || systemctl restart ntp 2>/dev/null || systemctl restart ntpd 2>/dev/null || true
 
 # Install and enable all systemd services
 echo "Enabling systemd services..."
@@ -97,8 +104,8 @@ echo "Services enabled for auto-boot:"
 systemctl is-active winter-river-hotspot && echo "  hotspot:       RUNNING" || echo "  hotspot:       STOPPED"
 systemctl is-active mosquitto            && echo "  mosquitto:     RUNNING" || echo "  mosquitto:     STOPPED"
 systemctl is-active mqtt-broker          && echo "  mqtt-broker:   RUNNING" || echo "  mqtt-broker:   STOPPED"
-systemctl is-active ntp                  && echo "  ntp:           RUNNING" || \
-    (systemctl is-active ntpd            && echo "  ntpd:          RUNNING" || echo "  ntp:           STOPPED")
+{ systemctl is-active ntpsec 2>/dev/null || systemctl is-active ntp 2>/dev/null || systemctl is-active ntpd 2>/dev/null; } \
+    && echo "  ntp:           RUNNING" || echo "  ntp:           STOPPED"
 echo ""
 echo "Hotspot: SSID=WinterRiver-AP  Password=winterriver  Gateway=192.168.4.1"
 echo "MQTT broker listening on 192.168.4.1:1883"

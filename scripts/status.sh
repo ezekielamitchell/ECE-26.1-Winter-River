@@ -48,7 +48,16 @@ echo ""
 bold "Services:"
 svc_status winter-river-hotspot
 svc_status mosquitto
-svc_status ntp 2>/dev/null || svc_status ntpd 2>/dev/null || red "  ✘  ntp: STOPPED"
+# Debian Trixie uses ntpsec instead of ntp/ntpd
+if systemctl is-active --quiet ntpsec 2>/dev/null; then
+    green "  ✔  ntpsec: RUNNING"
+elif systemctl is-active --quiet ntp 2>/dev/null; then
+    green "  ✔  ntp: RUNNING"
+elif systemctl is-active --quiet ntpd 2>/dev/null; then
+    green "  ✔  ntpd: RUNNING"
+else
+    red   "  ✘  ntp: STOPPED"
+fi
 echo ""
 
 # Hotspot
