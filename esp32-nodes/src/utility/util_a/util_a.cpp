@@ -60,12 +60,9 @@ String getTimestamp() {
 WiFiClient   espClient;
 PubSubClient mqtt(espClient);
 
-// ── LCD (16x2 I2C) — address auto-detected at boot (0x27 or 0x3F) ────────────
-uint8_t lcd_addr = 0x3F;
-LiquidCrystal_I2C lcd(lcd_addr, 16, 2);
-int message_count = 0;
+// ── LCD — pointer, allocated in setup() after I2C address scan ───────────────
+LiquidCrystal_I2C *lcd = nullptr;
 
-// Scan both common LCD backpack addresses; fall back to 0x3F if neither found
 uint8_t detectLCDAddr() {
   for (uint8_t addr : {0x27, 0x3F}) {
     Wire.beginTransmission(addr);
@@ -73,6 +70,8 @@ uint8_t detectLCDAddr() {
   }
   return 0x3F;
 }
+
+int message_count = 0;
 
 // ── MQTT callback — accepts control commands ──────────────────────────────────
 // Commands:
@@ -90,21 +89,19 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
   if (msg.startsWith("STATUS:")) {
     grid_state = msg.substring(7);
-    // Voltage follows state
     if      (grid_state == "OUTAGE") grid_voltage_kv = 0.0;
-    else if (grid_state == "SAG")    grid_voltage_kv = GRID_VOLTAGE_KV * 0.88; // -12%
-    else if (grid_state == "SWELL")  grid_voltage_kv = GRID_VOLTAGE_KV * 1.10; // +10%
+    else if (grid_state == "SAG")    grid_voltage_kv = GRID_VOLTAGE_KV * 0.88;
+    else if (grid_state == "SWELL")  grid_voltage_kv = GRID_VOLTAGE_KV * 1.10;
     else                             grid_voltage_kv = GRID_VOLTAGE_KV;
   } else if (msg.startsWith("VOLT:")) {
     grid_voltage_kv = msg.substring(5).toFloat();
-    // Re-evaluate state from voltage
-    if      (grid_voltage_kv == 0.0)                               grid_state = "OUTAGE";
-    else if (grid_voltage_kv < GRID_VOLTAGE_KV * 0.90)            grid_state = "SAG";
-    else if (grid_voltage_kv > GRID_VOLTAGE_KV * 1.10)            grid_state = "SWELL";
-    else                                                           grid_state = "GRID_OK";
+    if      (grid_voltage_kv == 0.0)                    grid_state = "OUTAGE";
+    else if (grid_voltage_kv < GRID_VOLTAGE_KV * 0.90)  grid_state = "SAG";
+    else if (grid_voltage_kv > GRID_VOLTAGE_KV * 1.10)  grid_state = "SWELL";
+    else                                                 grid_state = "GRID_OK";
   } else if (msg.startsWith("FREQ:")) {
-    freq_hz    = msg.substring(5).toFloat();
-    if (freq_hz < 59.3 || freq_hz > 60.7) grid_state = "FAULT"; // NERC deviation
+    freq_hz = msg.substring(5).toFloat();
+    if (freq_hz < 59.3 || freq_hz > 60.7) grid_state = "FAULT";
   } else if (msg.startsWith("LOAD:")) {
     load_pct = msg.substring(5).toInt();
   }
@@ -116,12 +113,11 @@ void setup() {
 
   // LCD first — before WiFi radio to avoid I2C interference
   Wire.begin();
-  lcd_addr = detectLCDAddr();
-  lcd = LiquidCrystal_I2C(lcd_addr, 16, 2);
-  lcd.init();
-  lcd.backlight();
-  lcd.setCursor(0, 0);
-  lcd.print("Connecting...");
+  lcd = new LiquidCrystal_I2C(detectLCDAddr(), 16, 2);
+  lcd->init();
+  lcd->backlight();
+  lcd->setCursor(0, 0);
+  lcd->print("Connecting...");
 
   // WiFi — full radio reset
   WiFi.persistent(false);
@@ -138,8 +134,8 @@ void setup() {
     if (millis() - wifi_start > 20000) {
       int s = WiFi.status();
       Serial.println("\nWiFi failed (status=" + String(s) + ") — waiting 30 s for hotspot then restarting");
-      lcd.clear(); lcd.setCursor(0, 0); lcd.print("WiFi FAILED s="); lcd.print(s);
-      lcd.setCursor(0, 1); lcd.print("Wait 30s...");
+      lcd->clear(); lcd->setCursor(0, 0); lcd->print("WiFi FAILED s="); lcd->print(s);
+      lcd->setCursor(0, 1); lcd->print("Wait 30s...");
       delay(30000);
       ESP.restart();
     }
@@ -147,8 +143,8 @@ void setup() {
     Serial.print(".");
   }
 
-  lcd.clear(); lcd.setCursor(0, 0);
-  lcd.print(node_id); lcd.print(" OK");
+  lcd->clear(); lcd->setCursor(0, 0);
+  lcd->print(node_id); lcd->print(" OK");
   Serial.println("\nWiFi connected: " + WiFi.localIP().toString());
 
   // NTP sync
@@ -167,56 +163,48 @@ void loop() {
   if (!mqtt.connected()) {
     Serial.print("MQTT connecting...");
     String lwt_topic = String("winter-river/") + node_id + "/status";
-    // LWT: broker publishes OFFLINE if this node disconnects — signals Side A cascade
-    String lwt_msg = String("{\"node\":\"") + node_id + "\",\"status\":\"OFFLINE\"}";
+    String lwt_msg   = String("{\"node\":\"") + node_id + "\",\"status\":\"OFFLINE\"}";
     if (mqtt.connect(node_id, lwt_topic.c_str(), 1, true, lwt_msg.c_str())) {
       Serial.println("connected");
-      // Override retained LWT with ONLINE
       String online = String("{\"ts\":\"") + getTimestamp() +
                       "\",\"node\":\"" + node_id +
                       "\",\"status\":\"ONLINE\"}";
       mqtt.publish(lwt_topic.c_str(), online.c_str(), true);
-      // Subscribe to control topic
       String ctrl = String("winter-river/") + node_id + "/control";
       mqtt.subscribe(ctrl.c_str());
       Serial.println("Subscribed to: " + ctrl);
     } else {
       Serial.println("failed, state=" + String(mqtt.state()));
-      lcd.clear(); lcd.setCursor(0, 0); lcd.print("MQTT FAIL");
-      lcd.setCursor(0, 1); lcd.print("st="); lcd.print(mqtt.state());
+      lcd->clear(); lcd->setCursor(0, 0); lcd->print("MQTT FAIL");
+      lcd->setCursor(0, 1); lcd->print("st="); lcd->print(mqtt.state());
       delay(2000);
       return;
     }
   }
 
   // ── LCD display ──────────────────────────────────────────────────────────────
-  // Line 0: "util_a GRID_OK" (or SAG / SWELL / OUTAGE)
+  // Line 0: "util_a GRID_OK"
   // Line 1: "230kV 60Hz 12%"
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print(node_id);
-  lcd.print(" ");
-  // Trim state to fit remaining cols (16 - 7 = 9)
-  String state_short = grid_state.substring(0, 8);
-  lcd.print(state_short);
+  lcd->clear();
+  lcd->setCursor(0, 0);
+  lcd->print(node_id);
+  lcd->print(" ");
+  lcd->print(grid_state.substring(0, 8));
 
-  lcd.setCursor(0, 1);
-  lcd.print((int)grid_voltage_kv);
-  lcd.print("kV ");
-  lcd.print((int)freq_hz);
-  lcd.print("Hz ");
-  lcd.print(load_pct);
-  lcd.print("%");
+  lcd->setCursor(0, 1);
+  lcd->print((int)grid_voltage_kv);
+  lcd->print("kV ");
+  lcd->print((int)freq_hz);
+  lcd->print("Hz ");
+  lcd->print(load_pct);
+  lcd->print("%");
 
   mqtt.loop();
 
   // ── Publish telemetry ─────────────────────────────────────────────────────────
-  // JSON fields aligned with simulation engine node schema:
-  //   v_out  → downstream nodes read this to set their v_in
-  //   state  → GRID_OK | SAG | SWELL | OUTAGE | FAULT
   String topic   = String("winter-river/") + node_id + "/status";
   String payload = String("{\"ts\":\"")        + getTimestamp()  +
-                   "\",\"v_out\":"             + grid_voltage_kv +  // kV
+                   "\",\"v_out\":"             + grid_voltage_kv +
                    ",\"freq_hz\":"             + freq_hz         +
                    ",\"load_pct\":"            + load_pct        +
                    ",\"state\":\""             + grid_state      +
@@ -226,5 +214,5 @@ void loop() {
   Serial.println("Published: " + payload);
   message_count++;
 
-  delay(5000); // 5 s publish interval
+  delay(5000);
 }

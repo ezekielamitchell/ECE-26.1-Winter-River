@@ -37,19 +37,19 @@ String getTimestamp() {
 WiFiClient espClient;
 PubSubClient mqtt(espClient);
 
-// ** LCD (16x2, I2C) — address auto-detected at boot (0x27 or 0x3F)
-uint8_t lcd_addr = 0x3F;
-LiquidCrystal_I2C lcd(lcd_addr, 16, 2);
-int message_count = 0;
+// ** LCD — pointer, allocated in setup() after I2C address scan
+// Scanning 0x27 and 0x3F covers both common PCF8574 backpack variants
+LiquidCrystal_I2C *lcd = nullptr;
 
-// Scan both common LCD backpack addresses; fall back to 0x3F if neither found
 uint8_t detectLCDAddr() {
   for (uint8_t addr : {0x27, 0x3F}) {
     Wire.beginTransmission(addr);
     if (Wire.endTransmission() == 0) return addr;
   }
-  return 0x3F; // default fallback
+  return 0x3F; // fallback
 }
+
+int message_count = 0;
 
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   String msg;
@@ -84,19 +84,18 @@ void setup() {
 
   // Initialize LCD first — before WiFi radio starts to avoid I2C interference
   Wire.begin();
-  lcd_addr = detectLCDAddr();
-  lcd = LiquidCrystal_I2C(lcd_addr, 16, 2);
-  lcd.init();
-  lcd.backlight();
-  lcd.setCursor(0, 0);
-  lcd.print("Connecting...");
+  lcd = new LiquidCrystal_I2C(detectLCDAddr(), 16, 2);
+  lcd->init();
+  lcd->backlight();
+  lcd->setCursor(0, 0);
+  lcd->print("Connecting...");
 
   // WiFi — full radio reset
-  WiFi.persistent(false);    // do NOT read/write NVS credentials
+  WiFi.persistent(false);
   WiFi.mode(WIFI_OFF);
   delay(200);
   WiFi.mode(WIFI_STA);
-  WiFi.disconnect(false);    // clear state without blocking reconnect
+  WiFi.disconnect(false);
   delay(200);
   WiFi.setMinSecurity(WIFI_AUTH_WPA_PSK);
   WiFi.begin(ssid, password);
@@ -106,15 +105,15 @@ void setup() {
     if (millis() - wifi_start > 20000) {
       int s = WiFi.status();
       Serial.println("\nWiFi failed (status=" + String(s) + ") — waiting 30 s for hotspot then restarting");
-      lcd.clear(); lcd.setCursor(0,0); lcd.print("WiFi FAILED s="); lcd.print(s);
-      lcd.setCursor(0,1); lcd.print("Wait 30s...");
+      lcd->clear(); lcd->setCursor(0,0); lcd->print("WiFi FAILED s="); lcd->print(s);
+      lcd->setCursor(0,1); lcd->print("Wait 30s...");
       delay(30000); ESP.restart();
     }
     delay(500); Serial.print(".");
   }
 
-  lcd.clear(); lcd.setCursor(0,0);
-  lcd.print(node_id); lcd.print(" OK");
+  lcd->clear(); lcd->setCursor(0,0);
+  lcd->print(node_id); lcd->print(" OK");
   Serial.println("\nWiFi connected: " + WiFi.localIP().toString());
 
   // NTP sync
@@ -147,16 +146,16 @@ void loop() {
   }
 
   // LCD display
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print(node_id);
-  lcd.print(" ");
-  lcd.print(sw_state.substring(0, 7));
-  lcd.setCursor(0, 1);
-  lcd.print((int)current_a);
-  lcd.print("A ");
-  lcd.print(load_pct);
-  lcd.print("%");
+  lcd->clear();
+  lcd->setCursor(0, 0);
+  lcd->print(node_id);
+  lcd->print(" ");
+  lcd->print(sw_state.substring(0, 7));
+  lcd->setCursor(0, 1);
+  lcd->print((int)current_a);
+  lcd->print("A ");
+  lcd->print(load_pct);
+  lcd->print("%");
 
   mqtt.loop();
 
