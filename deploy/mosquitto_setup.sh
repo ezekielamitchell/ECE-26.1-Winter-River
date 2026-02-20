@@ -34,8 +34,6 @@ cat > /etc/mosquitto/mosquitto.conf <<EOF
 # Winter River MQTT Broker Configuration
 # Managed by deploy/mosquitto_setup.sh — do not edit manually
 
-pid_file /run/mosquitto/mosquitto.pid
-
 # Listen on all interfaces, port 1883
 listener 1883 0.0.0.0
 allow_anonymous true
