@@ -48,12 +48,21 @@ String getTimestamp() {
 WiFiClient   espClient;
 PubSubClient mqtt(espClient);
 
-// ** OLED (128x64 SSD1306, I2C address 0x3C)
+// ** OLED (128x64 SSD1306 — address 0x3C common, 0x3D if SA0 pin is HIGH)
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 int message_count = 0;
+
+// Try 0x3C first, fall back to 0x3D — both are valid SSD1306 addresses
+uint8_t detectOLEDAddr() {
+  for (uint8_t addr : {0x3C, 0x3D}) {
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() == 0) return addr;
+  }
+  return 0x3C; // fallback
+}
 
 // Commands: INPUT:xxx | UPS:xxx | MECH:xxx | SOURCE:UTILITY/GENERATOR/NONE | STATUS:xxx
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
@@ -92,7 +101,7 @@ void setup() {
 
   // OLED first — before WiFi radio to avoid I2C interference
   Wire.begin();
-  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  display.begin(SSD1306_SWITCHCAPVCC, detectOLEDAddr());
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
