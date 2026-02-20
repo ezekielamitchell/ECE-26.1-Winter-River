@@ -2,7 +2,7 @@
 # mosquitto MQTT Broker Setup Script for Raspberry Pi
 # This script installs and configures mosquitto broker
 
-set -euo pipefail
+set -uo pipefail
 
 echo "========================================="
 echo "mosquitto MQTT Broker Setup"
@@ -51,18 +51,25 @@ EOF
 
 # Enable and start mosquitto
 echo "Enabling and starting mosquitto service..."
-systemctl enable mosquitto
+systemctl enable mosquitto || true
 # Stop first cleanly in case it was already running with old config
 systemctl stop mosquitto 2>/dev/null || true
 sleep 1
-systemctl start mosquitto
+systemctl start mosquitto || true
 
 # Verify service is running
 echo "Verifying mosquitto service status..."
-sleep 1
+sleep 2
 if ! systemctl is-active --quiet mosquitto; then
-    echo "ERROR: mosquitto failed to start. Full log:"
-    journalctl -u mosquitto -n 30 --no-pager
+    echo ""
+    echo "ERROR: mosquitto failed to start. Journal output:"
+    echo "----------------------------------------------------"
+    journalctl -u mosquitto -n 40 --no-pager
+    echo "----------------------------------------------------"
+    echo "Config test output:"
+    mosquitto -c /etc/mosquitto/mosquitto.conf -v &
+    sleep 2
+    kill %1 2>/dev/null || true
     exit 1
 fi
 systemctl status mosquitto --no-pager
