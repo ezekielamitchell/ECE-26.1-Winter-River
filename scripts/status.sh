@@ -121,7 +121,8 @@ echo ""
 # Last known node statuses (retained messages)
 bold "Last node telemetry (retained MQTT):"
 if command -v mosquitto_sub &>/dev/null; then
-    NODES=(trf_a pdu_a ups_a gen_a sw_a srv_a)
+    # Chain order: util_a → trf_a → sw_a → gen_a → dist_a → ups_a → pdu_a → srv_a
+    NODES=(util_a trf_a sw_a gen_a dist_a ups_a pdu_a srv_a)
     for node in "${NODES[@]}"; do
         MSG=$(timeout 2 mosquitto_sub -h 127.0.0.1 -p "$MQTT_PORT" \
             -t "winter-river/${node}/status" -C 1 2>/dev/null || echo "")
