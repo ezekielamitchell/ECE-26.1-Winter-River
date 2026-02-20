@@ -25,30 +25,35 @@ int message_count = 0;
 void setup() {
   Serial.begin(115200);
 
-  // WiFi setup — full radio reset before connecting
-  WiFi.mode(WIFI_OFF);       // power down radio
-  delay(100);                // let it settle
-  WiFi.mode(WIFI_STA);       // back to station mode
-  WiFi.disconnect(true);     // clear any cached credentials
-  delay(100);
-  WiFi.begin(ssid, password);
-
-  // Initialize LCD
+  // Initialize LCD first — before WiFi radio starts to avoid I2C interference
+  Wire.begin();
   lcd.init();
   lcd.backlight();
   lcd.setCursor(0, 0);
   lcd.print("Connecting...");
 
+  // WiFi setup — full radio reset before connecting
+  WiFi.persistent(false);    // do NOT read/write NVS credentials
+  WiFi.mode(WIFI_OFF);       // power down radio
+  delay(200);                // let it settle
+  WiFi.mode(WIFI_STA);       // back to station mode
+  WiFi.disconnect(false);    // clear state without blocking reconnect
+  delay(200);
+  WiFi.setMinSecurity(WIFI_AUTH_WPA_PSK);  // accept WPA as well as WPA2
+  WiFi.begin(ssid, password);
+
   unsigned long wifi_start = millis();
   while (WiFi.status() != WL_CONNECTED) {
-    if (millis() - wifi_start > 15000) {  // 15 s timeout
-      Serial.println("\nWiFi failed (status=" + String(WiFi.status()) + ") — restarting in 3 s");
+    if (millis() - wifi_start > 20000) {  // 20 s timeout
+      int s = WiFi.status();
+      Serial.println("\nWiFi failed (status=" + String(s) + ") — waiting 30 s for hotspot then restarting");
       lcd.clear();
       lcd.setCursor(0, 0);
-      lcd.print("WiFi FAILED");
+      lcd.print("WiFi FAILED s=");
+      lcd.print(s);
       lcd.setCursor(0, 1);
-      lcd.print("status=" + String(WiFi.status()));
-      delay(3000);
+      lcd.print("Wait 30s...");
+      delay(30000);
       ESP.restart();
     }
     delay(500);
@@ -71,12 +76,12 @@ void loop() {
     if (mqtt.connect(node_id)) {
       Serial.println("connected");
     } else {
-      Serial.println("failed");
+      Serial.println("failed, state=" + String(mqtt.state()));
       delay(2000);
       return;
     }
   }
-  
+
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print(node_id);

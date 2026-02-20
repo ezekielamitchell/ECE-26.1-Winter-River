@@ -1,7 +1,7 @@
 [Unit]
 Description=MQTT Broker Management Service
-After=network.target mosquitto.service
-Requires=mosquitto.service
+After=network.target mosquitto.service winter-river-hotspot.service
+Requires=mosquitto.service winter-river-hotspot.service
 
 [Service]
 Type=simple

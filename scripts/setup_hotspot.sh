@@ -44,7 +44,7 @@ start_hotspot() {
         ifname "$IFACE" \
         con-name "$CON_NAME" \
         ssid "$SSID" \
-        autoconnect no \
+        autoconnect yes \
         wifi.mode ap \
         wifi.band bg \
         wifi.channel 6 \
@@ -75,6 +75,8 @@ start_hotspot() {
 
 stop_hotspot() {
     echo "Stopping hotspot..."
+    # Disable autoconnect first so NM doesn't respawn it
+    nmcli connection modify "$CON_NAME" autoconnect no 2>/dev/null || true
     nmcli connection down   "$CON_NAME" 2>/dev/null || true
     nmcli connection delete "$CON_NAME" 2>/dev/null || true
     # Bring wlan0 back to managed mode so normal WiFi can resume

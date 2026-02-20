@@ -81,6 +81,7 @@ void setup() {
   Serial.begin(115200);
 
   // Initialize OLED
+  Wire.begin();
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   display.clearDisplay();
   display.setTextSize(1);
@@ -90,24 +91,28 @@ void setup() {
   display.display();
 
   // WiFi setup — full radio reset before connecting
+  WiFi.persistent(false);    // do NOT read/write NVS credentials
   WiFi.mode(WIFI_OFF);       // power down radio
-  delay(100);                // let it settle
+  delay(200);                // let it settle
   WiFi.mode(WIFI_STA);       // back to station mode
-  WiFi.disconnect(true);     // clear any cached credentials
-  delay(100);
+  WiFi.disconnect(false);    // clear state without blocking reconnect
+  delay(200);
+  WiFi.setMinSecurity(WIFI_AUTH_WPA_PSK);  // accept WPA as well as WPA2
   WiFi.begin(ssid, wifi_password);
 
   unsigned long wifi_start = millis();
   while (WiFi.status() != WL_CONNECTED) {
-    if (millis() - wifi_start > 15000) {  // 15 s timeout
-      Serial.println("\nWiFi failed (status=" + String(WiFi.status()) + ") — restarting in 3 s");
+    if (millis() - wifi_start > 20000) {  // 20 s timeout
+      int s = WiFi.status();
+      Serial.println("\nWiFi failed (status=" + String(s) + ") — waiting 30 s for hotspot then restarting");
       display.clearDisplay();
       display.setCursor(0, 0);
       display.println("WiFi FAILED");
-      display.println("status=" + String(WiFi.status()));
-      display.println("Restarting...");
+      display.println("status=" + String(s));
+      display.println("Wait 30s...");
       display.display();
-      delay(3000);
+      // Long wait so Pi hotspot has time to come up on standalone power
+      delay(30000);
       ESP.restart();
     }
     delay(500);
@@ -161,7 +166,13 @@ void loop() {
       Serial.print("Subscribed to: ");
       Serial.println(control_topic);
     } else {
-      Serial.println("failed");
+      Serial.println("failed, state=" + String(mqtt.state()));
+      display.clearDisplay();
+      display.setCursor(0, 0);
+      display.println("MQTT FAILED");
+      display.println("state=" + String(mqtt.state()));
+      display.println("Retrying...");
+      display.display();
       delay(2000);
       return;
     }

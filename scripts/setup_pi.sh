@@ -56,11 +56,16 @@ cd "$PROJECT_DIR/deploy"
 chmod +x mosquitto_setup.sh
 ./mosquitto_setup.sh
 
-# Set up WiFi hotspot
-echo "Setting up WiFi hotspot..."
-cd "$PROJECT_DIR/scripts"
-chmod +x setup_hotspot.sh
-./setup_hotspot.sh start
+# Set up WiFi hotspot systemd service (auto-starts hotspot on every boot)
+echo "Installing hotspot systemd service..."
+chmod +x "$PROJECT_DIR/scripts/setup_hotspot.sh"
+sed -e "s|/home/pi/ECE-26.1-Winter-River|$PROJECT_DIR|g" \
+    "$PROJECT_DIR/deploy/winter-river-hotspot.service" \
+    > /etc/systemd/system/winter-river-hotspot.service
+
+# Start hotspot now (first run creates the NM connection profile with autoconnect yes)
+echo "Starting WiFi hotspot..."
+"$PROJECT_DIR/scripts/setup_hotspot.sh" start
 
 # Configure NTP server so ESP32 nodes can sync time from the Pi
 echo "Configuring NTP server..."
@@ -70,15 +75,17 @@ if ! grep -q "192.168.4.0" /etc/ntp.conf 2>/dev/null; then
 fi
 systemctl restart ntp || systemctl restart ntpd || true
 
-# Set up systemd service for broker management
-echo "Setting up systemd service..."
-# Update the service file paths to match this installation
+# Install and enable all systemd services
+echo "Enabling systemd services..."
 sed -e "s|/home/pi/ECE-26.1-Winter-River|$PROJECT_DIR|g" \
     -e "s|User=pi|User=$ACTUAL_USER|g" \
     "$PROJECT_DIR/deploy/mqtt-broker.service" \
     > /etc/systemd/system/mqtt-broker.service
+
 systemctl daemon-reload
-systemctl enable mqtt-broker
+systemctl enable winter-river-hotspot   # hotspot auto-starts on boot
+systemctl enable mosquitto              # MQTT broker auto-starts on boot
+systemctl enable mqtt-broker            # broker management auto-starts on boot
 systemctl start mqtt-broker
 
 echo ""
@@ -86,13 +93,15 @@ echo "========================================="
 echo "Setup Complete!"
 echo "========================================="
 echo ""
-echo "Services status:"
-systemctl is-active mosquitto   && echo "  mosquitto:     RUNNING" || echo "  mosquitto:     STOPPED"
-systemctl is-active mqtt-broker && echo "  mqtt-broker:   RUNNING" || echo "  mqtt-broker:   STOPPED"
-systemctl is-active ntp         && echo "  ntp:           RUNNING" || \
-    (systemctl is-active ntpd   && echo "  ntpd:          RUNNING" || echo "  ntp:           STOPPED")
+echo "Services enabled for auto-boot:"
+systemctl is-active winter-river-hotspot && echo "  hotspot:       RUNNING" || echo "  hotspot:       STOPPED"
+systemctl is-active mosquitto            && echo "  mosquitto:     RUNNING" || echo "  mosquitto:     STOPPED"
+systemctl is-active mqtt-broker          && echo "  mqtt-broker:   RUNNING" || echo "  mqtt-broker:   STOPPED"
+systemctl is-active ntp                  && echo "  ntp:           RUNNING" || \
+    (systemctl is-active ntpd            && echo "  ntpd:          RUNNING" || echo "  ntp:           STOPPED")
 echo ""
 echo "Hotspot: SSID=WinterRiver-AP  Password=winterriver  Gateway=192.168.4.1"
 echo "MQTT broker listening on 192.168.4.1:1883"
 echo ""
+echo "All services will start automatically on next reboot."
 echo "Next: Flash ESP32 nodes with PlatformIO, then power them on."

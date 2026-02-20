@@ -28,22 +28,24 @@ int message_count = 0;
 void setup() {
   Serial.begin(115200);
 
+  // Initialize LCD first — before WiFi radio starts to avoid I2C interference
+  Wire.begin();
+  lcd.init();
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+  lcd.print("Connecting...");
+
+  adcAttachPin(ADC_PIN); // Configure ADC pin, default is ADC_11b (0-3.3V)
+  analogSetPinAttenuation(ADC_PIN, ADC_11db); // *ESP32
+
   // WiFi setup — full radio reset before connecting
   WiFi.mode(WIFI_OFF);       // power down radio
   delay(100);                // let it settle
   WiFi.mode(WIFI_STA);       // back to station mode
   WiFi.disconnect(true);     // clear any cached credentials
   delay(100);
+  WiFi.setMinSecurity(WIFI_AUTH_WPA_PSK);  // accept WPA as well as WPA2
   WiFi.begin(ssid, password);
-
-  adcAttachPin(ADC_PIN); // Configure ADC pin, default is ADC_11b (0-3.3V)
-  analogSetPinAttenuation(ADC_PIN, ADC_11db); // *ESP32
-
-  // Initialize LCD
-  lcd.init();
-  lcd.backlight();
-  lcd.setCursor(0, 0);
-  lcd.print("Connecting...");
 
   unsigned long wifi_start = millis();
   while (WiFi.status() != WL_CONNECTED) {
@@ -77,7 +79,7 @@ void loop() {
     if (mqtt.connect(node_id)) {
       Serial.println("connected");
     } else {
-      Serial.println("failed");
+      Serial.println("failed, state=" + String(mqtt.state()));
       delay(2000);
       return;
     }
