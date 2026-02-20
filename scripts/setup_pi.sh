@@ -1,14 +1,16 @@
 #!/bin/bash
 # Raspberry Pi Initial Setup Script
-# Sets up the complete IoT system on Raspberry Pi
+# Sets up the complete Winter River IoT system on Raspberry Pi
+#
+# Run once after cloning the repo:
+#   sudo ./scripts/setup_pi.sh
 
 set -euo pipefail
 
 echo "========================================="
-echo "Raspberry Pi IoT System Setup"
+echo "  Raspberry Pi IoT System Setup"
 echo "========================================="
 
-# Check if running with sudo
 if [ "$EUID" -ne 0 ]; then
     echo "Please run this script with sudo"
     exit 1
@@ -16,17 +18,6 @@ fi
 
 ACTUAL_USER="${SUDO_USER:-pi}"
 PROJECT_DIR="/home/$ACTUAL_USER/ECE-26.1-Winter-River"
-
-# Update system packages
-echo "Updating system packages..."
-apt update && apt upgrade -y
-
-# Install system dependencies
-# Note: Debian Trixie replaced ntp/ntpdate with ntpsec
-echo "Installing system dependencies..."
-apt install -y git python3 python3-pip python3-venv \
-    mosquitto mosquitto-clients \
-    ntpsec ntpsec-ntpdate
 
 # Verify project directory exists
 if [ ! -d "$PROJECT_DIR" ]; then
@@ -36,79 +27,72 @@ if [ ! -d "$PROJECT_DIR" ]; then
     exit 1
 fi
 
-# Set up Python virtual environment
-echo "Setting up Python virtual environment..."
-cd "$PROJECT_DIR"
-python3 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r broker/requirements.txt
+# ── System packages ───────────────────────────────────────────────────────────
+echo "Installing system packages..."
+apt update -qq
+# Note: Debian Trixie uses ntpsec instead of ntp/ntpdate
+apt install -y \
+    mosquitto mosquitto-clients \
+    ntpsec ntpsec-ntpdate
 
-# Configure broker
-echo "Configuring MQTT broker..."
-if [ ! -f "$PROJECT_DIR/broker/config.toml" ]; then
-    cp "$PROJECT_DIR/broker/config.sample.toml" "$PROJECT_DIR/broker/config.toml"
-    echo "broker/config.toml created from sample — review if needed"
-fi
+# ── Mosquitto MQTT broker ─────────────────────────────────────────────────────
+echo "Configuring mosquitto..."
+chmod +x "$PROJECT_DIR/deploy/mosquitto_setup.sh"
+"$PROJECT_DIR/deploy/mosquitto_setup.sh"
 
-# Run mosquitto setup
-echo "Setting up mosquitto broker..."
-cd "$PROJECT_DIR/deploy"
-chmod +x mosquitto_setup.sh
-./mosquitto_setup.sh
-
-# Set up WiFi hotspot systemd service (auto-starts hotspot on every boot)
+# ── WiFi hotspot ──────────────────────────────────────────────────────────────
 echo "Installing hotspot systemd service..."
 chmod +x "$PROJECT_DIR/scripts/setup_hotspot.sh"
-sed -e "s|/home/pi/ECE-26.1-Winter-River|$PROJECT_DIR|g" \
+# Copy service file, substituting actual project path if not default
+sed "s|/home/pi/ECE-26.1-Winter-River|$PROJECT_DIR|g" \
     "$PROJECT_DIR/deploy/winter-river-hotspot.service" \
     > /etc/systemd/system/winter-river-hotspot.service
 
-# Start hotspot now (first run creates the NM connection profile with autoconnect yes)
 echo "Starting WiFi hotspot..."
 "$PROJECT_DIR/scripts/setup_hotspot.sh" start
 
-# Configure NTP server so ESP32 nodes can sync time from the Pi
-# Debian Trixie uses ntpsec — config file is /etc/ntpsec/ntp.conf
-echo "Configuring NTP server..."
+# ── NTP (time sync for ESP32 nodes) ──────────────────────────────────────────
+echo "Configuring NTP..."
+# Allow hotspot subnet clients to query the Pi's NTP service
+# Debian Trixie: /etc/ntpsec/ntp.conf  |  older: /etc/ntp.conf
 NTP_CONF=""
-if [ -f /etc/ntpsec/ntp.conf ]; then
-    NTP_CONF="/etc/ntpsec/ntp.conf"
-elif [ -f /etc/ntp.conf ]; then
-    NTP_CONF="/etc/ntp.conf"
-fi
+[ -f /etc/ntpsec/ntp.conf ] && NTP_CONF="/etc/ntpsec/ntp.conf"
+[ -z "$NTP_CONF" ] && [ -f /etc/ntp.conf ] && NTP_CONF="/etc/ntp.conf"
 if [ -n "$NTP_CONF" ] && ! grep -q "192.168.4.0" "$NTP_CONF"; then
     echo "restrict 192.168.4.0 mask 255.255.255.0 nomodify notrap" >> "$NTP_CONF"
 fi
-systemctl restart ntpsec 2>/dev/null || systemctl restart ntp 2>/dev/null || systemctl restart ntpd 2>/dev/null || true
+systemctl restart ntpsec 2>/dev/null \
+    || systemctl restart ntp 2>/dev/null \
+    || systemctl restart ntpd 2>/dev/null \
+    || true
 
-# Install and enable all systemd services
-echo "Enabling systemd services..."
-sed -e "s|/home/pi/ECE-26.1-Winter-River|$PROJECT_DIR|g" \
-    -e "s|User=pi|User=$ACTUAL_USER|g" \
-    "$PROJECT_DIR/deploy/mqtt-broker.service" \
-    > /etc/systemd/system/mqtt-broker.service
-
+# ── Enable all services for auto-boot ────────────────────────────────────────
+echo "Enabling services for auto-boot..."
 systemctl daemon-reload
-systemctl enable winter-river-hotspot   # hotspot auto-starts on boot
-systemctl enable mosquitto              # MQTT broker auto-starts on boot
-systemctl enable mqtt-broker            # broker management auto-starts on boot
-systemctl start mqtt-broker
+systemctl enable winter-river-hotspot
+systemctl enable mosquitto
+systemctl enable ntpsec 2>/dev/null || systemctl enable ntp 2>/dev/null || true
 
+# ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
 echo "========================================="
-echo "Setup Complete!"
+echo "  Setup Complete!"
 echo "========================================="
 echo ""
 echo "Services enabled for auto-boot:"
-systemctl is-active winter-river-hotspot && echo "  hotspot:       RUNNING" || echo "  hotspot:       STOPPED"
-systemctl is-active mosquitto            && echo "  mosquitto:     RUNNING" || echo "  mosquitto:     STOPPED"
-systemctl is-active mqtt-broker          && echo "  mqtt-broker:   RUNNING" || echo "  mqtt-broker:   STOPPED"
-{ systemctl is-active ntpsec 2>/dev/null || systemctl is-active ntp 2>/dev/null || systemctl is-active ntpd 2>/dev/null; } \
-    && echo "  ntp:           RUNNING" || echo "  ntp:           STOPPED"
+systemctl is-active winter-river-hotspot \
+    && echo "  hotspot:    RUNNING" || echo "  hotspot:    STOPPED"
+systemctl is-active mosquitto \
+    && echo "  mosquitto:  RUNNING" || echo "  mosquitto:  STOPPED"
+{ systemctl is-active ntpsec 2>/dev/null \
+    || systemctl is-active ntp 2>/dev/null \
+    || systemctl is-active ntpd 2>/dev/null; } \
+    && echo "  ntp:        RUNNING" || echo "  ntp:        STOPPED"
 echo ""
-echo "Hotspot: SSID=WinterRiver-AP  Password=winterriver  Gateway=192.168.4.1"
-echo "MQTT broker listening on 192.168.4.1:1883"
+echo "  Hotspot SSID : WinterRiver-AP"
+echo "  Password     : winterriver"
+echo "  Gateway      : 192.168.4.1"
+echo "  MQTT broker  : 192.168.4.1:1883"
 echo ""
-echo "All services will start automatically on next reboot."
-echo "Next: Flash ESP32 nodes with PlatformIO, then power them on."
+echo "All services start automatically on every reboot."
+echo "Next: flash ESP32 nodes, then power them on."

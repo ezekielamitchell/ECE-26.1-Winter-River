@@ -3,8 +3,8 @@ Description=Winter River WiFi Hotspot (2.4 GHz AP)
 # Run after NetworkManager is fully up
 After=NetworkManager.service
 Wants=NetworkManager.service
-# Must be up before mosquitto and the broker mgmt service depend on the network
-Before=mosquitto.service mqtt-broker.service
+# Must be up before mosquitto so the network interface is ready
+Before=mosquitto.service
 
 [Service]
 Type=oneshot
