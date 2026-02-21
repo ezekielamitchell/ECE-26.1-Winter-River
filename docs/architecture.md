@@ -12,14 +12,14 @@ This IoT system consists of three main components:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      Raspberry Pi                            │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │  mosquitto   │  │   Python     │  │   Grafana    │      │
-│  │ MQTT Broker  │◄─┤  Management  │  │  + InfluxDB  │      │
-│  │  (port 1883) │  │   Utilities  │  │  + Telegraf  │      │
-│  └──────┬───────┘  └──────────────┘  └──────────────┘      │
-│         │                                      ▲             │
-└─────────┼──────────────────────────────────────┼─────────────┘
+│                      Raspberry Pi                           │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
+│  │  mosquitto   │  │   Python     │  │   Grafana    │       │
+│  │ MQTT Broker  │◄─┤  Management  │  │  + InfluxDB  │       │
+│  │  (port 1883) │  │   Utilities  │  │  + Telegraf  │       │
+│  └──────┬───────┘  └──────────────┘  └──────────────┘       │
+│         │                                      ▲            │
+└─────────┼──────────────────────────────────────┼────────────┘
           │                                      │
           │ MQTT Protocol                  Data Bridge
           │ (pub/sub)                      (MQTT→InfluxDB)

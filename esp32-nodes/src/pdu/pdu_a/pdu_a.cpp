@@ -2,47 +2,68 @@
 #include <PubSubClient.h>
 #include <WiFi.h>
 #include <Wire.h>
-#include <LiquidCrystal_I2C.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 
 // ** NODE
 const char *node_id = "pdu_a";
-const int voltage_rating = 480;// volts
+const int voltage_rating = 480; // volts
 
 // ** NETWORK
-const char *ssid = "endr";       // change to local wifi ssid
-const char *password = "SeattleUniversity01$$"; // change to local wifi pass
-
-// ** MQTT BROKER
-const char *mqtt_server = "10.0.0.75"; // change to broker ip
+const char *ssid        = "WinterRiver-AP";
+const char *password    = "winterriver";
+const char *mqtt_server = "192.168.4.1";
 
 WiFiClient espClient;
 PubSubClient mqtt(espClient);
 
-// ** LCD Init (16 columns, 2 rows, I2C address 0x27 - try 0x3F if this doesn't work)
-LiquidCrystal_I2C lcd(0x3F, 16, 2);
+// ** OLED (128x64 SSD1306, I2C address 0x3C)
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 int message_count = 0;
 
 void setup() {
   Serial.begin(115200);
+
+  // OLED first — before WiFi radio to avoid I2C interference
+  Wire.begin();
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.println("Connecting...");
+  display.display();
+
+  // WiFi — full radio reset
+  WiFi.persistent(false);
+  WiFi.mode(WIFI_OFF);
+  delay(200);
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect(false);
+  delay(200);
+  WiFi.setMinSecurity(WIFI_AUTH_WPA_PSK);
   WiFi.begin(ssid, password);
 
-  // Initialize LCD
-  lcd.init();
-  lcd.backlight();
-  lcd.setCursor(0, 0);
-  lcd.print("Connecting...");
-
+  unsigned long wifi_start = millis();
   while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+    if (millis() - wifi_start > 20000) {
+      int s = WiFi.status();
+      Serial.println("\nWiFi failed (status=" + String(s) + ") — waiting 30 s for hotspot then restarting");
+      display.clearDisplay(); display.setCursor(0, 0);
+      display.println("WiFi FAILED"); display.println("status=" + String(s)); display.println("Wait 30s...");
+      display.display();
+      delay(30000); ESP.restart();
+    }
+    delay(500); Serial.print(".");
   }
 
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print(node_id);
-  lcd.print(" OK");
-
-  Serial.println("\nWiFi connected");
+  display.clearDisplay(); display.setCursor(0, 0);
+  display.println(node_id); display.println("WiFi OK");
+  display.display();
+  Serial.println("\nWiFi connected: " + WiFi.localIP().toString());
 
   mqtt.setServer(mqtt_server, 1883);
 }
@@ -53,20 +74,19 @@ void loop() {
     if (mqtt.connect(node_id)) {
       Serial.println("connected");
     } else {
-      Serial.println("failed");
-      delay(2000);
-      return;
+      Serial.println("failed, state=" + String(mqtt.state()));
+      delay(2000); return;
     }
   }
-  
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print(node_id);
+
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.println(node_id);
+  display.print("IP: "); display.println(WiFi.localIP());
+  display.print("Volt: "); display.print(voltage_rating); display.println("V");
+  display.print("Msgs: "); display.println(message_count);
+  display.display();
   message_count++;
-  lcd.setCursor(0, 1);
-  lcd.print(WiFi.localIP());
-  lcd.print(" ");
-  lcd.print(voltage_rating);
 
   mqtt.loop();
   String msg = String("MQTT Relay Successful: ") + node_id;

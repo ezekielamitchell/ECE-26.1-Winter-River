@@ -18,14 +18,14 @@ int temp_f = 108;         // winding temperature (°F)
 String status_str = "NORMAL";   // NORMAL, WARNING, FAULT
 
 // ** NETWORK CONFIG
-const char *ssid = "endr";
-const char *wifi_password = "SeattleUniversity01$$";
+const char *ssid = "WinterRiver-AP";
+const char *wifi_password = "winterriver";
 
 // ** MQTT BROKER
-const char *mqtt_server = "10.0.0.18"; // change to broker ip
+const char *mqtt_server = "192.168.4.1"; // Pi hotspot gateway
 
 // ** NTP CONFIG
-const char* ntp_server = "pool.ntp.org";
+const char* ntp_server = "192.168.4.1";  // Pi acts as local NTP server
 const long gmt_offset_sec = -28800;  // PST = UTC-8 (adjust for your timezone)
 const int daylight_offset_sec = 3600; // DST offset
 
@@ -81,6 +81,7 @@ void setup() {
   Serial.begin(115200);
 
   // Initialize OLED
+  Wire.begin();
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   display.clearDisplay();
   display.setTextSize(1);
@@ -89,12 +90,31 @@ void setup() {
   display.println("Connecting...");
   display.display();
 
-  // WiFi setup
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_STA);
+  // WiFi setup — full radio reset before connecting
+  WiFi.persistent(false);    // do NOT read/write NVS credentials
+  WiFi.mode(WIFI_OFF);       // power down radio
+  delay(200);                // let it settle
+  WiFi.mode(WIFI_STA);       // back to station mode
+  WiFi.disconnect(false);    // clear state without blocking reconnect
+  delay(200);
+  WiFi.setMinSecurity(WIFI_AUTH_WPA_PSK);  // accept WPA as well as WPA2
   WiFi.begin(ssid, wifi_password);
 
+  unsigned long wifi_start = millis();
   while (WiFi.status() != WL_CONNECTED) {
+    if (millis() - wifi_start > 20000) {  // 20 s timeout
+      int s = WiFi.status();
+      Serial.println("\nWiFi failed (status=" + String(s) + ") — waiting 30 s for hotspot then restarting");
+      display.clearDisplay();
+      display.setCursor(0, 0);
+      display.println("WiFi FAILED");
+      display.println("status=" + String(s));
+      display.println("Wait 30s...");
+      display.display();
+      // Long wait so Pi hotspot has time to come up on standalone power
+      delay(30000);
+      ESP.restart();
+    }
     delay(500);
     Serial.print(".");
   }
@@ -102,20 +122,26 @@ void setup() {
   display.clearDisplay();
   display.setCursor(0, 0);
   display.println(node_id);
-  display.println("OK");
+  display.println("WiFi OK");
   display.display();
 
-  Serial.println("\nWiFi connected");
+  Serial.println("\nWiFi connected: " + WiFi.localIP().toString());
 
   // Sync time with NTP server
   configTime(gmt_offset_sec, daylight_offset_sec, ntp_server);
   Serial.println("Waiting for NTP time sync...");
   struct tm timeinfo;
-  while (!getLocalTime(&timeinfo)) {
+  int ntp_retries = 0;
+  while (!getLocalTime(&timeinfo) && ntp_retries < 10) {
     delay(500);
     Serial.print(".");
+    ntp_retries++;
   }
-  Serial.println("\nTime synced: " + getTimestamp());
+  if (ntp_retries >= 10) {
+    Serial.println("\nNTP sync failed, continuing without time");
+  } else {
+    Serial.println("\nTime synced: " + getTimestamp());
+  }
 
   mqtt.setServer(mqtt_server, 1883);
   mqtt.setCallback(mqttCallback);
@@ -125,8 +151,7 @@ void loop() {
   if (!mqtt.connected()) {
     Serial.print("MQTT connecting...");
     // Last Will and Testament - broker publishes this if node disconnects unexpectedly
-    // String lwt_topic = String("winter-river/") + node_id + "/status";
-    String lwt_topic = "test/topic";
+    String lwt_topic = String("winter-river/") + node_id + "/status";
     String lwt_message = String("{\"node\":\"") + node_id + "\",\"status\":\"OFFLINE\"}";
     if (mqtt.connect(node_id, lwt_topic.c_str(), 1, true, lwt_message.c_str())) {
       Serial.println("connected");
@@ -136,13 +161,18 @@ void loop() {
       mqtt.publish(lwt_topic.c_str(), online_msg.c_str(), true);  // retained
 
       // Subscribe to control topic for this node
-      // String control_topic = String("winter-river/") + node_id + "/control";
-      String control_topic = "test/topic";
+      String control_topic = String("winter-river/") + node_id + "/control";
       mqtt.subscribe(control_topic.c_str());
       Serial.print("Subscribed to: ");
       Serial.println(control_topic);
     } else {
-      Serial.println("failed");
+      Serial.println("failed, state=" + String(mqtt.state()));
+      display.clearDisplay();
+      display.setCursor(0, 0);
+      display.println("MQTT FAILED");
+      display.println("state=" + String(mqtt.state()));
+      display.println("Retrying...");
+      display.display();
       delay(2000);
       return;
     }
@@ -190,8 +220,7 @@ void loop() {
   mqtt.loop();
 
   // Publish status JSON to telemetry topic
-  // String status_topic = String("winter-river/") + node_id + "/status";
-  String status_topic = "test/topic";
+  String status_topic = String("winter-river/") + node_id + "/status";
   String payload = String("{\"ts\":\"") + getTimestamp() +
                    "\",\"load\":" + load_percent +
                    ",\"power_kva\":" + power_kva +

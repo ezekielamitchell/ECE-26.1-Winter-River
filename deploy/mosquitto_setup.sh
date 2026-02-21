@@ -2,7 +2,7 @@
 # mosquitto MQTT Broker Setup Script for Raspberry Pi
 # This script installs and configures mosquitto broker
 
-set -e  # Exit on error
+set -uo pipefail
 
 echo "========================================="
 echo "mosquitto MQTT Broker Setup"
@@ -14,54 +14,81 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# TODO: Implement mosquitto installation
+# Install mosquitto
 echo "Installing mosquitto and mosquitto-clients..."
-# apt update
-# apt install -y mosquitto mosquitto-clients
+apt update
+apt install -y mosquitto mosquitto-clients
 
-# TODO: Create mosquitto configuration
+# Create mosquitto configuration
+# We overwrite the main mosquitto.conf entirely and remove any conf.d drop-ins
+# to avoid duplicate directive errors (persistence_location, listener, etc.)
 echo "Creating mosquitto configuration..."
-# cat > /etc/mosquitto/conf.d/custom.conf <<EOF
-# # Custom mosquitto configuration
-# listener 1883
-# allow_anonymous true  # TODO: Disable in production
-#
-# # Persistence
-# persistence true
-# persistence_location /var/lib/mosquitto/
-#
-# # Logging
-# log_dest file /var/log/mosquitto/mosquitto.log
-# log_dest stdout
-# log_type all
-# EOF
+mkdir -p /var/lib/mosquitto /var/log/mosquitto /run/mosquitto
+chown mosquitto:mosquitto /var/lib/mosquitto /var/log/mosquitto /run/mosquitto
 
-# TODO: Set up authentication (optional but recommended)
-# mosquitto_passwd -c /etc/mosquitto/passwd mqtt_user
+# Remove any leftover conf.d files from previous installs
+rm -f /etc/mosquitto/conf.d/winter-river.conf
+rm -f /etc/mosquitto/conf.d/*.conf 2>/dev/null || true
 
-# TODO: Set proper permissions
-# chown mosquitto:mosquitto /etc/mosquitto/passwd
-# chmod 600 /etc/mosquitto/passwd
+cat > /etc/mosquitto/mosquitto.conf <<EOF
+# Winter River MQTT Broker Configuration
+# Managed by deploy/mosquitto_setup.sh — do not edit manually
 
-# TODO: Enable and start mosquitto service
+# Listen on all interfaces, port 1883
+listener 1883 0.0.0.0
+allow_anonymous true
+
+# Persistence — retain messages across restarts
+persistence true
+persistence_location /var/lib/mosquitto/
+
+# Logging
+log_dest file /var/log/mosquitto/mosquitto.log
+log_type error
+log_type warning
+log_type notice
+log_type information
+log_timestamp true
+EOF
+
+# Enable and start mosquitto
 echo "Enabling and starting mosquitto service..."
-# systemctl enable mosquitto
-# systemctl restart mosquitto
+systemctl enable mosquitto || true
+# Stop first cleanly in case it was already running with old config
+systemctl stop mosquitto 2>/dev/null || true
+sleep 1
+systemctl start mosquitto || true
 
-# TODO: Verify service is running
+# Verify service is running
 echo "Verifying mosquitto service status..."
-# systemctl status mosquitto --no-pager
+sleep 2
+if ! systemctl is-active --quiet mosquitto; then
+    echo ""
+    echo "ERROR: mosquitto failed to start. Journal output:"
+    echo "----------------------------------------------------"
+    journalctl -u mosquitto -n 40 --no-pager
+    echo "----------------------------------------------------"
+    echo "Config test output:"
+    mosquitto -c /etc/mosquitto/mosquitto.conf -v &
+    sleep 2
+    kill %1 2>/dev/null || true
+    exit 1
+fi
+systemctl status mosquitto --no-pager
 
-# TODO: Test MQTT broker
+# Test MQTT broker
 echo "Testing MQTT broker..."
-# timeout 2 mosquitto_sub -h localhost -t test &
-# sleep 1
-# mosquitto_pub -h localhost -t test -m "test message"
+sleep 1
+timeout 3 mosquitto_sub -h localhost -t test/ping -C 1 &
+SUB_PID=$!
+sleep 0.5
+mosquitto_pub -h localhost -t test/ping -m "ok"
+wait $SUB_PID && echo "Broker test: PASSED" || echo "Broker test: FAILED (check journalctl -u mosquitto)"
 
 echo ""
 echo "========================================="
-echo "Setup complete!"
+echo "mosquitto setup complete!"
 echo "========================================="
-echo "TODO: Uncomment and implement the setup steps above"
-echo "TODO: Configure authentication in production"
-echo "TODO: Set up TLS/SSL for secure connections"
+echo "Broker listening on 0.0.0.0:1883"
+echo "Logs: /var/log/mosquitto/mosquitto.log"
+echo "Test: mosquitto_pub -h 192.168.4.1 -t winter-river/test -m hello"

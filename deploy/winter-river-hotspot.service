@@ -1,0 +1,23 @@
+[Unit]
+Description=Winter River WiFi Hotspot (2.4 GHz AP)
+# Run after NetworkManager is fully up
+After=NetworkManager.service
+Wants=NetworkManager.service
+# Must be up before mosquitto so the network interface is ready
+Before=mosquitto.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/home/pi/ECE-26.1-Winter-River/scripts/setup_hotspot.sh start
+ExecStop=/home/pi/ECE-26.1-Winter-River/scripts/setup_hotspot.sh stop
+# If hotspot fails, retry up to 3 times with a 5-second gap
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=winter-river-hotspot
+
+[Install]
+WantedBy=multi-user.target

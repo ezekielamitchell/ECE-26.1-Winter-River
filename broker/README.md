@@ -1,6 +1,8 @@
 # MQTT Broker
 
-Python-based MQTT broker for the ECE-26.1 IoT Environmental Monitoring System.
+Python utilities for the ECE-26.1 Winter River data center training simulator.
+
+> **Note:** The primary MQTT broker is **Mosquitto**, running on the Raspberry Pi at `192.168.4.1:1883`. `main.py` is a stub for future Python subscriber/processing utilities.
 
 ## Features
 
@@ -23,8 +25,8 @@ Python-based MQTT broker for the ECE-26.1 IoT Environmental Monitoring System.
 1. Create a virtual environment:
 
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
 2. Install dependencies:
@@ -89,12 +91,17 @@ python main.py
 
 ### Production
 
-Use systemd service (see deployment documentation):
+The systemd service is installed by `scripts/setup_pi.sh` and points to the project's `.venv`:
 
 ```bash
 sudo systemctl start mqtt-broker
 sudo systemctl enable mqtt-broker
+sudo systemctl status mqtt-broker
 ```
+
+Service file: `deploy/mqtt-broker.service`
+Working directory: `/home/pi/ECE-26.1-Winter-River`
+Interpreter: `/home/pi/ECE-26.1-Winter-River/.venv/bin/python`
 
 ## Development
 
@@ -180,10 +187,9 @@ ESP32 → MQTT → Validator → Database → Grafana
 
 ## MQTT Topics
 
-- `sensor/{node_id}/temperature` - Temperature readings (°C)
-- `sensor/{node_id}/humidity` - Humidity readings (%)
-- `sensor/{node_id}/pressure` - Pressure readings (hPa)
-- `sensor/{node_id}/status` - Node status messages
+- `winter-river/{node_id}/status` - Node telemetry JSON (load, temp, voltage, status)
+- `winter-river/{node_id}/control` - Commands to node (`LOAD:xx`, `TEMP:xx`, `STATUS:xxxx`)
+- `winter-river` - General publish topic (pdu_a, pdu_b, server nodes)
 
 ## Database Schema
 
@@ -237,9 +243,11 @@ Example:
 
 ### Connection Issues
 
-- Verify MQTT broker is running: `sudo systemctl status mqtt-broker`
+- Verify Mosquitto is running: `sudo systemctl status mosquitto`
+- Verify the broker management service is running: `sudo systemctl status mqtt-broker`
+- Confirm the Pi hotspot is up on 2.4 GHz: `sudo ./scripts/setup_hotspot.sh status`
 - Check firewall rules allow port 1883
-- Verify ESP32 nodes can reach the broker IP
+- Verify ESP32 nodes can reach `192.168.4.1` (Pi gateway IP)
 
 ### Database Issues
 
