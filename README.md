@@ -1,5 +1,4 @@
-
-# <div align="center" data-with-frame="true">ECE 26.1 Winter River</div>
+# ECE 26.1 Winter River
 
 <div align="center" data-with-frame="true"><figure><picture><source srcset=".gitbook/assets/WR_1_B.png" media="(prefers-color-scheme: dark)"><img src=".gitbook/assets/WR_1.png" alt=""></picture><figcaption><p>image [1] logo</p></figcaption></figure></div>
 
@@ -7,7 +6,9 @@
 
 <p align="center">Team: Leilani Gonzalez, Ton Dam Lam (Adam), William McDonald, Ezekiel A. Mitchell, Keshav Verma<br>{lgonzalez1, tlam, wmcdonald, emitchell4, kverma1}@seattleu.edu</p>
 
-<p align="center"><a href="https://github.com/ezekielamitchell/GUARDEN/blob/main/LICENSE/README.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a> <a href="https://www.espressif.com/en/products/socs/esp32-c3"><img src="https://img.shields.io/badge/platform-ESP32--C3-green.svg" alt="Platform"></a> <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.8+-blue.svg" alt="Python"></a> <a href="https://github.com/ezekielamitchell/ECE-26.1-Winter-River/actions/workflows/ci.yml"> <img src="https://github.com/ezekielamitchell/ECE-26.1-Winter-River/actions/workflows/ci.yml/badge.svg" alt="CI"> </a> <a href="./LICENSE"></p>
+<p align="center"><a href="https://github.com/ezekielamitchell/GUARDEN/blob/main/LICENSE/README.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a> <a href="https://www.espressif.com/en/products/socs/esp32-c3"><img src="https://img.shields.io/badge/platform-ESP32--C3-green.svg" alt="Platform"></a> <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.8+-blue.svg" alt="Python"></a></p>
+
+***
 
 ## Overview
 
@@ -67,55 +68,41 @@ By combining physical modularity (plug-and-play components on a custom PCB basep
 
 ```md
 ECE-26.1-Winter-River/
-├── .github/workflows/
-│   └── ci.yml                         # CI/CD pipeline
+├── .github/
+│   └── workflows/
+│       └── ci.yml                    # CI/CD pipeline
 ├── broker/
-│   ├── main.py                        # MQTT broker entry point
-│   ├── config.sample.toml             # Config template
+│   ├── __init__.py                    # Python package init
+│   ├── config.sample.toml             # Configuration template
+│   ├── main.py                        # MQTT broker main entry
 │   ├── pyproject.toml                 # Python project config
-│   ├── requirements.txt               # Production deps
-│   ├── requirements-dev.txt           # Dev deps
-│   └── README.md
+│   ├── requirements-dev.txt           # Development dependencies
+│   ├── requirements.txt               # Production dependencies
+│   └── README.md                      # Broker documentation
 ├── deploy/
-│   ├── mosquitto_setup.sh             # Mosquitto install/config
-│   └── mqtt-broker.service            # Systemd service
+│   ├── mosquitto_setup.sh             # Mosquitto MQTT setup script
+│   └── mqtt-broker.service            # Systemd service file
 ├── docs/
-│   ├── architecture.md
-│   └── deployment.md
+│   ├── architecture.md                # System architecture docs
+│   └── deployment.md                  # Deployment guide
 ├── esp32-nodes/
-│   ├── src/
-│   │   ├── transformer/
-│   │   │   └── transformer_a/
-│   │   │       └── transformer_a.cpp  # Transformer node (LWT, MQTT, OLED)
-│   │   ├── pdu/
-│   │   │   ├── pdu_a/pdu_a.cpp        # PDU A node
-│   │   │   └── pdu_b/pdu_b.cpp        # PDU B node
-│   │   └── server/
-│   │       └── server.cpp             # Server rack node
-│   ├── test/
-│   │   └── wifi_connection_test.cpp
-│   ├── platformio.ini                 # Multi-env PlatformIO config
-│   ├── TROUBLESHOOTING.md
-│   └── README.md                      # MQTT + LWT node guide
+│   ├── include/                       # Header files
+│   ├── src/                           # ESP32 source code
+│   ├── test/                          # Unit tests
+│   ├── .gitignore                     # Git ignore for ESP32
+│   └── platformio.ini                 # PlatformIO configuration
 ├── grafana/
-│   ├── dashboards/
-│   │   ├── broker-overview.json
-│   │   └── nodes-telemetry.json
-│   ├── provisioning/
-│   │   ├── dashboards/dashboard.yml
-│   │   └── datasources/datasource.yml
-│   ├── docker-compose.yml             # Grafana + Telegraf stack
-│   ├── grafana.ini
-│   ├── telegraf.conf                  # MQTT → InfluxDB bridge
-│   ├── .env.sample
-│   └── README.md
+│   ├── dashboards/                    # Grafana dashboard definitions
+│   ├── provisioning/                  # Auto-provisioning configs
+│   ├── .env.sample                    # Environment variables template
+│   ├── docker-compose.yml             # Grafana + data source containers
+│   ├── grafana.ini                    # Grafana configuration
+│   ├── telegraf.conf                  # Telegraf metrics collector
+│   └── README.md                      # Grafana setup documentation
 ├── scripts/
-│   ├── setup_pi.sh                    # Raspberry Pi bootstrap
-│   ├── setup_hotspot.sh               # WiFi hotspot setup (SSID: WinterRiver-AP)
-│   └── init_db.sql                    # Database schema
-├── config.toml                        # Global project config
-├── CONTRIBUTING.md
-├── SUMMARY.md
-├── LICENSE
-└── README.md
+│   └── setup_pi.sh                    # Raspberry Pi setup script
+├── .gitignore                         # Root git ignore
+├── CONTRIBUTING.md                    # Contribution guidelines
+├── LICENSE                            # MIT license
+└── README.md                          # Project overview
 ```
