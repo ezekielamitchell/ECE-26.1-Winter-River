@@ -4,10 +4,11 @@ description: >-
   River project — capturing field deployments, hardware builds, and system
   testing throughout the project lifecycle.
 icon: grid-4
-coverY: 0
 ---
 
 # Gallery
+
+<figure><img src=".gitbook/assets/Screenshot 2026-02-21 at 11.21.01.png" alt=""><figcaption></figcaption></figure>
 
 ### Field Deployment
 
