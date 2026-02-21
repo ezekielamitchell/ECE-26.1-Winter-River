@@ -12,7 +12,7 @@
 
 ## Overview
 
-[Winter River](https://ezekielamitchell.gitbook.io/ece-26.1-winter-river/) is a modular, tabletop-scale data center training simulator designed to bridge the critical skills gap in data center operations. Developed in partnership with Amazon Web Services (AWS), this educational platform provides hands-on experience with data center infrastructure systems without the cost, complexity, or risk associated with real facilities.
+[Winter River](https://ezekielamitchell.gitbook.io/ece-26.1-winter-river/) ([ezekielamitchell.gitbook.io/ece-26.1-winter-river/](https://ezekielamitchell.gitbook.io/ece-26.1-winter-river/)) is a modular, tabletop-scale data center training simulator designed to bridge the critical skills gap in data center operations. Developed in partnership with Amazon Web Services (AWS), this educational platform provides hands-on experience with data center infrastructure systems without the cost, complexity, or risk associated with real facilities.
 
 The project addresses a growing industry need: as of 2025, the U.S. operates over 5,400 active data centers with data center employment growing 60% from 2016 to 2023, yet qualified personnel continue to fall short of demand. More than half of U.S. data center operators report difficulty hiring qualified candidates, particularly for specialized skills in power distribution, thermal management, and infrastructure systems.
 
@@ -120,4 +120,4 @@ ECE-26.1-Winter-River/
 | `scripts/status.sh`                   | Checks all 8 nodes + Pi services at a glance   |
 | `grafana/docker-compose.yml`          | Spins up the full monitoring stack             |
 
-See full page: [ezekielamitchell.gitbook.io/ece-26.1-winter-river/](https://ezekielamitchell.gitbook.io/ece-26.1-winter-river/)<br>
+<br>
