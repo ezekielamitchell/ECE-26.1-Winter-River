@@ -3,7 +3,6 @@ description: >-
   A visual collection of photos, diagrams, and documentation from the Winter
   River project — capturing field deployments, hardware builds, and system
   testing throughout the project lifecycle.
-icon: grid-4
 ---
 
 # Gallery
