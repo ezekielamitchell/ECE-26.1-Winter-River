@@ -1,3 +1,16 @@
+# =============================================================================
+# DEPRECATED — Docker-based monitoring stack
+# =============================================================================
+# This file is kept for reference only.
+# The Winter River project now runs InfluxDB, Telegraf, and Grafana as native
+# systemd services installed directly on the Raspberry Pi.
+#
+# To set up the native stack, run:
+#   sudo ./scripts/setup_pi.sh
+#
+# See grafana/README.md for the full native install documentation.
+# =============================================================================
+
 version: '3.8'
 
 services:

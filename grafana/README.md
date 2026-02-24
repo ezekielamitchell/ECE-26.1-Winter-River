@@ -1,142 +1,183 @@
 # Grafana Visualization Setup
 
-This directory contains Grafana configuration for visualizing MQTT broker metrics and ESP32 node telemetry.
-
-## Overview
-
-- **Broker Monitoring**: Visualize mosquitto broker statistics and connection metrics
-- **Node Telemetry**: Dashboard for monitoring up to 3 ESP32 nodes (scalable to 20)
-- **Real-time Updates**: Live visualization of sensor data and system health
+This directory contains Grafana configuration for visualizing MQTT broker metrics
+and ESP32 node telemetry.  The stack runs **natively on the Raspberry Pi** via
+systemd — no Docker required.
 
 ## Architecture
 
 ```
 grafana/
 ├── README.md                          # This file
-├── docker-compose.yml                 # Grafana + data source containers
-├── grafana.ini                        # Grafana configuration
+├── docker-compose.yml                 # DEPRECATED — kept for reference only
+├── grafana.ini                        # Grafana tunables (referenced in docs)
+├── telegraf.conf                      # Telegraf MQTT→InfluxDB bridge config
+├── .env.sample                        # Credential template (copy → .env)
 ├── dashboards/                        # Dashboard JSON definitions
 │   ├── broker-overview.json          # MQTT broker metrics dashboard
 │   └── nodes-telemetry.json          # ESP32 nodes telemetry dashboard
-└── provisioning/                      # Auto-provisioning configs
+└── provisioning/                      # Grafana auto-provisioning configs
     ├── dashboards/
     │   └── dashboard.yml             # Dashboard provisioning config
     └── datasources/
         └── datasource.yml            # Data source provisioning config
 ```
 
+## Data flow
+
+```
+ESP32 nodes
+    │  MQTT  (TCP 1883)
+    ▼
+Mosquitto broker  (192.168.4.1)
+    │  MQTT  (TCP 1883)          ─── also WebSocket (WS 9001) ──► Grafana MQTT Live
+    ▼
+Telegraf  (MQTT consumer)
+    │  Line Protocol
+    ▼
+InfluxDB 2  (localhost:8086, bucket: mqtt_metrics)
+    │  Flux queries
+    ▼
+Grafana  (http://192.168.4.1:3000)
+```
+
 ## Prerequisites
 
-- Docker and Docker Compose installed on Raspberry Pi
-- MQTT broker (mosquitto) running and accessible
-- Time-series database for metrics (InfluxDB recommended)
+- Raspberry Pi 5 running Debian Trixie (arm64)
+- Grafana installed natively (e.g. via the official Grafana apt repo)
+- Project cloned to `~/ECE-26.1-Winter-River`
 
-## Setup Instructions
+## Setup
 
-### 1. Choose a Data Source
-
-This setup assumes you'll use InfluxDB as the time-series database for storing MQTT metrics.
+### 1. Configure credentials
 
 ```bash
-# Install InfluxDB via Docker (included in docker-compose.yml)
-# Or install directly on Raspberry Pi
+cp grafana/.env.sample grafana/.env
+nano grafana/.env          # Set real passwords and token
 ```
 
-### 2. Configure MQTT to InfluxDB Bridge
+Key variables in `.env`:
 
-You'll need a bridge service to write MQTT messages to InfluxDB:
-- Option A: Use Telegraf with MQTT consumer plugin
-- Option B: Implement custom Python service using paho-mqtt + influxdb client
-- Option C: Use Node-RED for visual flow-based bridging
+| Variable | Description |
+|---|---|
+| `INFLUXDB_ADMIN_USER` | InfluxDB admin username |
+| `INFLUXDB_ADMIN_PASSWORD` | InfluxDB admin password |
+| `INFLUXDB_ADMIN_TOKEN` | InfluxDB API token (≥ 32 chars) |
+| `GF_SECURITY_ADMIN_USER` | Grafana admin username |
+| `GF_SECURITY_ADMIN_PASSWORD` | Grafana admin password |
 
-### 3. Start Grafana Stack
+### 2. Run setup
 
 ```bash
-cd grafana
-docker-compose up -d
+sudo ./scripts/setup_pi.sh
 ```
 
-Grafana will be available at `http://192.168.4.1:3000`
+`setup_pi.sh` is **idempotent** — safe to re-run after changing `.env`.
 
-Default credentials:
-- Username: `admin`
-- Password: `admin` (change on first login)
+It will:
+1. Add the InfluxData apt repo and install `influxdb2` + `telegraf`
+2. Run InfluxDB non-interactive initial setup (org `iot-project`, bucket `mqtt_metrics`)
+3. Write credentials into `/etc/default/telegraf` and `/etc/default/grafana-server`
+4. Copy `grafana/telegraf.conf` → `/etc/telegraf/telegraf.conf`
+5. Copy `grafana/provisioning/` → `/etc/grafana/provisioning/`
+6. Copy `grafana/dashboards/` → `/var/lib/grafana/dashboards/`
+7. Install the `grafana-mqtt-datasource` Grafana plugin
+8. Enable and start `influxdb`, `telegraf`, and `grafana-server` via systemd
+9. Add Mosquitto WebSocket listener on port 9001
 
-### 4. Dashboard Configuration
+### 3. Access Grafana
 
-Dashboards are automatically provisioned from the `dashboards/` directory.
+Open `http://192.168.4.1:3000` in a browser connected to the **WinterRiver-AP**
+hotspot.  Login with the credentials you set in `.env`.
 
-**Broker Overview Dashboard** displays:
+## Service management
+
+```bash
+# Status
+systemctl status influxdb telegraf grafana-server
+
+# Restart after config changes
+sudo systemctl restart telegraf
+sudo systemctl restart grafana-server
+
+# Logs
+journalctl -u influxdb      -f
+journalctl -u telegraf      -f
+journalctl -u grafana-server -f
+```
+
+## Datasources
+
+Two datasources are provisioned automatically:
+
+| Name | Type | URL | Purpose |
+|---|---|---|---|
+| `InfluxDB-MQTT` | InfluxDB v2 (Flux) | `http://localhost:8086` | Historical time-series |
+| `MQTT-Live` | grafana-mqtt-datasource | `ws://192.168.4.1:9001` | Real-time panel streaming |
+
+The InfluxDB token is injected at startup via `GF_*` environment variables in
+`/etc/default/grafana-server` — no plain-text tokens in the repo.
+
+## Dashboards
+
+Dashboards are automatically provisioned from `/var/lib/grafana/dashboards/`.
+
+**Broker Overview** — displays:
 - Active connections
 - Message throughput (messages/sec)
 - Published/received bytes
 - Topic subscription counts
-- Client session info
 
-**Nodes Telemetry Dashboard** displays (per node):
+**Nodes Telemetry** — displays per ESP32 node:
 - Connection status
-- Sensor readings (customize for your sensors)
+- Sensor readings (voltage, current, etc.)
 - WiFi signal strength (RSSI)
-- Uptime
-- Message latency
-- Error counts
+- Uptime and message latency
 
-## Scaling to More Nodes
-
-The node dashboard is designed to handle 3 nodes initially but can scale to 20+:
+## Scaling to more nodes
 
 1. Edit `dashboards/nodes-telemetry.json`
-2. Add new panels by duplicating existing node panels
-3. Update panel queries to filter by new node IDs
-4. Use dashboard variables for dynamic node selection
+2. Duplicate existing node panels and update Flux queries to filter by `node_id`
+3. Use Grafana's *repeat panel* feature with a `node_id` dashboard variable for
+   automatic scaling
 
-Or use Grafana's repeat panel feature:
-- Create a variable for node IDs
-- Configure panels to repeat for each node
+## Plugins
 
-## Development Tasks
+The following plugin is installed automatically by `setup_pi.sh`:
 
-- [ ] Set up InfluxDB container
-- [ ] Configure Telegraf MQTT consumer
-- [ ] Create broker metrics collection script
-- [ ] Design broker overview dashboard
-- [ ] Design node telemetry dashboard with 3 node panels
-- [ ] Test with live MQTT data
-- [ ] Add alerting rules (optional)
-- [ ] Configure dashboard auto-refresh
-- [ ] Document custom queries
+- **grafana-mqtt-datasource** — real-time MQTT streaming panels
 
-## Grafana Plugins
+To install manually:
 
-Consider installing these plugins for enhanced functionality:
-- MQTT data source plugin (if available)
-- Worldmap panel (for node location visualization)
-- Flowchart plugin (for system architecture visualization)
-
-## Environment Variables
-
-Create a `.env` file in this directory (git-ignored) with:
-
-```env
-# InfluxDB Configuration
-INFLUXDB_DB=mqtt_metrics
-INFLUXDB_ADMIN_USER=admin
-INFLUXDB_ADMIN_PASSWORD=changeme
-INFLUXDB_USER=grafana
-INFLUXDB_USER_PASSWORD=changeme
-
-# Grafana Configuration
-GF_SECURITY_ADMIN_USER=admin
-GF_SECURITY_ADMIN_PASSWORD=changeme
-GF_INSTALL_PLUGINS=
-
-# MQTT Broker
-MQTT_BROKER_HOST=192.168.4.1
-MQTT_BROKER_PORT=1883
+```bash
+sudo grafana-cli plugins install grafana-mqtt-datasource
+sudo systemctl restart grafana-server
 ```
 
-## Resources
+## MQTT topic schema
 
-- [Grafana Documentation](https://grafana.com/docs/)
-- [InfluxDB Documentation](https://docs.influxdata.com/)
-- [Telegraf MQTT Consumer Plugin](https://github.com/influxdata/telegraf/tree/master/plugins/inputs/mqtt_consumer)
+```
+winter-river/<node_id>/status
+```
+
+Example payload:
+
+```json
+{"node_id": "pdu_a", "voltage": 12.1, "current": 2.3, "status": "ok"}
+```
+
+Telegraf subscribes to `winter-river/#` and writes all numeric fields to the
+`mqtt_metrics` InfluxDB bucket, tagging by `node_id` and `status`.
+
+## Environment variables reference
+
+| Variable (in `/etc/default/telegraf`) | Purpose |
+|---|---|
+| `INFLUX_TOKEN` | Telegraf → InfluxDB write token |
+
+| Variable (in `/etc/default/grafana-server`) | Purpose |
+|---|---|
+| `GF_SECURITY_ADMIN_USER` | Grafana admin username |
+| `GF_SECURITY_ADMIN_PASSWORD` | Grafana admin password |
+| `INFLUXDB_TOKEN` | Grafana datasource token (expanded in `datasource.yml`) |
+| `GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH` | Home dashboard path |
