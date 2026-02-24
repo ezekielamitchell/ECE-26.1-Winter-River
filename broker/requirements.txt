@@ -1,5 +1,4 @@
-# Runtime dependencies for broker utilities
-# Note: The MQTT broker itself is mosquitto (system service).
-# This venv is only needed if broker/main.py utilities are extended in future.
+# Runtime dependencies for broker/main.py
 paho-mqtt==1.6.1
 toml==0.10.2
+psycopg2-binary==2.9.9

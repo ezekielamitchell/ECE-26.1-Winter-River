@@ -1,22 +1,23 @@
 # Grafana Data Source Provisioning
-# Automatically configure InfluxDB data source on startup
+# Automatically configure PostgreSQL data source on startup
 
 apiVersion: 1
 
 datasources:
-  - name: InfluxDB-MQTT
-    type: influxdb
+  - name: PostgreSQL
+    type: postgres
     access: proxy
-    url: http://influxdb:8086
+    url: localhost:5432
+    database: winter_river
+    user: grafana_reader
     jsonData:
-      version: Flux
-      organization: iot-project
-      defaultBucket: mqtt_metrics
-      tlsSkipVerify: true
+      sslmode: disable
+      maxOpenConns: 10
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+      postgresVersion: 1500
+      timescaledb: false
     secureJsonData:
-      token: my-super-secret-auth-token
+      password: changeme
     isDefault: true
     editable: true
-
-# TODO: Update token to match your InfluxDB setup
-# TODO: Add additional data sources if needed

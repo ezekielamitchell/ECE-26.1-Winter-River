@@ -1,0 +1,10 @@
+[mqtt] 
+host = "0.0.0.0" # Listen for all ESP32s 
+port = 1883
+keepalive = 60 
+
+[database] 
+url = "postgresql://postgres:password@localhost/sensor_data" 
+
+[simulation] 
+tick_rate = 1.0 # Seconds between physics updates 
