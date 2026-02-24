@@ -4,6 +4,8 @@
 #
 # Run once after cloning the repo:
 #   sudo ./scripts/setup_pi.sh
+#
+# Re-running is safe — all steps are idempotent.
 
 set -euo pipefail
 
@@ -27,16 +29,149 @@ if [ ! -d "$PROJECT_DIR" ]; then
     exit 1
 fi
 
+# ── Load credentials ──────────────────────────────────────────────────────────
+ENV_FILE="$PROJECT_DIR/grafana/.env"
+if [ -f "$ENV_FILE" ]; then
+    echo "Loading credentials from $ENV_FILE ..."
+    set -a
+    # shellcheck disable=SC1090
+    source "$ENV_FILE"
+    set +a
+else
+    echo ""
+    echo "WARNING: $ENV_FILE not found — using placeholder credentials."
+    echo "         Copy grafana/.env.sample to grafana/.env and set real passwords"
+    echo "         before running this script in production!"
+    echo ""
+fi
+
+# Apply defaults for any variable not already set by .env
+# These are intentionally not 'changeme' so they are clearly placeholders
+# but still unique enough to not collide with other defaults.
+INFLUXDB_ADMIN_USER="${INFLUXDB_ADMIN_USER:-influx-admin}"
+INFLUXDB_ADMIN_PASSWORD="${INFLUXDB_ADMIN_PASSWORD:-WinterRiverInflux_CHANGE_ME}"
+# Token must be at least 32 chars; derive a host-unique default if unset
+INFLUXDB_ADMIN_TOKEN="${INFLUXDB_ADMIN_TOKEN:-WinterRiverToken_$(hostname | sha256sum | cut -c1-24)}"
+GF_SECURITY_ADMIN_USER="${GF_SECURITY_ADMIN_USER:-admin}"
+GF_SECURITY_ADMIN_PASSWORD="${GF_SECURITY_ADMIN_PASSWORD:-WinterRiverGrafana_CHANGE_ME}"
+
 # ── System packages ───────────────────────────────────────────────────────────
 echo "Installing system packages..."
-apt update -qq
+apt-get update -qq
 # Note: Debian Trixie uses ntpsec instead of ntp/ntpdate
-apt install -y \
+apt-get install -y \
     mosquitto mosquitto-clients \
     ntpsec ntpsec-ntpdate \
+<<<<<<< HEAD
     postgresql postgresql-client \
     python3 python3-pip python3-venv \
     wget gpg
+=======
+    curl gnupg
+
+# ── InfluxData apt repository (InfluxDB 2 + Telegraf) ────────────────────────
+echo "Configuring InfluxData apt repository..."
+INFLUX_GPG="/etc/apt/trusted.gpg.d/influxdata.gpg"
+INFLUX_LIST="/etc/apt/sources.list.d/influxdata.list"
+
+if [ ! -f "$INFLUX_LIST" ]; then
+    curl -fsSL https://repos.influxdata.com/influxdata-archive_compat.key \
+        | gpg --dearmor -o "$INFLUX_GPG"
+    echo "deb [arch=arm64 signed-by=${INFLUX_GPG}] https://repos.influxdata.com/debian stable main" \
+        > "$INFLUX_LIST"
+    apt-get update -qq
+else
+    echo "  InfluxData repo already configured — skipping."
+fi
+
+# ── InfluxDB 2 ────────────────────────────────────────────────────────────────
+echo "Installing InfluxDB 2..."
+apt-get install -y influxdb2
+
+echo "Enabling and starting influxdb..."
+systemctl enable influxdb
+systemctl start influxdb
+
+# Wait for InfluxDB HTTP API to be ready (up to 60 s)
+echo "  Waiting for InfluxDB to become ready..."
+for i in $(seq 1 30); do
+    influx ping 2>/dev/null && break
+    sleep 2
+done
+influx ping 2>/dev/null || { echo "ERROR: InfluxDB did not start in time."; exit 1; }
+
+# Non-interactive initial setup (idempotent — silently skips if already done)
+echo "Running InfluxDB initial setup..."
+influx setup \
+    --username  "$INFLUXDB_ADMIN_USER" \
+    --password  "$INFLUXDB_ADMIN_PASSWORD" \
+    --org       iot-project \
+    --bucket    mqtt_metrics \
+    --token     "$INFLUXDB_ADMIN_TOKEN" \
+    --retention 0 \
+    --force 2>&1 \
+    && echo "  InfluxDB setup complete." \
+    || echo "  InfluxDB already initialized — skipping."
+
+# ── Telegraf ─────────────────────────────────────────────────────────────────
+echo "Installing Telegraf..."
+apt-get install -y telegraf
+
+# Write telegraf config (copy from repo, no templating needed — token via env)
+echo "  Copying telegraf.conf..."
+cp "$PROJECT_DIR/grafana/telegraf.conf" /etc/telegraf/telegraf.conf
+
+# Inject the InfluxDB token into Telegraf's service environment
+echo "  Writing /etc/default/telegraf ..."
+cat > /etc/default/telegraf <<EOF
+# Written by scripts/setup_pi.sh — re-run to refresh
+INFLUX_TOKEN=${INFLUXDB_ADMIN_TOKEN}
+EOF
+chmod 640 /etc/default/telegraf
+
+echo "Enabling and starting telegraf..."
+systemctl enable telegraf
+systemctl restart telegraf
+
+# ── Grafana (already installed natively — configure only) ────────────────────
+echo "Configuring Grafana..."
+
+# Install MQTT Live datasource plugin
+echo "  Installing grafana-mqtt-datasource plugin..."
+grafana-cli plugins install grafana-mqtt-datasource 2>/dev/null \
+    || echo "  (plugin already installed or grafana-cli unavailable — check manually)"
+
+# Provision datasources and dashboards
+echo "  Copying provisioning files..."
+mkdir -p /etc/grafana/provisioning/datasources \
+         /etc/grafana/provisioning/dashboards \
+         /var/lib/grafana/dashboards
+
+cp -r "$PROJECT_DIR/grafana/provisioning/datasources/." /etc/grafana/provisioning/datasources/
+cp -r "$PROJECT_DIR/grafana/provisioning/dashboards/."  /etc/grafana/provisioning/dashboards/
+cp -r "$PROJECT_DIR/grafana/dashboards/."               /var/lib/grafana/dashboards/
+
+chown -R grafana:grafana \
+    /etc/grafana/provisioning/datasources \
+    /etc/grafana/provisioning/dashboards \
+    /var/lib/grafana/dashboards
+
+# Inject secrets and dashboard path into Grafana's service environment.
+# Grafana expands ${VAR} in provisioning YAML files from its process environment.
+echo "  Writing /etc/default/grafana-server ..."
+cat > /etc/default/grafana-server <<EOF
+# Written by scripts/setup_pi.sh — re-run to refresh
+GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER}
+GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
+INFLUXDB_TOKEN=${INFLUXDB_ADMIN_TOKEN}
+GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/broker-overview.json
+EOF
+chmod 640 /etc/default/grafana-server
+
+echo "Enabling and restarting grafana-server..."
+systemctl enable grafana-server
+systemctl restart grafana-server
+>>>>>>> d8a14531abfd618bee7d40d106aa0bec62e21533
 
 # ── Mosquitto MQTT broker ─────────────────────────────────────────────────────
 echo "Configuring mosquitto..."
@@ -147,7 +282,14 @@ echo "  Setup Complete!"
 echo "========================================="
 echo ""
 echo "Services enabled for auto-boot:"
+systemctl is-active influxdb    2>/dev/null \
+    && echo "  influxdb:         RUNNING" || echo "  influxdb:         STOPPED"
+systemctl is-active telegraf    2>/dev/null \
+    && echo "  telegraf:         RUNNING" || echo "  telegraf:         STOPPED"
+systemctl is-active grafana-server 2>/dev/null \
+    && echo "  grafana-server:   RUNNING" || echo "  grafana-server:   STOPPED"
 systemctl is-active winter-river-hotspot \
+<<<<<<< HEAD
     && echo "  hotspot:     RUNNING" || echo "  hotspot:     STOPPED"
 systemctl is-active mosquitto \
     && echo "  mosquitto:   RUNNING" || echo "  mosquitto:   STOPPED"
@@ -175,3 +317,29 @@ echo "  then: sudo systemctl restart grafana-server"
 echo ""
 echo "Next: copy broker/config.sample.toml to broker/config.toml and set DB password."
 echo "Then: flash ESP32 nodes and power them on."
+=======
+    && echo "  hotspot:          RUNNING" || echo "  hotspot:          STOPPED"
+systemctl is-active mosquitto \
+    && echo "  mosquitto:        RUNNING" || echo "  mosquitto:        STOPPED"
+{ systemctl is-active ntpsec 2>/dev/null \
+    || systemctl is-active ntp 2>/dev/null \
+    || systemctl is-active ntpd 2>/dev/null; } \
+    && echo "  ntp:              RUNNING" || echo "  ntp:              STOPPED"
+echo ""
+echo "  Hotspot SSID   : WinterRiver-AP"
+echo "  Password       : winterriver"
+echo "  Gateway        : 192.168.4.1"
+echo "  MQTT (TCP)     : 192.168.4.1:1883"
+echo "  MQTT (WS)      : ws://192.168.4.1:9001"
+echo "  InfluxDB       : http://192.168.4.1:8086"
+echo "  Grafana        : http://192.168.4.1:3000"
+echo ""
+if [ ! -f "$ENV_FILE" ]; then
+    echo "  !! ACTION REQUIRED: Set real credentials in grafana/.env !!"
+    echo "     Copy: grafana/.env.sample → grafana/.env"
+    echo "     Then re-run: sudo ./scripts/setup_pi.sh"
+    echo ""
+fi
+echo "All services start automatically on every reboot."
+echo "Next: flash ESP32 nodes, then power them on."
+>>>>>>> d8a14531abfd618bee7d40d106aa0bec62e21533

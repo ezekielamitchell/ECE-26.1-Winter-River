@@ -34,15 +34,21 @@ cat > /etc/mosquitto/mosquitto.conf <<EOF
 # Winter River MQTT Broker Configuration
 # Managed by deploy/mosquitto_setup.sh — do not edit manually
 
-# Listen on all interfaces, port 1883
+# ── TCP listener (ESP32 nodes and Telegraf) ───────────────────────────────────
 listener 1883 0.0.0.0
 allow_anonymous true
 
-# Persistence — retain messages across restarts
+# ── WebSocket listener (Grafana MQTT Live datasource plugin) ──────────────────
+# Grafana's grafana-mqtt-datasource connects over WebSocket (port 9001).
+listener 9001 0.0.0.0
+protocol websockets
+allow_anonymous true
+
+# ── Persistence — retain messages across restarts ─────────────────────────────
 persistence true
 persistence_location /var/lib/mosquitto/
 
-# Logging
+# ── Logging ───────────────────────────────────────────────────────────────────
 log_dest file /var/log/mosquitto/mosquitto.log
 log_type error
 log_type warning
@@ -89,6 +95,7 @@ echo ""
 echo "========================================="
 echo "mosquitto setup complete!"
 echo "========================================="
-echo "Broker listening on 0.0.0.0:1883"
+echo "Broker listening on 0.0.0.0:1883  (TCP — ESP32 nodes, Telegraf)"
+echo "Broker listening on 0.0.0.0:9001  (WebSocket — Grafana MQTT Live plugin)"
 echo "Logs: /var/log/mosquitto/mosquitto.log"
 echo "Test: mosquitto_pub -h 192.168.4.1 -t winter-river/test -m hello"

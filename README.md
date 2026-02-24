@@ -73,14 +73,13 @@ ECE-26.1-Winter-River/
 ├── SUMMARY.md                         # GitBook navigation index
 ├── LICENSE
 ├── .gitignore
-├── config.toml
 ├── .gitbook/
 │   └── assets/
 ├── .github/
 │   └── workflows/
-├── broker/                            # Python MQTT → InfluxDB bridge
+├── broker/                            # Python MQTT broker utilities
 ├── deploy/                            # Raspberry Pi systemd units & setup
-│   ├── mosquitto_setup.sh             # ① Configure Mosquitto MQTT broker
+│   ├── mosquitto_setup.sh             # ① Configure Mosquitto (TCP 1883 + WS 9001)
 │   └── winter-river-hotspot.service   # ② Register Pi as 2.4 GHz access point
 ├── docs/
 ├── esp32-nodes/                       # PlatformIO firmware for all ESP32 nodes
@@ -94,13 +93,15 @@ ECE-26.1-Winter-River/
 │       ├── ups/            → ups_a    # ⑥ UPS — battery %, charge state
 │       ├── pdu/            → pdu_a    # ⑦ Rack PDU, 480 V
 │       └── server_rack/    → srv_a    # ⑧ Server rack endpoint
-├── grafana/                           # Monitoring stack (Docker)
+├── grafana/                           # Grafana + InfluxDB + Telegraf (native systemd)
+│   ├── telegraf.conf                  # Telegraf MQTT → InfluxDB bridge config
+│   ├── provisioning/                  # Auto-provisioned datasources & dashboards
+│   ├── dashboards/                    # Dashboard JSON definitions
+│   └── .env.sample                    # Credential template (copy → .env)
 ├── images/
 ├── scripts/
 │   ├── setup_pi.sh                    # ① Run first — full Pi provisioning
 │   └── status.sh                      # ② Live node & service health check
-├── examples/
-├── tests/
 └── typescript/
 
 ```
@@ -111,13 +112,15 @@ ECE-26.1-Winter-River/
 
 ### Key Configuration Files
 
-| File                                  | Purpose                                        |
-| ------------------------------------- | ---------------------------------------------- |
-| `esp32-nodes/platformio.ini`          | PlatformIO build environments  (one per node)  |
-| `deploy/mosquitto_setup.sh`           | Configures the Mosquitto MQTT broker on the Pi |
-| `deploy/winter-river-hotspot.service` | Systemd unit for the Pi access point           |
-| `scripts/setup_pi.sh`                 | Run first (provisions the Pi end-to-end)       |
-| `scripts/status.sh`                   | Checks all 8 nodes + Pi services at a glance   |
-| `grafana/docker-compose.yml`          | Spins up the full monitoring stack             |
+| File                                  | Purpose                                                       |
+| ------------------------------------- | ------------------------------------------------------------- |
+| `esp32-nodes/platformio.ini`          | PlatformIO build environments (one per node)                  |
+| `deploy/mosquitto_setup.sh`           | Configures Mosquitto (TCP 1883 + WebSocket 9001)              |
+| `deploy/winter-river-hotspot.service` | Systemd unit for the Pi access point                          |
+| `scripts/setup_pi.sh`                 | Run first — provisions the entire Pi stack end-to-end         |
+| `scripts/status.sh`                   | Checks all 8 nodes + Pi services at a glance                  |
+| `grafana/telegraf.conf`               | Telegraf config — MQTT consumer → InfluxDB v2 bridge          |
+| `grafana/.env.sample`                 | Credential template; copy to `grafana/.env` before setup      |
+| `grafana/provisioning/`               | Auto-provisioned Grafana datasources and dashboard configs    |
 
 <br>

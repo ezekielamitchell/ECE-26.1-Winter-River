@@ -1,15 +1,30 @@
 # Grafana Data Source Provisioning
+<<<<<<< HEAD
 # Automatically configure PostgreSQL data source on startup
+=======
+# Automatically configure data sources on startup.
+#
+# ${INFLUXDB_TOKEN} is expanded from the grafana-server process environment,
+# which is populated by /etc/default/grafana-server (written by setup_pi.sh).
+>>>>>>> d8a14531abfd618bee7d40d106aa0bec62e21533
 
 apiVersion: 1
 
 datasources:
+<<<<<<< HEAD
   - name: PostgreSQL
     type: postgres
     access: proxy
     url: localhost:5432
     database: winter_river
     user: grafana_reader
+=======
+  # ── InfluxDB v2 (primary time-series store, written by Telegraf) ─────────────
+  - name: InfluxDB-MQTT
+    type: influxdb
+    access: proxy
+    url: http://localhost:8086
+>>>>>>> d8a14531abfd618bee7d40d106aa0bec62e21533
     jsonData:
       sslmode: disable
       maxOpenConns: 10
@@ -18,6 +33,23 @@ datasources:
       postgresVersion: 1500
       timescaledb: false
     secureJsonData:
+<<<<<<< HEAD
       password: changeme
     isDefault: true
     editable: true
+=======
+      # Token is injected at runtime from /etc/default/grafana-server
+      token: ${INFLUXDB_TOKEN}
+    isDefault: true
+    editable: true
+
+  # ── MQTT Live (real-time panel streaming via WebSocket) ──────────────────────
+  # Requires: grafana-cli plugins install grafana-mqtt-datasource
+  # Mosquitto WebSocket listener must be enabled on port 9001 (see mosquitto_setup.sh)
+  - name: MQTT-Live
+    type: grafana-mqtt-datasource
+    access: proxy
+    editable: true
+    jsonData:
+      uri: ws://192.168.4.1:9001
+>>>>>>> d8a14531abfd618bee7d40d106aa0bec62e21533

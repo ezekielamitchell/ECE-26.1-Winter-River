@@ -39,7 +39,6 @@ This project follows a code of conduct that ensures a welcoming environment for 
    - Python 3.9 or higher
    - PlatformIO CLI or VS Code with PlatformIO extension
    - Git
-   - Docker and Docker Compose
 
 2. Fork the repository on GitHub
 
@@ -212,14 +211,9 @@ pio test -v
 ### Integration Tests
 
 ```bash
-# Start test environment
-docker-compose -f docker-compose.test.yml up -d
-
-# Run integration tests
+# Ensure the native monitoring stack is running on the Pi (setup_pi.sh)
+# then run integration tests against the live services
 pytest tests/integration/
-
-# Cleanup
-docker-compose -f docker-compose.test.yml down
 ```
 
 ## Pull Request Process
