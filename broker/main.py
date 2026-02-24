@@ -22,7 +22,11 @@ class WinterRiverEngine:
         """Processes incoming data from ESP32 nodes"""
         try:
             node_id = msg.topic.split('/')[1]
-            payload = json.loads(msg.payload)
+            try:
+                payload = json.loads(msg.payload)
+            except json.JSONDecodeError:
+                # pdu_a publishes a plain string, not JSON — treat as present
+                payload = {"status": "ONLINE"}
             
             # Detect removal via LWT or status message
             is_present = (payload.get('status') != 'OFFLINE')
@@ -31,7 +35,7 @@ class WinterRiverEngine:
                 # Update database with latest telemetry
                 cur.execute("UPDATE live_status SET is_present = %s, last_update = NOW() WHERE node_id = %s", 
                            (is_present, node_id))
-                cur.execute("INSERT INTO telemetry_history (node_id, metrics) VALUES (%s, %s)", 
+                cur.execute("INSERT INTO historical_data (node_id, metrics) VALUES (%s, %s)",
                            (node_id, json.dumps(payload)))
                 self.db.commit()
         except Exception as e:
@@ -41,7 +45,7 @@ class WinterRiverEngine:
         """Calculates value propagation through the hierarchy"""
         with self.db.cursor() as cur:
             # 1. Fetch current state
-            cur.execute("SELECT m.*, l.* FROM node_metadata m JOIN live_status l ON m.node_id = l.node_id")
+            cur.execute("SELECT n.*, l.* FROM nodes n JOIN live_status l ON n.node_id = l.node_id")
             nodes = {row['node_id']: row for row in cur.fetchall()}
 
             # 2. Logic: Top-Down Propagation
@@ -92,22 +96,22 @@ class WinterRiverEngine:
                 
                 # 3. Update DB and Broadcast to Physical ESP32
                 node['v_out'] = v_out
-                node['current_state'] = state
+                node['status_msg'] = state
                 self.update_node(node)
 
     def update_node(self, node):
         """Sends command back to ESP32 and updates DB"""
         # Publish to control topic (e.g., winter-river/ups_a/control)
-        cmd = f"INPUT:{node['v_out']} STATUS:{node['current_state']}"
+        cmd = f"INPUT:{node['v_out']} STATUS:{node['status_msg']}"
         if node['node_type'] == 'UPS': cmd += f" BATT:{node['battery_level']}"
         if node['node_type'] == 'GENERATOR': cmd += f" RPM:{1800 if node['v_out'] > 0 else 0}"
         
         self.mqtt.publish(f"winter-river/{node['node_id']}/control", cmd)
         
         with self.db.cursor() as cur:
-            cur.execute("""UPDATE live_status SET v_out = %s, current_state = %s, 
+            cur.execute("""UPDATE live_status SET v_out = %s, status_msg = %s,
                         battery_level = %s, gen_timer = %s WHERE node_id = %s""",
-                        (node['v_out'], node['current_state'], node['battery_level'], 
+                        (node['v_out'], node['status_msg'], node['battery_level'],
                          node['gen_timer'], node['node_id']))
             self.db.commit()
 

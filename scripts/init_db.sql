@@ -24,6 +24,7 @@ CREATE TABLE historical_data (
     id SERIAL PRIMARY KEY, 
     node_id VARCHAR(50) REFERENCES nodes(node_id), 
     timestamp TIMESTAMP DEFAULT NOW(),
+    metrics JSONB
 );
 
 -- Seed Data for Step 2 
