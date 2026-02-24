@@ -1,25 +1,16 @@
-# Sample Configuration for MQTT Broker Management
+# Sample Configuration for Winter River Simulation Engine
 # Copy this file to config.toml (which is git-ignored) and customize
 
 [mqtt]
-broker_host = "localhost"
+broker_host = "192.168.4.1"   # Pi hotspot gateway; use "localhost" if running on the Pi itself
 broker_port = 1883
-# username = "your_mqtt_user"
-# password = "your_mqtt_password"
 keepalive = 60
 
-[topics]
-# Define your MQTT topic structure
-base_topic = "iot"
-node_prefix = "node"
-telemetry_suffix = "telemetry"
-command_suffix = "command"
+[database]
+dsn = "host=localhost dbname=winter_river user=postgres password=changeme"
+
+[simulation]
+tick_rate = 1.0   # seconds between simulation ticks
 
 [logging]
 level = "INFO"
-format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-
-# Instructions:
-# 1. Copy this file to broker/config.toml
-# 2. Update values according to your setup
-# 3. Never commit config.toml to version control

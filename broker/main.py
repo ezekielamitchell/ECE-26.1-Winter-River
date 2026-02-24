@@ -1,20 +1,26 @@
-# TODO: Implement broker management utilities using paho-mqtt
 import paho.mqtt.client as mqtt
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import json
 import time
+import toml
+import os
 
 # --- CONFIGURATION ---
-MQTT_BROKER = "localhost" # or Pi IP
-DB_CONFIG = "host=localhost dbname=winter_river user=postgres password=password"
+# Load from config.toml (copy from config.sample.toml, never commit)
+_cfg_path = os.path.join(os.path.dirname(__file__), "config.toml")
+_cfg = toml.load(_cfg_path)
+
+MQTT_BROKER = _cfg["mqtt"]["broker_host"]       # 192.168.4.1 on Pi
+MQTT_PORT   = _cfg["mqtt"]["broker_port"]        # 1883
+DB_CONFIG   = _cfg["database"]["dsn"]            # postgres DSN string
 
 class WinterRiverEngine:
     def __init__(self):
         self.db = psycopg2.connect(DB_CONFIG, cursor_factory=RealDictCursor)
         self.mqtt = mqtt.Client()
         self.mqtt.on_message = self.on_message
-        self.mqtt.connect(MQTT_BROKER, 1883)
+        self.mqtt.connect(MQTT_BROKER, MQTT_PORT)
         self.mqtt.subscribe("winter-river/+/status")
         self.mqtt.loop_start()
 
@@ -54,7 +60,7 @@ class WinterRiverEngine:
                 state = "NORMAL"
 
                 if node['node_type'] == 'UTILITY':
-                    v_out = 230000 if node['is_present'] else 0
+                    v_out = 230.0 if node['is_present'] else 0.0  # kV
                 
                 elif node['node_type'] == 'GENERATOR':
                     # Trigger start sequence if Utility is gone
@@ -82,17 +88,33 @@ class WinterRiverEngine:
                         state = "ON_BATTERY"
                         node['battery_level'] -= 1 # Drain battery
                     else:
-                        state = "BLACKOUT"
+                        state = "FAULT"
 
-                else: # Transformers, SW_GEAR, PDU, RACK
+                else: # TRANSFORMER, SW_GEAR, DIST_BOARD, PDU, SERVER_RACK
                     parent = nodes.get(node['parent_id'])
-                    # Special Logic for SW_GEAR: Check Utility OR Generator
                     if node['node_type'] == 'SW_GEAR':
-                        gen = nodes[f'gen_{node["side"].lower()}']
-                        source_v = max(parent['v_out'] if parent else 0, gen['v_out'])
-                        v_out = source_v
+                        # ATS: passes whichever source is live — utility path or generator
+                        side = node['side'].lower()
+                        gen = nodes[f'gen_{side}']
+                        util = nodes[f'util_{side}']
+                        util_v = parent['v_out'] if parent else 0.0
+                        gen_v = gen['v_out']
+                        v_out = max(util_v, gen_v)
+                    elif node['node_type'] == 'DIST_BOARD':
+                        side = node['side'].lower()
+                        gen = nodes[f'gen_{side}']
+                        util = nodes[f'util_{side}']
+                        v_out = (parent['v_out'] * node['v_ratio']) if parent else 0.0
+                        if util['is_present'] and util['v_out'] > 0:
+                            node['_source'] = 'UTILITY'
+                        elif gen['v_out'] > 0:
+                            node['_source'] = 'GENERATOR'
+                        else:
+                            node['_source'] = 'NONE'
+                        if v_out == 0.0:
+                            state = 'NO_INPUT'
                     else:
-                        v_out = (parent['v_out'] * node['v_ratio']) if parent else 0
+                        v_out = (parent['v_out'] * node['v_ratio']) if parent else 0.0
                 
                 # 3. Update DB and Broadcast to Physical ESP32
                 node['v_out'] = v_out
@@ -101,11 +123,31 @@ class WinterRiverEngine:
 
     def update_node(self, node):
         """Sends command back to ESP32 and updates DB"""
-        # Publish to control topic (e.g., winter-river/ups_a/control)
-        cmd = f"INPUT:{node['v_out']} STATUS:{node['status_msg']}"
-        if node['node_type'] == 'UPS': cmd += f" BATT:{node['battery_level']}"
-        if node['node_type'] == 'GENERATOR': cmd += f" RPM:{1800 if node['v_out'] > 0 else 0}"
-        
+        ntype = node['node_type']
+        status = node['status_msg']
+        v = node['v_out']
+
+        # Build control command matching firmware mqttCallback per node type
+        if ntype == 'UTILITY':
+            cmd = f"VOLT:{v} STATUS:{status}"
+        elif ntype == 'TRANSFORMER':
+            cmd = f"STATUS:{status}"
+        elif ntype == 'SW_GEAR':
+            cmd = f"CLOSE STATUS:{status}" if v > 0 else f"OPEN STATUS:{status}"
+        elif ntype == 'GENERATOR':
+            rpm = 1800 if v > 0 else 0
+            cmd = f"RPM:{rpm} STATUS:{status}"
+        elif ntype == 'DIST_BOARD':
+            cmd = f"INPUT:{v} SOURCE:{node.get('_source', 'NONE')} STATUS:{status}"
+        elif ntype == 'UPS':
+            cmd = f"INPUT:{v} BATT:{node['battery_level']} STATUS:{status}"
+        elif ntype == 'PDU':
+            cmd = f"STATUS:{status}"
+        elif ntype == 'SERVER_RACK':
+            cmd = f"STATUS:{status}"
+        else:
+            cmd = f"STATUS:{status}"
+
         self.mqtt.publish(f"winter-river/{node['node_id']}/control", cmd)
         
         with self.db.cursor() as cur:
