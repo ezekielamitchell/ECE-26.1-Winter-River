@@ -14,3 +14,12 @@ tick_rate = 1.0   # seconds between simulation ticks
 
 [logging]
 level = "INFO"
+
+[influxdb]
+# Direct broker → InfluxDB writes (computed node state at 1 Hz).
+# Leave this section absent or commented to disable InfluxDB writes from broker.
+# NOTE: Telegraf also writes raw MQTT telemetry to InfluxDB independently.
+url    = "http://localhost:8086"
+token  = "my-super-secret-auth-token"   # change for production
+org    = "iot-project"
+bucket = "mqtt_metrics"

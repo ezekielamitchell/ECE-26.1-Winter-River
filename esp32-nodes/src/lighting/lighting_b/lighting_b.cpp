@@ -1,7 +1,7 @@
 // ============================================================
-// pdu_a.cpp — Power Distribution Unit, Side A
-// Chain: ups_a → [pdu_a] → rectifier_a
-// Node ID: pdu_a | 480V PDU
+// lighting_b.cpp — Lighting Circuit, Side B
+// Chain: lv_dist_b → [lighting_b]
+// Node ID: lighting_b | 277V Lighting (phase-to-neutral)
 // ECE 26.1 Winter River — Seattle University
 // ============================================================
 
@@ -14,13 +14,13 @@
 #include <time.h>
 
 // ── Network constants ────────────────────────────────────────
-const char* ssid       = "WinterRiver-AP";
-const char* password   = "winterriver";
+const char* ssid        = "WinterRiver-AP";
+const char* password    = "winterriver";
 const char* mqtt_server = "192.168.4.1";
 
 // ── NTP ─────────────────────────────────────────────────────
-const char* ntp_server       = "192.168.4.1";
-const long  gmt_offset_sec   = -28800;
+const char* ntp_server          = "192.168.4.1";
+const long  gmt_offset_sec      = -28800;
 const int   daylight_offset_sec = 3600;
 
 // ── OLED ─────────────────────────────────────────────────────
@@ -30,15 +30,15 @@ const int   daylight_offset_sec = 3600;
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // ── MQTT ─────────────────────────────────────────────────────
-WiFiClient  espClient;
+WiFiClient   espClient;
 PubSubClient mqtt(espClient);
 
 // ── Node state ───────────────────────────────────────────────
-const int  voltage_rating = 480;
-float      input_v   = 480.0;
-float      output_v  = 480.0;
-int        load_pct  = 25;
-String     pdu_state = "NORMAL";  // NORMAL, OVERLOAD, FAULT, OFF
+const int  voltage_rating = 277;
+float      input_v        = 277.0;
+int        load_pct       = 45;
+int        dimmer_pct     = 80;
+String     light_state    = "ON";  // ON, OFF, FAULT
 
 // ── Message counter ──────────────────────────────────────────
 int message_count = 0;
@@ -52,18 +52,6 @@ String getTimestamp() {
     return String(buf);
 }
 
-void updateState() {
-    if (load_pct > 95) {
-        pdu_state = "OVERLOAD";
-    } else if (load_pct > 85) {
-        pdu_state = "FAULT";
-    } else if (input_v < 48.0) {
-        pdu_state = "OFF";
-    } else if (pdu_state != "OVERLOAD" && pdu_state != "FAULT") {
-        pdu_state = "NORMAL";
-    }
-}
-
 // ── MQTT callback ─────────────────────────────────────────────
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
     String msg;
@@ -72,20 +60,25 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
     if (msg.startsWith("INPUT:")) {
         input_v = msg.substring(6).toFloat();
-        if (input_v < 48.0) {
-            pdu_state = "OFF";
-        } else if (pdu_state == "OFF") {
-            pdu_state = "NORMAL";
+        if (input_v < 240.0) {
+            light_state = "OFF";
+        } else if (light_state == "OFF") {
+            light_state = "ON";
         }
-        output_v = (load_pct > 0 && input_v > 0) ? input_v : 0.0;
-    } else if (msg.startsWith("LOAD:")) {
-        load_pct = msg.substring(5).toInt();
-        output_v = (load_pct > 0 && input_v > 0) ? input_v : 0.0;
+    } else if (msg.startsWith("DIM:")) {
+        dimmer_pct = msg.substring(4).toInt();
+        load_pct   = (int)(dimmer_pct * 0.56f);
     } else if (msg.startsWith("STATUS:")) {
-        pdu_state = msg.substring(7);
+        String val = msg.substring(7);
+        if (val == "ON") {
+            light_state = "ON";
+        } else if (val == "OFF") {
+            light_state = "OFF";
+            input_v = 0.0;
+        } else {
+            light_state = val;
+        }
     }
-
-    updateState();
 }
 
 // ── OLED draw ────────────────────────────────────────────────
@@ -96,8 +89,8 @@ void drawDisplay(bool mqtt_ok) {
 
     // Line 1: node id + state
     display.setCursor(0, 0);
-    display.print("pdu_a [");
-    display.print(pdu_state);
+    display.print("light_b [");
+    display.print(light_state);
     display.print("]");
 
     // Line 2: IP + RSSI
@@ -118,17 +111,17 @@ void drawDisplay(bool mqtt_ok) {
     display.print((int)input_v);
     display.print("V");
 
-    // Line 4: load
+    // Line 4: dimmer level
     display.setCursor(0, 30);
+    display.print("Dim:  ");
+    display.print(dimmer_pct);
+    display.print("%");
+
+    // Line 5: load
+    display.setCursor(0, 40);
     display.print("Load: ");
     display.print(load_pct);
     display.print("%");
-
-    // Line 5: output voltage
-    display.setCursor(0, 40);
-    display.print("Vout: ");
-    display.print((int)output_v);
-    display.print("V");
 
     // Line 6: MQTT status + message count
     display.setCursor(0, 54);
@@ -154,7 +147,7 @@ void setup() {
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(0, 0);
-    display.println("pdu_a starting...");
+    display.println("lighting_b starting...");
     display.display();
 
     // WiFi reset sequence
@@ -206,10 +199,10 @@ void setup() {
 void loop() {
     // MQTT connect / reconnect
     if (!mqtt.connected()) {
-        String lwt_topic = "winter-river/pdu_a/status";
-        String lwt_msg   = "{\"node\":\"pdu_a\",\"status\":\"OFFLINE\"}";
+        String lwt_topic = "winter-river/lighting_b/status";
+        String lwt_msg   = "{\"node\":\"lighting_b\",\"status\":\"OFFLINE\"}";
 
-        if (!mqtt.connect("pdu_a", NULL, NULL,
+        if (!mqtt.connect("lighting_b", NULL, NULL,
                           lwt_topic.c_str(), 1, true, lwt_msg.c_str())) {
             Serial.println("MQTT FAILED, rc=" + String(mqtt.state()));
             display.clearDisplay();
@@ -224,27 +217,27 @@ void loop() {
 
         // Publish ONLINE
         String online_msg = "{\"ts\":\"" + getTimestamp() +
-                            "\",\"node\":\"pdu_a\",\"status\":\"ONLINE\"}";
-        mqtt.publish("winter-river/pdu_a/status", online_msg.c_str(), true);
+                            "\",\"node\":\"lighting_b\",\"status\":\"ONLINE\"}";
+        mqtt.publish("winter-river/lighting_b/status", online_msg.c_str(), true);
 
         // Subscribe to control topic
-        mqtt.subscribe("winter-river/pdu_a/control");
-        Serial.println("MQTT connected, subscribed to winter-river/pdu_a/control");
+        mqtt.subscribe("winter-river/lighting_b/control");
+        Serial.println("MQTT connected, subscribed to winter-river/lighting_b/control");
     }
 
     mqtt.loop();
 
     // Build and publish telemetry
-    String ts  = getTimestamp();
+    String ts      = getTimestamp();
     String payload = "{\"ts\":\"" + ts + "\""
-                   + ",\"input_v\":"  + String(input_v,  1)
-                   + ",\"output_v\":" + String(output_v, 1)
-                   + ",\"load_pct\":" + String(load_pct)
-                   + ",\"state\":\""  + pdu_state + "\""
-                   + ",\"voltage\":"  + String(voltage_rating)
+                   + ",\"input_v\":"    + String(input_v, 1)
+                   + ",\"load_pct\":"   + String(load_pct)
+                   + ",\"dimmer_pct\":" + String(dimmer_pct)
+                   + ",\"state\":\""    + light_state + "\""
+                   + ",\"voltage\":"    + String(voltage_rating)
                    + "}";
 
-    mqtt.publish("winter-river/pdu_a/status", payload.c_str());
+    mqtt.publish("winter-river/lighting_b/status", payload.c_str());
     Serial.println("Published: " + payload);
 
     message_count++;

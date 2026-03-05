@@ -1,8 +1,11 @@
 // ============================================================
-// pdu_a.cpp — Power Distribution Unit, Side A
-// Chain: ups_a → [pdu_a] → rectifier_a
-// Node ID: pdu_a | 480V PDU
+// server_rack.cpp — 48V DC Server Rack (2N Shared Load)
+// Chain: rectifier_a + rectifier_b → [server_rack]
+// Node ID: server_rack | 48V DC, 2N redundant
 // ECE 26.1 Winter River — Seattle University
+//
+// NOTE: This is the only node without a side suffix.
+//       It receives dual-path feeds from both Side A and Side B.
 // ============================================================
 
 #include <Arduino.h>
@@ -14,13 +17,13 @@
 #include <time.h>
 
 // ── Network constants ────────────────────────────────────────
-const char* ssid       = "WinterRiver-AP";
-const char* password   = "winterriver";
+const char* ssid        = "WinterRiver-AP";
+const char* password    = "winterriver";
 const char* mqtt_server = "192.168.4.1";
 
 // ── NTP ─────────────────────────────────────────────────────
-const char* ntp_server       = "192.168.4.1";
-const long  gmt_offset_sec   = -28800;
+const char* ntp_server          = "192.168.4.1";
+const long  gmt_offset_sec      = -28800;
 const int   daylight_offset_sec = 3600;
 
 // ── OLED ─────────────────────────────────────────────────────
@@ -30,15 +33,18 @@ const int   daylight_offset_sec = 3600;
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // ── MQTT ─────────────────────────────────────────────────────
-WiFiClient  espClient;
+WiFiClient   espClient;
 PubSubClient mqtt(espClient);
 
 // ── Node state ───────────────────────────────────────────────
-const int  voltage_rating = 480;
-float      input_v   = 480.0;
-float      output_v  = 480.0;
-int        load_pct  = 25;
-String     pdu_state = "NORMAL";  // NORMAL, OVERLOAD, FAULT, OFF
+const int  voltage_rating = 48;   // DC
+int        cpu_load_pct   = 42;
+int        inlet_temp_f   = 75;
+float      power_kw       = 3.2;
+int        units_active   = 8;
+bool       path_a_ok      = true;   // rectifier_a path alive
+bool       path_b_ok      = true;   // rectifier_b path alive
+String     srv_state      = "NORMAL";  // NORMAL, DEGRADED, FAULT
 
 // ── Message counter ──────────────────────────────────────────
 int message_count = 0;
@@ -53,14 +59,14 @@ String getTimestamp() {
 }
 
 void updateState() {
-    if (load_pct > 95) {
-        pdu_state = "OVERLOAD";
-    } else if (load_pct > 85) {
-        pdu_state = "FAULT";
-    } else if (input_v < 48.0) {
-        pdu_state = "OFF";
-    } else if (pdu_state != "OVERLOAD" && pdu_state != "FAULT") {
-        pdu_state = "NORMAL";
+    if (inlet_temp_f > 95 || cpu_load_pct > 95) {
+        srv_state = "FAULT";
+    } else if (!path_a_ok || !path_b_ok) {
+        srv_state = "DEGRADED";
+    } else if (inlet_temp_f > 85 || cpu_load_pct > 80) {
+        srv_state = "DEGRADED";
+    } else {
+        srv_state = "NORMAL";
     }
 }
 
@@ -70,19 +76,20 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
     msg.trim();
 
-    if (msg.startsWith("INPUT:")) {
-        input_v = msg.substring(6).toFloat();
-        if (input_v < 48.0) {
-            pdu_state = "OFF";
-        } else if (pdu_state == "OFF") {
-            pdu_state = "NORMAL";
-        }
-        output_v = (load_pct > 0 && input_v > 0) ? input_v : 0.0;
-    } else if (msg.startsWith("LOAD:")) {
-        load_pct = msg.substring(5).toInt();
-        output_v = (load_pct > 0 && input_v > 0) ? input_v : 0.0;
+    if (msg.startsWith("CPU:")) {
+        cpu_load_pct = msg.substring(4).toInt();
+        power_kw     = 1.2f + (cpu_load_pct / 100.0f) * 6.0f;
+    } else if (msg.startsWith("TEMP:")) {
+        inlet_temp_f = msg.substring(5).toInt();
+    } else if (msg.startsWith("UNITS:")) {
+        units_active = msg.substring(6).toInt();
+    } else if (msg.startsWith("PATH_A:")) {
+        path_a_ok = (msg.substring(7).toInt() == 1);
+    } else if (msg.startsWith("PATH_B:")) {
+        path_b_ok = (msg.substring(7).toInt() == 1);
     } else if (msg.startsWith("STATUS:")) {
-        pdu_state = msg.substring(7);
+        srv_state = msg.substring(7);
+        return;  // STATUS override skips auto guard
     }
 
     updateState();
@@ -94,10 +101,10 @@ void drawDisplay(bool mqtt_ok) {
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
 
-    // Line 1: node id + state
+    // Line 1: abbreviated node id + state (full "server_rack" is 11 chars, fits at size 1)
     display.setCursor(0, 0);
-    display.print("pdu_a [");
-    display.print(pdu_state);
+    display.print("srvr [");
+    display.print(srv_state);
     display.print("]");
 
     // Line 2: IP + RSSI
@@ -112,23 +119,27 @@ void drawDisplay(bool mqtt_ok) {
         display.print("WiFi disconnected");
     }
 
-    // Line 3: input voltage
+    // Line 3: CPU load + inlet temperature
     display.setCursor(0, 20);
-    display.print("Vin:  ");
-    display.print((int)input_v);
-    display.print("V");
+    display.print("CPU:");
+    display.print(cpu_load_pct);
+    display.print("% Temp:");
+    display.print(inlet_temp_f);
+    display.print("F");
 
-    // Line 4: load
+    // Line 4: power + active units
     display.setCursor(0, 30);
-    display.print("Load: ");
-    display.print(load_pct);
-    display.print("%");
+    display.print("Power:");
+    display.print(power_kw, 1);
+    display.print("kW U:");
+    display.print(units_active);
 
-    // Line 5: output voltage
+    // Line 5: dual-path status
     display.setCursor(0, 40);
-    display.print("Vout: ");
-    display.print((int)output_v);
-    display.print("V");
+    display.print("PathA:");
+    display.print(path_a_ok ? "OK" : "NO");
+    display.print(" PathB:");
+    display.print(path_b_ok ? "OK" : "NO");
 
     // Line 6: MQTT status + message count
     display.setCursor(0, 54);
@@ -154,7 +165,7 @@ void setup() {
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(0, 0);
-    display.println("pdu_a starting...");
+    display.println("server_rack starting...");
     display.display();
 
     // WiFi reset sequence
@@ -206,10 +217,10 @@ void setup() {
 void loop() {
     // MQTT connect / reconnect
     if (!mqtt.connected()) {
-        String lwt_topic = "winter-river/pdu_a/status";
-        String lwt_msg   = "{\"node\":\"pdu_a\",\"status\":\"OFFLINE\"}";
+        String lwt_topic = "winter-river/server_rack/status";
+        String lwt_msg   = "{\"node\":\"server_rack\",\"status\":\"OFFLINE\"}";
 
-        if (!mqtt.connect("pdu_a", NULL, NULL,
+        if (!mqtt.connect("server_rack", NULL, NULL,
                           lwt_topic.c_str(), 1, true, lwt_msg.c_str())) {
             Serial.println("MQTT FAILED, rc=" + String(mqtt.state()));
             display.clearDisplay();
@@ -224,27 +235,30 @@ void loop() {
 
         // Publish ONLINE
         String online_msg = "{\"ts\":\"" + getTimestamp() +
-                            "\",\"node\":\"pdu_a\",\"status\":\"ONLINE\"}";
-        mqtt.publish("winter-river/pdu_a/status", online_msg.c_str(), true);
+                            "\",\"node\":\"server_rack\",\"status\":\"ONLINE\"}";
+        mqtt.publish("winter-river/server_rack/status", online_msg.c_str(), true);
 
         // Subscribe to control topic
-        mqtt.subscribe("winter-river/pdu_a/control");
-        Serial.println("MQTT connected, subscribed to winter-river/pdu_a/control");
+        mqtt.subscribe("winter-river/server_rack/control");
+        Serial.println("MQTT connected, subscribed to winter-river/server_rack/control");
     }
 
     mqtt.loop();
 
     // Build and publish telemetry
-    String ts  = getTimestamp();
+    String ts      = getTimestamp();
     String payload = "{\"ts\":\"" + ts + "\""
-                   + ",\"input_v\":"  + String(input_v,  1)
-                   + ",\"output_v\":" + String(output_v, 1)
-                   + ",\"load_pct\":" + String(load_pct)
-                   + ",\"state\":\""  + pdu_state + "\""
+                   + ",\"cpu_pct\":"  + String(cpu_load_pct)
+                   + ",\"inlet_f\":"  + String(inlet_temp_f)
+                   + ",\"power_kw\":" + String(power_kw, 1)
+                   + ",\"units\":"    + String(units_active)
+                   + ",\"path_a\":"   + String(path_a_ok ? 1 : 0)
+                   + ",\"path_b\":"   + String(path_b_ok ? 1 : 0)
+                   + ",\"state\":\""  + srv_state + "\""
                    + ",\"voltage\":"  + String(voltage_rating)
                    + "}";
 
-    mqtt.publish("winter-river/pdu_a/status", payload.c_str());
+    mqtt.publish("winter-river/server_rack/status", payload.c_str());
     Serial.println("Published: " + payload);
 
     message_count++;

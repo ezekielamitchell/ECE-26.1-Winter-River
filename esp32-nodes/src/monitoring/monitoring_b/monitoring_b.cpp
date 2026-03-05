@@ -1,7 +1,7 @@
 // ============================================================
-// pdu_a.cpp — Power Distribution Unit, Side A
-// Chain: ups_a → [pdu_a] → rectifier_a
-// Node ID: pdu_a | 480V PDU
+// monitoring_b.cpp — Monitoring / BMS Equipment, Side B
+// Chain: lv_dist_b → [monitoring_b]
+// Node ID: monitoring_b | 120V Monitoring & BMS
 // ECE 26.1 Winter River — Seattle University
 // ============================================================
 
@@ -14,13 +14,13 @@
 #include <time.h>
 
 // ── Network constants ────────────────────────────────────────
-const char* ssid       = "WinterRiver-AP";
-const char* password   = "winterriver";
+const char* ssid        = "WinterRiver-AP";
+const char* password    = "winterriver";
 const char* mqtt_server = "192.168.4.1";
 
 // ── NTP ─────────────────────────────────────────────────────
-const char* ntp_server       = "192.168.4.1";
-const long  gmt_offset_sec   = -28800;
+const char* ntp_server          = "192.168.4.1";
+const long  gmt_offset_sec      = -28800;
 const int   daylight_offset_sec = 3600;
 
 // ── OLED ─────────────────────────────────────────────────────
@@ -30,15 +30,14 @@ const int   daylight_offset_sec = 3600;
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // ── MQTT ─────────────────────────────────────────────────────
-WiFiClient  espClient;
+WiFiClient   espClient;
 PubSubClient mqtt(espClient);
 
 // ── Node state ───────────────────────────────────────────────
-const int  voltage_rating = 480;
-float      input_v   = 480.0;
-float      output_v  = 480.0;
-int        load_pct  = 25;
-String     pdu_state = "NORMAL";  // NORMAL, OVERLOAD, FAULT, OFF
+const int  voltage_rating = 120;
+float      input_v        = 120.0;
+int        load_pct       = 15;
+String     mon_state      = "NORMAL";  // NORMAL, FAULT, OFF
 
 // ── Message counter ──────────────────────────────────────────
 int message_count = 0;
@@ -53,15 +52,12 @@ String getTimestamp() {
 }
 
 void updateState() {
-    if (load_pct > 95) {
-        pdu_state = "OVERLOAD";
-    } else if (load_pct > 85) {
-        pdu_state = "FAULT";
-    } else if (input_v < 48.0) {
-        pdu_state = "OFF";
-    } else if (pdu_state != "OVERLOAD" && pdu_state != "FAULT") {
-        pdu_state = "NORMAL";
+    if (input_v > 145.0) {
+        mon_state = "FAULT";
+    } else if (input_v < 100.0) {
+        mon_state = "OFF";
     }
+    // NORMAL is set explicitly in callback on recovery
 }
 
 // ── MQTT callback ─────────────────────────────────────────────
@@ -72,17 +68,15 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
     if (msg.startsWith("INPUT:")) {
         input_v = msg.substring(6).toFloat();
-        if (input_v < 48.0) {
-            pdu_state = "OFF";
-        } else if (pdu_state == "OFF") {
-            pdu_state = "NORMAL";
+        if (input_v < 100.0) {
+            mon_state = "OFF";
+        } else if (mon_state == "OFF") {
+            mon_state = "NORMAL";
         }
-        output_v = (load_pct > 0 && input_v > 0) ? input_v : 0.0;
     } else if (msg.startsWith("LOAD:")) {
         load_pct = msg.substring(5).toInt();
-        output_v = (load_pct > 0 && input_v > 0) ? input_v : 0.0;
     } else if (msg.startsWith("STATUS:")) {
-        pdu_state = msg.substring(7);
+        mon_state = msg.substring(7);
     }
 
     updateState();
@@ -96,8 +90,8 @@ void drawDisplay(bool mqtt_ok) {
 
     // Line 1: node id + state
     display.setCursor(0, 0);
-    display.print("pdu_a [");
-    display.print(pdu_state);
+    display.print("mon_b [");
+    display.print(mon_state);
     display.print("]");
 
     // Line 2: IP + RSSI
@@ -124,11 +118,9 @@ void drawDisplay(bool mqtt_ok) {
     display.print(load_pct);
     display.print("%");
 
-    // Line 5: output voltage
+    // Line 5: subsystem description
     display.setCursor(0, 40);
-    display.print("Vout: ");
-    display.print((int)output_v);
-    display.print("V");
+    display.print("120V BMS/Sensors");
 
     // Line 6: MQTT status + message count
     display.setCursor(0, 54);
@@ -154,7 +146,7 @@ void setup() {
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(0, 0);
-    display.println("pdu_a starting...");
+    display.println("monitoring_b starting...");
     display.display();
 
     // WiFi reset sequence
@@ -206,10 +198,10 @@ void setup() {
 void loop() {
     // MQTT connect / reconnect
     if (!mqtt.connected()) {
-        String lwt_topic = "winter-river/pdu_a/status";
-        String lwt_msg   = "{\"node\":\"pdu_a\",\"status\":\"OFFLINE\"}";
+        String lwt_topic = "winter-river/monitoring_b/status";
+        String lwt_msg   = "{\"node\":\"monitoring_b\",\"status\":\"OFFLINE\"}";
 
-        if (!mqtt.connect("pdu_a", NULL, NULL,
+        if (!mqtt.connect("monitoring_b", NULL, NULL,
                           lwt_topic.c_str(), 1, true, lwt_msg.c_str())) {
             Serial.println("MQTT FAILED, rc=" + String(mqtt.state()));
             display.clearDisplay();
@@ -224,27 +216,26 @@ void loop() {
 
         // Publish ONLINE
         String online_msg = "{\"ts\":\"" + getTimestamp() +
-                            "\",\"node\":\"pdu_a\",\"status\":\"ONLINE\"}";
-        mqtt.publish("winter-river/pdu_a/status", online_msg.c_str(), true);
+                            "\",\"node\":\"monitoring_b\",\"status\":\"ONLINE\"}";
+        mqtt.publish("winter-river/monitoring_b/status", online_msg.c_str(), true);
 
         // Subscribe to control topic
-        mqtt.subscribe("winter-river/pdu_a/control");
-        Serial.println("MQTT connected, subscribed to winter-river/pdu_a/control");
+        mqtt.subscribe("winter-river/monitoring_b/control");
+        Serial.println("MQTT connected, subscribed to winter-river/monitoring_b/control");
     }
 
     mqtt.loop();
 
     // Build and publish telemetry
-    String ts  = getTimestamp();
+    String ts      = getTimestamp();
     String payload = "{\"ts\":\"" + ts + "\""
-                   + ",\"input_v\":"  + String(input_v,  1)
-                   + ",\"output_v\":" + String(output_v, 1)
+                   + ",\"input_v\":"  + String(input_v, 1)
                    + ",\"load_pct\":" + String(load_pct)
-                   + ",\"state\":\""  + pdu_state + "\""
+                   + ",\"state\":\""  + mon_state + "\""
                    + ",\"voltage\":"  + String(voltage_rating)
                    + "}";
 
-    mqtt.publish("winter-river/pdu_a/status", payload.c_str());
+    mqtt.publish("winter-river/monitoring_b/status", payload.c_str());
     Serial.println("Published: " + payload);
 
     message_count++;
