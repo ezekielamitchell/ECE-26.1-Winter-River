@@ -115,7 +115,7 @@ TABLE_EXISTS=$(sudo -u postgres psql -d winter_river -tc \
     "SELECT 1 FROM information_schema.tables WHERE table_name='nodes';" | tr -d ' ')
 if [ "$TABLE_EXISTS" != "1" ]; then
     echo "Initializing database schema..."
-    sudo -u postgres psql -d winter_river -f "$PROJECT_DIR/scripts/init_db.sql"
+    sudo -u postgres psql -d winter_river < "$PROJECT_DIR/scripts/init_db.sql"
 else
     echo "Schema already exists, skipping init_db.sql"
 fi
