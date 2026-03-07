@@ -1,5 +1,5 @@
 # Runtime dependencies for broker/main.py
 paho-mqtt==1.6.1
 toml==0.10.2
-psycopg2-binary==2.9.9
+psycopg2-binary>=2.9.10
 influxdb-client==1.44.0   # optional: broker → InfluxDB direct writes
