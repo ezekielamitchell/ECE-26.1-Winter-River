@@ -1,266 +1,221 @@
-# MQTT Broker
+# Broker — Python Simulation Engine
 
-Python utilities for the ECE-26.1 Winter River data center training simulator.
+`broker/main.py` is the **WinterRiverEngine** — the central simulation brain for ECE 26.1 Winter River. It connects to Mosquitto, subscribes to all node telemetry, runs a topology-aware cascade simulation at 1 Hz, and publishes computed power states back to every node via MQTT control commands. Optionally it also writes every tick to InfluxDB for Grafana visualisation.
 
-> **Note:** The primary MQTT broker is **Mosquitto**, running on the Raspberry Pi at `192.168.4.1:1883`. `main.py` is a stub for future Python subscriber/processing utilities.
-
-## Features
-
-- MQTT protocol support for ESP32 sensor nodes
-- PostgreSQL database for persistent storage
-- Real-time data processing and validation
-- Prometheus metrics endpoint
-- Configurable via TOML configuration file
-- Structured logging with structlog
-
-## Installation
-
-### Prerequisites
-
-- Python 3.9 or higher
-- PostgreSQL 12 or higher
-
-### Setup
-
-1. Create a virtual environment:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-2. Install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-3. Install development dependencies (optional):
-
-```bash
-pip install -r requirements-dev.txt
-```
-
-4. Configure the broker:
-
-```bash
-cp config.sample.toml config.toml
-# Edit config.toml with your settings
-```
-
-5. Initialize the database:
-
-```bash
-alembic upgrade head
-```
-
-## Configuration
-
-Edit `config.toml` to configure the broker:
-
-```toml
-[mqtt]
-host = "0.0.0.0"
-port = 1883
-keepalive = 60
-client_id = "winter-river-broker"
-
-[database]
-host = "localhost"
-port = 5432
-database = "sensor_data"
-user = "postgres"
-password = "your_password"
-
-[logging]
-level = "INFO"
-format = "json"
-
-[metrics]
-enabled = true
-port = 9090
-```
-
-## Running
-
-### Development
-
-```bash
-python main.py
-```
-
-### Production
-
-The systemd service is installed by `scripts/setup_pi.sh` and points to the project's `.venv`:
-
-```bash
-sudo systemctl start mqtt-broker
-sudo systemctl enable mqtt-broker
-sudo systemctl status mqtt-broker
-```
-
-Service file: `deploy/mqtt-broker.service`
-Working directory: `/home/pi/ECE-26.1-Winter-River`
-Interpreter: `/home/pi/ECE-26.1-Winter-River/.venv/bin/python`
-
-## Development
-
-### Running Tests
-
-```bash
-# All tests
-pytest
-
-# With coverage
-pytest --cov=src --cov-report=html
-
-# Specific test file
-pytest tests/test_broker.py
-
-# With verbose output
-pytest -v
-```
-
-### Code Formatting
-
-```bash
-# Format code
-black src/ tests/
-
-# Sort imports
-isort src/ tests/
-
-# Check style
-flake8 src/ tests/
-
-# Type checking
-mypy src/
-```
-
-### Linting
-
-```bash
-pylint src/
-```
-
-## Project Structure
-
-```text
-broker/
-├── main.py              # Entry point
-├── config.toml          # Configuration
-├── requirements.txt     # Dependencies
-├── pyproject.toml       # Project metadata
-├── src/                 # Source code
-│   ├── __init__.py
-│   ├── broker.py        # MQTT broker logic
-│   ├── database.py      # Database interface
-│   ├── models.py        # Data models
-│   └── utils.py         # Utilities
-├── tests/               # Test suite
-│   ├── __init__.py
-│   ├── test_broker.py
-│   ├── test_database.py
-│   └── conftest.py
-└── alembic/             # Database migrations
-    ├── versions/
-    └── env.py
-```
+---
 
 ## Architecture
 
-### Components
-
-1. **MQTT Handler**: Receives messages from ESP32 nodes
-2. **Data Validator**: Validates sensor readings
-3. **Database Writer**: Persists data to PostgreSQL
-4. **Metrics Exporter**: Exposes Prometheus metrics
-5. **Logger**: Structured logging for debugging
-
-### Data Flow
-
-```text
-ESP32 → MQTT → Validator → Database → Grafana
-                    ↓
-                Metrics → Prometheus
+```
+ESP32 nodes
+    │
+    │  winter-river/<node_id>/status   (JSON telemetry, every 5s, retained)
+    ▼
+Mosquitto MQTT broker (192.168.4.1:1883)
+    │
+    │  paho-mqtt subscriber
+    ▼
+WinterRiverEngine (broker/main.py)
+    ├── _load_topology()     PostgreSQL → in-memory node graph
+    ├── _topo_sort()         Kahn's BFS — respects secondary_parent_id
+    ├── _tick()              1 Hz cascade propagation loop
+    │     ├── node type handlers (13 types)
+    │     ├── publish control commands → MQTT
+    │     └── write_to_influx() → InfluxDB (optional)
+    └── PostgreSQL live_status updates
 ```
 
-## MQTT Topics
+---
 
-- `winter-river/{node_id}/status` - Node telemetry JSON (load, temp, voltage, status)
-- `winter-river/{node_id}/control` - Commands to node (`LOAD:xx`, `TEMP:xx`, `STATUS:xxxx`)
-- `winter-river` - General publish topic (pdu_a, pdu_b, server nodes)
+## Node Types Handled
+
+| Type | node_ids | Key Logic |
+|------|----------|-----------|
+| `UTILITY` | `utility_a`, `utility_b` | Root nodes; `v_out` = 230 kV when `GRID_OK/SAG/SWELL`, 0 on `OUTAGE/FAULT/OFFLINE` |
+| `MV_SWITCHGEAR` | `mv_switchgear_a/b` | Passes parent voltage when `CLOSED`; 0 when `OPEN/TRIPPED/FAULT` |
+| `MV_LV_TRANSFORMER` | `mv_lv_transformer_a/b` | Passes parent voltage when `NORMAL/WARNING`; 0 when `FAULT` |
+| `GENERATOR` | `generator_a`, `generator_b` | Standby while utility is live; 10-tick startup delay on utility loss; 480 V when `RUNNING` |
+| `ATS` | `ats_a`, `ats_b` | Prefers transformer (utility) path; falls back to generator; `OPEN` if both down |
+| `LV_DIST` | `lv_dist_a/b` | Distributes ATS voltage to all downstream IT + mechanical branches |
+| `UPS` | `ups_a`, `ups_b` | Passes voltage with battery tracking; 0 V on `FAULT` |
+| `PDU` | `pdu_a`, `pdu_b` | Passes UPS voltage; 0 V on `FAULT` |
+| `RECTIFIER` | `rectifier_a/b` | 480 V AC → 48 V DC; 0 on `OFF`/`FAULT` |
+| `COOLING` | `cooling_a/b` | Mechanical load — monitored but not in IT power chain |
+| `LIGHTING` | `lighting_a/b` | Mechanical load — monitored but not in IT power chain |
+| `MONITORING` | `monitoring_a/b` | 120 V monitoring load — not in IT power chain |
+| `SERVER_RACK` | `server_rack` | 2N node — NORMAL if both paths live, DEGRADED if one path down, FAULT if both down |
+
+---
+
+## Topological Sort
+
+The engine uses **Kahn's BFS algorithm** so cascade propagation always visits parents before children — even with the dual-parent structure required by ATS and the 2N server rack.
+
+```python
+def _topo_sort(self, nodes):
+    # Counts in-degree from BOTH parent_id and secondary_parent_id
+    # UTILITY nodes are enqueued before GENERATOR nodes so generator
+    # can correctly check whether utility is still live.
+```
+
+---
+
+## Generator Startup Delay
+
+When utility power is lost the generator does not supply power instantly. The engine simulates a realistic 10-tick (~10 second) startup sequence:
+
+```
+Utility lost  → gen_timer = GEN_STARTUP_TICKS (10)
+Each tick:    → gen_timer decrements, state = STARTING, v_out = 0
+Timer = 0     → state = RUNNING, v_out = 480 V
+```
+
+This means the ATS output drops to 0 V for ~10 seconds before generator power arrives — exactly matching a real data centre emergency scenario where the UPS must carry the load during the gap.
+
+---
+
+## 2N Server Rack Logic
+
+`server_rack` has two parents (`rectifier_a` and `rectifier_b`) and combines their status:
+
+| Path A | Path B | server_rack state | v_out |
+|--------|--------|-------------------|-------|
+| live   | live   | `NORMAL`          | 48 V  |
+| live   | dead   | `DEGRADED`        | 48 V  |
+| dead   | live   | `DEGRADED`        | 48 V  |
+| dead   | dead   | `FAULT`           | 0 V   |
+
+---
+
+## Installation
+
+```bash
+cd broker
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+---
+
+## Configuration
+
+Copy the template and edit:
+
+```bash
+cp config.sample.toml ../config.toml
+```
+
+`config.toml` is git-ignored. Minimum required sections:
+
+```toml
+[mqtt]
+host      = "192.168.4.1"
+port      = 1883
+keepalive = 60
+
+[database]
+host     = "localhost"
+port     = 5432
+database = "sensor_data"
+user     = "postgres"
+password = "your_password"
+
+[simulation]
+tick_rate = 1.0    # seconds per simulation tick
+```
+
+**Optional** — add this section to enable InfluxDB writes:
+
+```toml
+[influxdb]
+url    = "http://localhost:8086"
+token  = "my-super-secret-auth-token"
+org    = "iot-project"
+bucket = "mqtt_metrics"
+```
+
+If `[influxdb]` is absent or `influxdb-client` is not installed, the engine runs in MQTT-only mode without error.
+
+---
+
+## Running
+
+```bash
+cd broker
+source venv/bin/activate
+python main.py
+```
+
+The engine will:
+1. Connect to MQTT broker at the configured host
+2. Subscribe to `winter-river/#`
+3. Load topology from PostgreSQL (`nodes` + `live_status` tables)
+4. Begin a 1 Hz simulation tick loop
+5. Publish control commands to each node's `/control` topic every tick
+
+---
 
 ## Database Schema
 
+Run `scripts/init_db.sql` to initialise:
+
+```bash
+psql -U postgres -d sensor_data -f scripts/init_db.sql
+```
+
+Key tables:
+
 ```sql
-CREATE TABLE sensor_readings (
-    id SERIAL PRIMARY KEY,
-    node_id VARCHAR(50) NOT NULL,
-    sensor_type VARCHAR(50) NOT NULL,
-    value FLOAT NOT NULL,
-    timestamp TIMESTAMP NOT NULL DEFAULT NOW(),
-    metadata JSONB
-);
+nodes (
+    node_id              VARCHAR(50) PRIMARY KEY,
+    node_type            VARCHAR(30),     -- UTILITY, MV_SWITCHGEAR, GENERATOR, ATS, etc.
+    side                 CHAR(1),         -- 'A', 'B', or NULL (shared)
+    parent_id            VARCHAR(50),     -- primary upstream node
+    secondary_parent_id  VARCHAR(50),     -- ATS generator input / server_rack Side B
+    rated_voltage        FLOAT,
+    v_ratio              FLOAT
+)
 
-CREATE INDEX idx_node_timestamp ON sensor_readings(node_id, timestamp DESC);
+live_status (
+    node_id       VARCHAR(50) PRIMARY KEY,
+    is_present    BOOLEAN,    -- true when node is publishing telemetry
+    v_in          FLOAT,      -- input voltage computed by engine
+    v_out         FLOAT,      -- output voltage published to node
+    status_msg    VARCHAR(50),
+    battery_level INT,        -- UPS only
+    gen_timer     INT,        -- GENERATOR startup countdown ticks
+    last_update   TIMESTAMP
+)
 ```
 
-## Metrics
+---
 
-Exposed on port 9090 (configurable):
+## MQTT Topics
 
-- `sensor_messages_total` - Total messages received per node
-- `sensor_messages_invalid` - Invalid messages received
-- `database_writes_total` - Total database writes
-- `database_write_errors` - Database write errors
-- `broker_uptime_seconds` - Broker uptime
+| Direction | Topic pattern | Content |
+|-----------|---------------|---------|
+| Inbound | `winter-river/<node_id>/status` | JSON telemetry (retained, every 5s) |
+| Outbound | `winter-river/<node_id>/control` | Space-delimited commands, e.g. `INPUT:480.0 STATUS:NORMAL` |
 
-## Logging
+Full command reference: see each component's README in `esp32-nodes/src/<type>/README.md`.
 
-Structured JSON logs with fields:
+---
 
-- `timestamp` - ISO 8601 timestamp
-- `level` - Log level (DEBUG, INFO, WARNING, ERROR)
-- `event` - Event description
-- `node_id` - Related node ID (if applicable)
-- `duration` - Operation duration (if applicable)
+## Development Tools
 
-Example:
+```bash
+pip install -r requirements-dev.txt
 
-```json
-{
-  "timestamp": "2026-01-09T16:45:23.123Z",
-  "level": "INFO",
-  "event": "message_received",
-  "node_id": "node1",
-  "topic": "sensor/node1/temperature",
-  "value": 23.5
-}
+# Format
+black main.py
+
+# Lint
+flake8 main.py
+
+# Type check
+mypy main.py
+
+# Tests (stubs — add to tests/)
+pytest
 ```
-
-## Troubleshooting
-
-### Connection Issues
-
-- Verify Mosquitto is running: `sudo systemctl status mosquitto`
-- Verify the broker management service is running: `sudo systemctl status mqtt-broker`
-- Confirm the Pi hotspot is up on 2.4 GHz: `sudo ./scripts/setup_hotspot.sh status`
-- Check firewall rules allow port 1883
-- Verify ESP32 nodes can reach `192.168.4.1` (Pi gateway IP)
-
-### Database Issues
-
-- Check PostgreSQL is running: `sudo systemctl status postgresql`
-- Verify database credentials in config.toml
-- Check database logs: `sudo journalctl -u postgresql -f`
-
-### Performance Issues
-
-- Monitor metrics at `http://broker-ip:9090/metrics`
-- Check database query performance
-- Adjust PostgreSQL connection pool settings
-
-## License
-
-MIT License - see LICENSE file for details

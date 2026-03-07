@@ -45,7 +45,7 @@ By combining physical modularity (plug-and-play components on a custom PCB basep
 | Display                | OLED per component             | Real-time operational parameters (voltage, current, power, temperature, status) |
 | PCB Architecture       | Custom modular baseplate       | USB-C connectors at each node, plug-and-play components                         |
 | Power Topology         | 2N Redundancy                  | OCP Open Rack V3 specifications, dual power paths                               |
-| Component Types        | 15-20 modules (stretch 30)     | Generators, transformers, switchgear, UPS units, PDUs, server racks             |
+| Component Types        | 25 modules (12 Side A + 12 Side B + 1 shared) | Utility, MV switchgear, transformer, generator, ATS, LV dist, UPS, PDU, rectifier, cooling, lighting, monitoring, server rack |
 | Simulation Features    | Real-time system states        | Power flow, thermal modeling, failure propagation, hot-swap detection           |
 | Development Platform   | PlatformIO + Python            | ESP32 firmware, Raspberry Pi controller scripts, GitHub CI/CD                   |
 | Visualization          | Grafana Dashboard              | Real-time metrics, system topology view, historical data analysis               |
@@ -56,71 +56,121 @@ By combining physical modularity (plug-and-play components on a custom PCB basep
 
 ### Winter Quarter 2026
 
-<table><thead><tr><th>Metric</th><th>Target</th><th>Status<select><option value="sqgq1MesM8XL" label="Achieved" color="blue"></option><option value="83KQpvtBIYxJ" label="In progress" color="blue"></option><option value="cdfReAEhJSDI" label="Planned" color="blue"></option></select></th></tr></thead><tbody><tr><td>Proof-of-concept nodes operational</td><td>6-12 ESP32 nodes with MQTT</td><td><span data-option="sqgq1MesM8XL">Achieved</span></td></tr><tr><td>PCB design completed and ordered</td><td>Custom power distribution PCB</td><td><span data-option="sqgq1MesM8XL">Achieved</span></td></tr><tr><td>Firmware architecture established</td><td>Base ESP32 template code for primaries</td><td><span data-option="83KQpvtBIYxJ">In progress</span></td></tr><tr><td>Raspberry Pi broker configured</td><td>Mosquitto MQTT running</td><td><span data-option="83KQpvtBIYxJ">In progress</span></td></tr><tr><td>Database configuration</td><td><p></p><p></p></td><td></td></tr></tbody></table>
+| Metric | Target | Status |
+|--------|--------|--------|
+| Proof-of-concept nodes operational | 6–12 ESP32 nodes with MQTT | ✅ Achieved |
+| PCB design completed and ordered | Custom power distribution PCB | ✅ Achieved |
+| Firmware architecture established | Base ESP32 template for all primaries | ✅ Achieved |
+| Mosquitto MQTT broker running on Pi | port 1883, anonymous, persistence | ✅ Achieved |
+| 24-node firmware written | All 25 envs in platformio.ini | ✅ Achieved |
+| Simulation engine (`broker/main.py`) | Topological sort + cascade logic | ✅ Achieved |
+| PostgreSQL schema (25 nodes) | `secondary_parent_id`, 2N support | ✅ Achieved |
 
 ### Spring Quarter 2026
 
-<table><thead><tr><th>Metric</th><th>Target</th><th>Status<select><option value="sqgq1MesM8XL" label="Achieved" color="blue"></option><option value="83KQpvtBIYxJ" label="In progress" color="blue"></option><option value="cdfReAEhJSDI" label="Planned" color="blue"></option></select></th></tr></thead><tbody><tr><td>Component modules completed</td><td>24 functional modules</td><td><span data-option="cdfReAEhJSDI">Planned</span></td></tr><tr><td>Full 2N redundancy simulation</td><td>Dual power path logic</td><td><span data-option="cdfReAEhJSDI">Planned</span></td></tr><tr><td>Failure scenarios implemented</td><td>3+ automated scenarios</td><td><span data-option="cdfReAEhJSDI">Planned</span></td></tr><tr><td>Dashboard deployed</td><td>Grafana real-time visualization</td><td><span data-option="cdfReAEhJSDI">Planned</span></td></tr><tr><td>Documentation complete</td><td>User + technical manuals</td><td><span data-option="cdfReAEhJSDI">Planned</span></td></tr><tr><td>AWS delivery</td><td>Functional prototype delivered</td><td><span data-option="cdfReAEhJSDI">Planned</span></td></tr></tbody></table>
+| Metric | Target | Status |
+|--------|--------|--------|
+| Full 2N redundancy hardware | 25 physical ESP32 nodes on PCB baseplate | 🔲 Planned |
+| 3+ automated failure scenarios | Utility loss, UPS switchover, cooling fault | 🔲 Planned |
+| Grafana dashboard deployed | Real-time visualization at :3000 | 🔲 Planned |
+| InfluxDB / Telegraf integration | MQTT → InfluxDB live pipeline | 🔲 Planned |
+| Documentation complete | User + technical manuals | 🔲 Planned |
+| AWS delivery | Functional prototype delivered | 🔲 Planned |
 
 ***
 
 ## Project Structure
 
-```md
+```
 ECE-26.1-Winter-River/
 ├── README.md
 ├── CONTRIBUTING.md
 ├── SUMMARY.md                         # GitBook navigation index
 ├── LICENSE
 ├── .gitignore
+├── config.toml                        # Runtime config (git-ignored; copy from broker/config.sample.toml)
 ├── .gitbook/
 │   └── assets/
 ├── .github/
 │   └── workflows/
-├── broker/                            # Python MQTT broker utilities
+│       └── ci.yml                     # GitHub Actions: python lint + pio build
+├── broker/                            # Python simulation engine + MQTT bridge
+│   ├── main.py                        # WinterRiverEngine: topo sort, cascade logic, InfluxDB writes
+│   ├── config.sample.toml             # Copy to root config.toml
+│   ├── requirements.txt               # Runtime: paho-mqtt, toml, influxdb-client
+│   └── requirements-dev.txt           # Dev: pytest, black, flake8, mypy
 ├── deploy/                            # Raspberry Pi systemd units & setup
-│   ├── mosquitto_setup.sh             # ① Configure Mosquitto (TCP 1883 + WS 9001)
-│   └── winter-river-hotspot.service   # ② Register Pi as 2.4 GHz access point
+│   ├── mosquitto_setup.sh             # Configures Mosquitto (TCP 1883, anonymous, persistence)
+│   └── winter-river-hotspot.service   # Systemd unit — Pi 2.4 GHz access point
 ├── docs/
-├── esp32-nodes/                       # PlatformIO firmware for all ESP32 nodes
-│   ├── platformio.ini
+├── esp32-nodes/                       # PlatformIO firmware for all 25 ESP32 nodes
+│   ├── platformio.ini                 # 25 active envs + legacy section
 │   └── src/
-│       ├── utility/        → util_a   # ① 230 kV MV grid feed — chain root
-│       ├── transformer/    → trf_a    # ② 230 kV → 480 V step-down
-│       ├── switchgear/     → sw_a     # ③ ATS — utility / generator transfer
-│       ├── generator/      → gen_a    # ④ Backup diesel generator, 480 V
-│       ├── distribution/   → dist_a   # ⑤ LV distribution board, 384 kW
-│       ├── ups/            → ups_a    # ⑥ UPS — battery %, charge state
-│       ├── pdu/            → pdu_a    # ⑦ Rack PDU, 480 V
-│       └── server_rack/    → srv_a    # ⑧ Server rack endpoint
-├── grafana/                           # Grafana + InfluxDB + Telegraf (native systemd)
-│   ├── telegraf.conf                  # Telegraf MQTT → InfluxDB bridge config
+│       ├── utility/                   # ①  230 kV grid feed — Side A + B chain roots
+│       ├── mv_switchgear/             # ②  34.5 kV main disconnect & protection relay
+│       ├── mv_lv_transformer/         # ③  34.5 kV → 480 V, 1000 kVA
+│       ├── generator/                 # ④  Backup diesel gen, 480 V, startup delay
+│       ├── ats/                       # ⑤  Automatic transfer switch (dual-source)
+│       ├── lv_dist/                   # ⑥  480 V distribution board, 384 kW rated
+│       ├── ups/                       # ⑦  UPS — battery %, charge state, ON_BATTERY
+│       ├── pdu/                       # ⑧  Rack PDU, 480 V
+│       ├── rectifier/                 # ⑨  480 V AC → 48 V DC (HVDC path)
+│       ├── cooling/                   # ⑩  CRAC/CRAH — coolant temp + fan speed
+│       ├── lighting/                  # ⑪  277 V lighting circuit
+│       ├── monitoring/                # ⑫  120 V DCIM/BMS monitoring equipment
+│       └── server_rack/               # ⑬  2N 48 V DC shared rack endpoint
+├── grafana/                           # Docker monitoring stack
+│   ├── docker-compose.yml             # InfluxDB 2.7 + Grafana + Telegraf
+│   ├── telegraf.conf                  # MQTT consumer → InfluxDB v2 bridge
 │   ├── provisioning/                  # Auto-provisioned datasources & dashboards
-│   ├── dashboards/                    # Dashboard JSON definitions
-│   └── .env.sample                    # Credential template (copy → .env)
+│   ├── dashboards/                    # Dashboard JSON exports
+│   └── .env.sample                    # Credential template (copy → grafana/.env)
 ├── images/
 ├── scripts/
-│   ├── setup_pi.sh                    # ① Run first — full Pi provisioning
-│   └── status.sh                      # ② Live node & service health check
-└── typescript/
-
+│   ├── setup_pi.sh                    # Run first — full Pi provisioning
+│   ├── setup_hotspot.sh               # Start/stop/status for NetworkManager AP
+│   ├── status.sh                      # Live node & service health check
+│   └── init_db.sql                    # PostgreSQL schema (25 nodes seeded)
+└── typescript/                        # Reserved — future dashboard/API
 ```
 
-### Power Chain
+### Power Chain (Side A — 12 nodes)
 
-<table><thead><tr><th width="108.19921875">#</th><th width="129.421875">Node</th><th width="330.63671875">Role</th><th>Voltage</th></tr></thead><tbody><tr><td>①</td><td><code>util_a</code></td><td>MV utility grid feed (chain root)</td><td>230 kV</td></tr><tr><td>②</td><td><code>trf_a</code></td><td>Step-down transformer</td><td>230 kV → 480 V</td></tr><tr><td>③</td><td><code>sw_a</code></td><td>Automatic transfer switch (ATS)</td><td>480 V</td></tr><tr><td>④</td><td><code>gen_a</code></td><td>Backup diesel generator</td><td>480 V</td></tr><tr><td>⑤</td><td><code>dist_a</code></td><td>LV distribution board</td><td>480 V, 384 kW</td></tr><tr><td>⑥</td><td><code>ups_a</code></td><td>Uninterruptible power supply</td><td>480 V</td></tr><tr><td>⑦</td><td><code>pdu_a</code></td><td>Rack power distribution unit</td><td>480 V</td></tr><tr><td>⑧</td><td><code>srv_a</code></td><td>Server rack endpoint</td><td>480 V</td></tr></tbody></table>
+| # | Node | Role | Voltage |
+|---|------|------|---------|
+| ① | `utility_a` | MV utility grid feed (chain root) | 230 kV |
+| ② | `mv_switchgear_a` | Main disconnect & protection relay | 34.5 kV |
+| ③ | `mv_lv_transformer_a` | Step-down transformer 34.5 kV → 480 V | 480 V out |
+| ④ | `generator_a` | Backup diesel generator (ATS secondary input) | 480 V |
+| ⑤ | `ats_a` | Automatic transfer switch — utility or generator | 480 V |
+| ⑥ | `lv_dist_a` | LV distribution board — IT + mechanical loads | 480 V, 384 kW |
+| ⑦ | `ups_a` | Uninterruptible power supply (IT path) | 480 V AC |
+| ⑧ | `pdu_a` | Rack power distribution unit | 480 V AC |
+| ⑨ | `rectifier_a` | AC→DC rectifier (HVDC) | 480 V AC → 48 V DC |
+| ⑩ | `cooling_a` | CRAC/CRAH cooling unit | 480 V AC |
+| ⑪ | `lighting_a` | 277 V lighting circuit | 277 V AC |
+| ⑫ | `monitoring_a` | DCIM / BMS monitoring systems | 120 V AC |
+
+Side B mirrors Side A exactly with `_b` suffix on all node IDs.
+
+### Shared Node
+
+| Node | Role | Parents |
+|------|------|---------|
+| `server_rack` | 2N redundant server rack endpoint | `rectifier_a` (primary) + `rectifier_b` (secondary) |
 
 ### Key Configuration Files
 
-| File                                  | Purpose                                                       |
-| ------------------------------------- | ------------------------------------------------------------- |
-| `esp32-nodes/platformio.ini`          | PlatformIO build environments (one per node)                  |
-| `deploy/mosquitto_setup.sh`           | Configures Mosquitto (TCP 1883 + WebSocket 9001)              |
-| `deploy/winter-river-hotspot.service` | Systemd unit for the Pi access point                          |
-| `scripts/setup_pi.sh`                 | Run first — provisions the entire Pi stack end-to-end         |
-| `scripts/status.sh`                   | Checks all 8 nodes + Pi services at a glance                  |
-| `grafana/telegraf.conf`               | Telegraf config — MQTT consumer → InfluxDB v2 bridge          |
-| `grafana/.env.sample`                 | Credential template; copy to `grafana/.env` before setup      |
-| `grafana/provisioning/`               | Auto-provisioned Grafana datasources and dashboard configs    |
+| File | Purpose |
+|------|---------|
+| `esp32-nodes/platformio.ini` | PlatformIO build environments (25 active envs) |
+| `broker/config.sample.toml` | Template for runtime config — copy to `config.toml` |
+| `scripts/init_db.sql` | PostgreSQL schema (25-node seed data, `secondary_parent_id` support) |
+| `deploy/mosquitto_setup.sh` | Configures Mosquitto (TCP 1883, anonymous, persistence on) |
+| `deploy/winter-river-hotspot.service` | Systemd unit for the Pi 2.4 GHz AP |
+| `scripts/setup_pi.sh` | Run first — provisions the entire Pi stack end-to-end |
+| `scripts/status.sh` | Checks all nodes + Pi services at a glance |
+| `grafana/telegraf.conf` | Telegraf config — MQTT consumer → InfluxDB v2 bridge |
+| `grafana/.env.sample` | Credential template; copy to `grafana/.env` before setup |
 
 <br>
