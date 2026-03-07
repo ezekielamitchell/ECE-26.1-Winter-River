@@ -62,7 +62,7 @@ apt-get update -qq
 apt-get install -y \
     mosquitto mosquitto-clients \
     ntpsec ntpsec-ntpdate \
-    postgresql postgresql-client \
+    postgresql postgresql-client libpq-dev \
     python3 python3-pip python3-venv \
     wget gpg
 
