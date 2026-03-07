@@ -86,19 +86,30 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
   String msg;
   for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
 
-  if (msg.startsWith("FUEL:")) {
-    fuel_pct = msg.substring(5).toInt();
+  // Parse space-separated tokens so compound commands work.
+  // e.g. "TOKEN1:val1 TOKEN2:val2" sets both fields.
+  int start = 0;
+  while (start <= (int)msg.length()) {
+    int sp = msg.indexOf(' ', start);
+    String tok = (sp < 0) ? msg.substring(start) : msg.substring(start, sp);
 
-  } else if (msg.startsWith("RPM:")) {
-    rpm = msg.substring(4).toInt();
-    output_v = (rpm > 0) ? voltage_rating : 0.0;
-    deriveStateFromRPM();
+    if (tok.startsWith("FUEL:")) {
+      fuel_pct = tok.substring(5).toInt();
 
-  } else if (msg.startsWith("LOAD:")) {
-    load_pct = msg.substring(5).toInt();
+    } else if (tok.startsWith("RPM:")) {
+      rpm = tok.substring(4).toInt();
+      output_v = (rpm > 0) ? voltage_rating : 0.0;
+      deriveStateFromRPM();
 
-  } else if (msg.startsWith("STATUS:")) {
-    run_state = msg.substring(7);
+    } else if (tok.startsWith("LOAD:")) {
+      load_pct = tok.substring(5).toInt();
+
+    } else if (tok.startsWith("STATUS:")) {
+      run_state = tok.substring(7);
+    }
+
+    if (sp < 0) break;
+    start = sp + 1;
   }
 
   applyFaultGuard();

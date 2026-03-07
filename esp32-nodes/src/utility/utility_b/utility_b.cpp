@@ -58,27 +58,38 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
   String msg;
   for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
 
-  if (msg.startsWith("STATUS:")) {
-    grid_state = msg.substring(7);
-    if      (grid_state == "OUTAGE") grid_voltage_kv = 0.0;
-    else if (grid_state == "SAG")    grid_voltage_kv = GRID_VOLTAGE_KV * 0.88f;
-    else if (grid_state == "SWELL")  grid_voltage_kv = GRID_VOLTAGE_KV * 1.10f;
-    else                             grid_voltage_kv = GRID_VOLTAGE_KV;
+  // Parse space-separated tokens so compound commands work.
+  // e.g. "TOKEN1:val1 TOKEN2:val2" sets both fields.
+  int start = 0;
+  while (start <= (int)msg.length()) {
+    int sp = msg.indexOf(' ', start);
+    String tok = (sp < 0) ? msg.substring(start) : msg.substring(start, sp);
 
-  } else if (msg.startsWith("VOLT:")) {
-    grid_voltage_kv = msg.substring(5).toFloat();
-    float ratio = grid_voltage_kv / GRID_VOLTAGE_KV;
-    if      (grid_voltage_kv <= 0.0f) grid_state = "OUTAGE";
-    else if (ratio < 0.90f)           grid_state = "SAG";
-    else if (ratio > 1.10f)           grid_state = "SWELL";
-    else                              grid_state = "GRID_OK";
+    if (tok.startsWith("STATUS:")) {
+      grid_state = tok.substring(7);
+      if      (grid_state == "OUTAGE") grid_voltage_kv = 0.0;
+      else if (grid_state == "SAG")    grid_voltage_kv = GRID_VOLTAGE_KV * 0.88f;
+      else if (grid_state == "SWELL")  grid_voltage_kv = GRID_VOLTAGE_KV * 1.10f;
+      else                             grid_voltage_kv = GRID_VOLTAGE_KV;
 
-  } else if (msg.startsWith("FREQ:")) {
-    freq_hz = msg.substring(5).toFloat();
-    if (freq_hz < 59.3f || freq_hz > 60.7f) grid_state = "FAULT";
+    } else if (tok.startsWith("VOLT:")) {
+      grid_voltage_kv = tok.substring(5).toFloat();
+      float ratio = grid_voltage_kv / GRID_VOLTAGE_KV;
+      if      (grid_voltage_kv <= 0.0f) grid_state = "OUTAGE";
+      else if (ratio < 0.90f)           grid_state = "SAG";
+      else if (ratio > 1.10f)           grid_state = "SWELL";
+      else                              grid_state = "GRID_OK";
 
-  } else if (msg.startsWith("LOAD:")) {
-    load_pct = msg.substring(5).toInt();
+    } else if (tok.startsWith("FREQ:")) {
+      freq_hz = tok.substring(5).toFloat();
+      if (freq_hz < 59.3f || freq_hz > 60.7f) grid_state = "FAULT";
+
+    } else if (tok.startsWith("LOAD:")) {
+      load_pct = tok.substring(5).toInt();
+    }
+
+    if (sp < 0) break;
+    start = sp + 1;
   }
 }
 

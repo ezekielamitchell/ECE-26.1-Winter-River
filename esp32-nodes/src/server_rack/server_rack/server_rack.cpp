@@ -76,23 +76,35 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
     msg.trim();
 
-    if (msg.startsWith("CPU:")) {
-        cpu_load_pct = msg.substring(4).toInt();
-        power_kw     = 1.2f + (cpu_load_pct / 100.0f) * 6.0f;
-    } else if (msg.startsWith("TEMP:")) {
-        inlet_temp_f = msg.substring(5).toInt();
-    } else if (msg.startsWith("UNITS:")) {
-        units_active = msg.substring(6).toInt();
-    } else if (msg.startsWith("PATH_A:")) {
-        path_a_ok = (msg.substring(7).toInt() == 1);
-    } else if (msg.startsWith("PATH_B:")) {
-        path_b_ok = (msg.substring(7).toInt() == 1);
-    } else if (msg.startsWith("STATUS:")) {
-        srv_state = msg.substring(7);
-        return;  // STATUS override skips auto guard
+    // Parse space-separated tokens so compound commands work.
+    // e.g. "TOKEN1:val1 TOKEN2:val2" sets both fields.
+    bool status_set = false;
+    int start = 0;
+    while (start <= (int)msg.length()) {
+        int sp = msg.indexOf(' ', start);
+        String tok = (sp < 0) ? msg.substring(start) : msg.substring(start, sp);
+
+        if (tok.startsWith("CPU:")) {
+            cpu_load_pct = tok.substring(4).toInt();
+            power_kw     = 1.2f + (cpu_load_pct / 100.0f) * 6.0f;
+        } else if (tok.startsWith("TEMP:")) {
+            inlet_temp_f = tok.substring(5).toInt();
+        } else if (tok.startsWith("UNITS:")) {
+            units_active = tok.substring(6).toInt();
+        } else if (tok.startsWith("PATH_A:")) {
+            path_a_ok = (tok.substring(7).toInt() == 1);
+        } else if (tok.startsWith("PATH_B:")) {
+            path_b_ok = (tok.substring(7).toInt() == 1);
+        } else if (tok.startsWith("STATUS:")) {
+            srv_state = tok.substring(7);
+            status_set = true;
+        }
+
+        if (sp < 0) break;
+        start = sp + 1;
     }
 
-    updateState();
+    if (!status_set) updateState();
 }
 
 // ── OLED draw ────────────────────────────────────────────────

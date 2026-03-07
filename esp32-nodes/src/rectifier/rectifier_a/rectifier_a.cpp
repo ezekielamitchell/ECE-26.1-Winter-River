@@ -68,18 +68,29 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
     msg.trim();
 
-    if (msg.startsWith("INPUT_AC:")) {
-        input_v_ac = msg.substring(9).toFloat();
-        output_v_dc = (input_v_ac > 400.0) ? (float)dc_voltage_rating : 0.0;
-        if (input_v_ac < 400.0) {
-            rect_state = "OFF";
-        } else if (rect_state == "OFF") {
-            rect_state = "NORMAL";
+    // Parse space-separated tokens so compound commands work.
+    // e.g. "TOKEN1:val1 TOKEN2:val2" sets both fields.
+    int start = 0;
+    while (start <= (int)msg.length()) {
+        int sp = msg.indexOf(' ', start);
+        String tok = (sp < 0) ? msg.substring(start) : msg.substring(start, sp);
+
+        if (tok.startsWith("INPUT_AC:")) {
+            input_v_ac = tok.substring(9).toFloat();
+            output_v_dc = (input_v_ac > 400.0) ? (float)dc_voltage_rating : 0.0;
+            if (input_v_ac < 400.0) {
+                rect_state = "OFF";
+            } else if (rect_state == "OFF") {
+                rect_state = "NORMAL";
+            }
+        } else if (tok.startsWith("LOAD:")) {
+            load_pct = tok.substring(5).toInt();
+        } else if (tok.startsWith("STATUS:")) {
+            rect_state = tok.substring(7);
         }
-    } else if (msg.startsWith("LOAD:")) {
-        load_pct = msg.substring(5).toInt();
-    } else if (msg.startsWith("STATUS:")) {
-        rect_state = msg.substring(7);
+
+        if (sp < 0) break;
+        start = sp + 1;
     }
 
     updateState();

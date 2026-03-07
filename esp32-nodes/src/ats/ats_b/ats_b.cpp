@@ -56,29 +56,40 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
   String msg;
   for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
 
-  if (msg == "SOURCE:UTILITY") {
-    power_source = "UTILITY";
-    input_v      = 480.0;
-    output_v     = 480.0;
-    ats_state    = "UTILITY";
+  // Parse space-separated tokens so compound commands work.
+  // e.g. "TOKEN1:val1 TOKEN2:val2" sets both fields.
+  int start = 0;
+  while (start <= (int)msg.length()) {
+    int sp = msg.indexOf(' ', start);
+    String tok = (sp < 0) ? msg.substring(start) : msg.substring(start, sp);
 
-  } else if (msg == "SOURCE:GENERATOR") {
-    power_source = "GENERATOR";
-    input_v      = 480.0;
-    output_v     = 480.0;
-    ats_state    = "GENERATOR";
+    if (tok == "SOURCE:UTILITY") {
+      power_source = "UTILITY";
+      input_v      = 480.0;
+      output_v     = 480.0;
+      ats_state    = "UTILITY";
 
-  } else if (msg == "SOURCE:OPEN") {
-    power_source = "OPEN";
-    input_v      = 0.0;
-    output_v     = 0.0;
-    ats_state    = "OPEN";
+    } else if (tok == "SOURCE:GENERATOR") {
+      power_source = "GENERATOR";
+      input_v      = 480.0;
+      output_v     = 480.0;
+      ats_state    = "GENERATOR";
 
-  } else if (msg.startsWith("LOAD:")) {
-    load_pct = msg.substring(5).toInt();
+    } else if (tok == "SOURCE:OPEN") {
+      power_source = "OPEN";
+      input_v      = 0.0;
+      output_v     = 0.0;
+      ats_state    = "OPEN";
 
-  } else if (msg.startsWith("STATUS:")) {
-    ats_state = msg.substring(7);
+    } else if (tok.startsWith("LOAD:")) {
+      load_pct = tok.substring(5).toInt();
+
+    } else if (tok.startsWith("STATUS:")) {
+      ats_state = tok.substring(7);
+    }
+
+    if (sp < 0) break;
+    start = sp + 1;
   }
 }
 

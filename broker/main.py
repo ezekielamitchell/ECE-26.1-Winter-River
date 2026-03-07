@@ -81,6 +81,18 @@ class WinterRiverEngine:
         try:
             node_id = msg.topic.split("/")[1]
 
+            # Reject messages from node_ids not in the DB — avoids FK violations
+            # and catches accidentally-flashed legacy firmware (util_a, gen_a, etc.)
+            with self.db.cursor() as cur:
+                cur.execute("SELECT 1 FROM nodes WHERE node_id=%s", (node_id,))
+                if cur.fetchone() is None:
+                    log.warning(
+                        "Ignoring MQTT message from unknown node_id %r (topic: %s). "
+                        "Is legacy firmware flashed? Run init_db.sql to add new nodes.",
+                        node_id, msg.topic,
+                    )
+                    return
+
             try:
                 payload = json.loads(msg.payload)
             except (json.JSONDecodeError, UnicodeDecodeError):

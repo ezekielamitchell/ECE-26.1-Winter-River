@@ -66,17 +66,28 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
     msg.trim();
 
-    if (msg.startsWith("INPUT:")) {
-        input_v = msg.substring(6).toFloat();
-        if (input_v < 100.0) {
-            mon_state = "OFF";
-        } else if (mon_state == "OFF") {
-            mon_state = "NORMAL";
+    // Parse space-separated tokens so compound commands work.
+    // e.g. "TOKEN1:val1 TOKEN2:val2" sets both fields.
+    int start = 0;
+    while (start <= (int)msg.length()) {
+        int sp = msg.indexOf(' ', start);
+        String tok = (sp < 0) ? msg.substring(start) : msg.substring(start, sp);
+
+        if (tok.startsWith("INPUT:")) {
+            input_v = tok.substring(6).toFloat();
+            if (input_v < 100.0) {
+                mon_state = "OFF";
+            } else if (mon_state == "OFF") {
+                mon_state = "NORMAL";
+            }
+        } else if (tok.startsWith("LOAD:")) {
+            load_pct = tok.substring(5).toInt();
+        } else if (tok.startsWith("STATUS:")) {
+            mon_state = tok.substring(7);
         }
-    } else if (msg.startsWith("LOAD:")) {
-        load_pct = msg.substring(5).toInt();
-    } else if (msg.startsWith("STATUS:")) {
-        mon_state = msg.substring(7);
+
+        if (sp < 0) break;
+        start = sp + 1;
     }
 
     updateState();

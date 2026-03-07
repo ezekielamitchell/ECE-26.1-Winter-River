@@ -50,10 +50,21 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
   Serial.println("Received: " + msg);
 
-  if      (msg.startsWith("BATT:"))   battery_pct  = msg.substring(5).toInt();
-  else if (msg.startsWith("LOAD:"))   load_pct     = msg.substring(5).toInt();
-  else if (msg.startsWith("INPUT:"))  input_v      = msg.substring(6).toFloat();
-  else if (msg.startsWith("STATUS:")) charge_state = msg.substring(7);
+  // Parse space-separated tokens so compound commands work.
+  // e.g. "TOKEN1:val1 TOKEN2:val2" sets both fields.
+  int start = 0;
+  while (start <= (int)msg.length()) {
+    int sp = msg.indexOf(' ', start);
+    String tok = (sp < 0) ? msg.substring(start) : msg.substring(start, sp);
+
+    if      (tok.startsWith("BATT:"))   battery_pct  = tok.substring(5).toInt();
+    else if (tok.startsWith("LOAD:"))   load_pct     = tok.substring(5).toInt();
+    else if (tok.startsWith("INPUT:"))  input_v      = tok.substring(6).toFloat();
+    else if (tok.startsWith("STATUS:")) charge_state = tok.substring(7);
+
+    if (sp < 0) break;
+    start = sp + 1;
+  }
 
   if (battery_pct < 10 || input_v < 400.0) {
     charge_state = "FAULT";

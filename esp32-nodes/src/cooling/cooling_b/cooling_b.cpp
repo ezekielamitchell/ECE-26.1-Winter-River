@@ -67,25 +67,36 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
     msg.trim();
 
-    if (msg.startsWith("INPUT:")) {
-        input_v = msg.substring(6).toFloat();
-        if (input_v < 48.0) {
-            cool_state = "OFF";
-        } else if (cool_state == "OFF") {
-            cool_state = "NORMAL";
+    // Parse space-separated tokens so compound commands work.
+    // e.g. "TOKEN1:val1 TOKEN2:val2" sets both fields.
+    int start = 0;
+    while (start <= (int)msg.length()) {
+        int sp = msg.indexOf(' ', start);
+        String tok = (sp < 0) ? msg.substring(start) : msg.substring(start, sp);
+
+        if (tok.startsWith("INPUT:")) {
+            input_v = tok.substring(6).toFloat();
+            if (input_v < 48.0) {
+                cool_state = "OFF";
+            } else if (cool_state == "OFF") {
+                cool_state = "NORMAL";
+            }
+        } else if (tok.startsWith("TEMP:")) {
+            coolant_temp_f = tok.substring(5).toInt();
+            if (coolant_temp_f > 80) {
+                cool_state = "FAULT";
+            } else if (coolant_temp_f > 72) {
+                cool_state = "DEGRADED";
+            }
+        } else if (tok.startsWith("SPEED:")) {
+            fan_speed_pct = tok.substring(6).toInt();
+            load_pct = fan_speed_pct;
+        } else if (tok.startsWith("STATUS:")) {
+            cool_state = tok.substring(7);
         }
-    } else if (msg.startsWith("TEMP:")) {
-        coolant_temp_f = msg.substring(5).toInt();
-        if (coolant_temp_f > 80) {
-            cool_state = "FAULT";
-        } else if (coolant_temp_f > 72) {
-            cool_state = "DEGRADED";
-        }
-    } else if (msg.startsWith("SPEED:")) {
-        fan_speed_pct = msg.substring(6).toInt();
-        load_pct = fan_speed_pct;
-    } else if (msg.startsWith("STATUS:")) {
-        cool_state = msg.substring(7);
+
+        if (sp < 0) break;
+        start = sp + 1;
     }
 }
 

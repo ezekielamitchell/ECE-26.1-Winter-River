@@ -55,21 +55,32 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
   String msg;
   for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
 
-  if (msg == "CLOSE") {
-    breaker_closed = true;
-    sw_state       = "CLOSED";
+  // Parse space-separated tokens so compound commands work.
+  // e.g. "TOKEN1:val1 TOKEN2:val2" sets both fields.
+  int start = 0;
+  while (start <= (int)msg.length()) {
+    int sp = msg.indexOf(' ', start);
+    String tok = (sp < 0) ? msg.substring(start) : msg.substring(start, sp);
 
-  } else if (msg == "OPEN") {
-    breaker_closed = false;
-    sw_state       = "OPEN";
+    if (tok == "CLOSE") {
+      breaker_closed = true;
+      sw_state       = "CLOSED";
 
-  } else if (msg.startsWith("LOAD:")) {
-    load_pct  = msg.substring(5).toInt();
-    load_kw   = load_pct * 14.0f;
-    current_a = (load_kw * 1000.0f) / voltage_rating;
+    } else if (tok == "OPEN") {
+      breaker_closed = false;
+      sw_state       = "OPEN";
 
-  } else if (msg.startsWith("STATUS:")) {
-    sw_state = msg.substring(7);
+    } else if (tok.startsWith("LOAD:")) {
+      load_pct  = tok.substring(5).toInt();
+      load_kw   = load_pct * 14.0f;
+      current_a = (load_kw * 1000.0f) / voltage_rating;
+
+    } else if (tok.startsWith("STATUS:")) {
+      sw_state = tok.substring(7);
+    }
+
+    if (sp < 0) break;
+    start = sp + 1;
   }
 
   // Protection guards

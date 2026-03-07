@@ -58,26 +58,37 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
     msg.trim();
 
-    if (msg.startsWith("INPUT:")) {
-        input_v = msg.substring(6).toFloat();
-        if (input_v < 240.0) {
-            light_state = "OFF";
-        } else if (light_state == "OFF") {
-            light_state = "ON";
+    // Parse space-separated tokens so compound commands work.
+    // e.g. "TOKEN1:val1 TOKEN2:val2" sets both fields.
+    int start = 0;
+    while (start <= (int)msg.length()) {
+        int sp = msg.indexOf(' ', start);
+        String tok = (sp < 0) ? msg.substring(start) : msg.substring(start, sp);
+
+        if (tok.startsWith("INPUT:")) {
+            input_v = tok.substring(6).toFloat();
+            if (input_v < 240.0) {
+                light_state = "OFF";
+            } else if (light_state == "OFF") {
+                light_state = "ON";
+            }
+        } else if (tok.startsWith("DIM:")) {
+            dimmer_pct = tok.substring(4).toInt();
+            load_pct   = (int)(dimmer_pct * 0.56f);
+        } else if (tok.startsWith("STATUS:")) {
+            String val = tok.substring(7);
+            if (val == "ON") {
+                light_state = "ON";
+            } else if (val == "OFF") {
+                light_state = "OFF";
+                input_v = 0.0;
+            } else {
+                light_state = val;
+            }
         }
-    } else if (msg.startsWith("DIM:")) {
-        dimmer_pct = msg.substring(4).toInt();
-        load_pct   = (int)(dimmer_pct * 0.56f);
-    } else if (msg.startsWith("STATUS:")) {
-        String val = msg.substring(7);
-        if (val == "ON") {
-            light_state = "ON";
-        } else if (val == "OFF") {
-            light_state = "OFF";
-            input_v = 0.0;
-        } else {
-            light_state = val;
-        }
+
+        if (sp < 0) break;
+        start = sp + 1;
     }
 }
 

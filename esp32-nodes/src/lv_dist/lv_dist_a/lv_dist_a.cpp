@@ -87,35 +87,46 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
   String msg;
   for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
 
-  if (msg.startsWith("INPUT:")) {
-    input_v = msg.substring(6).toFloat();
-    if (input_v < 48.0f) {
-      dist_state   = "NO_INPUT";
-      power_source = "NONE";
-    } else if (input_v >= 432.0f && dist_state == "NO_INPUT") {
-      dist_state = "NORMAL";
+  // Parse space-separated tokens so compound commands work.
+  // e.g. "TOKEN1:val1 TOKEN2:val2" sets both fields.
+  int start = 0;
+  while (start <= (int)msg.length()) {
+    int sp = msg.indexOf(' ', start);
+    String tok = (sp < 0) ? msg.substring(start) : msg.substring(start, sp);
+
+    if (tok.startsWith("INPUT:")) {
+      input_v = tok.substring(6).toFloat();
+      if (input_v < 48.0f) {
+        dist_state   = "NO_INPUT";
+        power_source = "NONE";
+      } else if (input_v >= 432.0f && dist_state == "NO_INPUT") {
+        dist_state = "NORMAL";
+      }
+
+    } else if (tok.startsWith("UPS:")) {
+      ups_load_kw = tok.substring(4).toFloat();
+      recalcLoad();
+
+    } else if (tok.startsWith("MECH:")) {
+      mech_load_kw = tok.substring(5).toFloat();
+      recalcLoad();
+
+    } else if (tok.startsWith("SOURCE:")) {
+      power_source = tok.substring(7);
+      if (power_source == "NONE") {
+        dist_state = "NO_INPUT";
+        input_v    = 0.0;
+      } else if (dist_state == "NO_INPUT") {
+        dist_state = "NORMAL";
+        input_v    = RATED_VOLTAGE;
+      }
+
+    } else if (tok.startsWith("STATUS:")) {
+      dist_state = tok.substring(7);
     }
 
-  } else if (msg.startsWith("UPS:")) {
-    ups_load_kw = msg.substring(4).toFloat();
-    recalcLoad();
-
-  } else if (msg.startsWith("MECH:")) {
-    mech_load_kw = msg.substring(5).toFloat();
-    recalcLoad();
-
-  } else if (msg.startsWith("SOURCE:")) {
-    power_source = msg.substring(7);
-    if (power_source == "NONE") {
-      dist_state = "NO_INPUT";
-      input_v    = 0.0;
-    } else if (dist_state == "NO_INPUT") {
-      dist_state = "NORMAL";
-      input_v    = RATED_VOLTAGE;
-    }
-
-  } else if (msg.startsWith("STATUS:")) {
-    dist_state = msg.substring(7);
+    if (sp < 0) break;
+    start = sp + 1;
   }
 
   applyStateGuard();
