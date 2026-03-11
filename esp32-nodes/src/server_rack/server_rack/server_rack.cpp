@@ -32,6 +32,15 @@ const int   daylight_offset_sec = 3600;
 #define OLED_RESET -1
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
+// Probe 0x3C then 0x3D — returns whichever ACKs, defaults to 0x3C
+uint8_t detectOLEDAddr() {
+  for (uint8_t addr : {0x3C, 0x3D}) {
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() == 0) return addr;
+  }
+  return 0x3C;
+}
+
 // ── MQTT ─────────────────────────────────────────────────────
 WiFiClient   espClient;
 PubSubClient mqtt(espClient);
@@ -169,7 +178,9 @@ void setup() {
 
     // OLED before WiFi (prevent I2C interference)
     Wire.begin();
-    if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    uint8_t oledAddr = detectOLEDAddr();
+    Serial.print("OLED addr: 0x"); Serial.println(oledAddr, HEX);
+    if (!display.begin(SSD1306_SWITCHCAPVCC, oledAddr)) {
         Serial.println("SSD1306 allocation failed");
         for (;;);
     }

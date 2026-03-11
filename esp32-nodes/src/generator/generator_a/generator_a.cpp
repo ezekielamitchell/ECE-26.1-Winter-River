@@ -34,6 +34,7 @@ PubSubClient mqtt(espClient);
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 int message_count = 0;
 
+
 // ─── State variables ─────────────────────────────────────────────────────────
 const int voltage_rating = 480;
 int    fuel_pct   = 85;
