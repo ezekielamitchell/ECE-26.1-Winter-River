@@ -51,7 +51,7 @@ class WinterRiverEngine:
         self.mqtt_client = mqtt.Client()
         self.mqtt_client.on_message = self.on_message
         self.mqtt_client.connect(MQTT_BROKER, MQTT_PORT)
-        self.mqtt_client.subscribe("winter-river/+/status")
+        self.mqtt_client.subscribe("winter-river/+/status", qos=1)
         self.mqtt_client.loop_start()
         log.info("MQTT connected to %s:%d", MQTT_BROKER, MQTT_PORT)
 
@@ -389,7 +389,7 @@ class WinterRiverEngine:
                 # Publish control command to ESP32
                 cmd = self._control_cmd(node, v_out, status)
                 self.mqtt_client.publish(
-                    f"winter-river/{nid}/control", cmd
+                    f"winter-river/{nid}/control", cmd, qos=1,
                 )
                 log.debug("→ %s/control: %s", nid, cmd)
 
