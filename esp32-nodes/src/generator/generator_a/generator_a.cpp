@@ -158,7 +158,6 @@ void updateDisplay() {
   display.display();
 }
 
-// ─── setup() ─────────────────────────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
 
@@ -221,7 +220,6 @@ void setup() {
   mqtt.setCallback(mqttCallback);
 }
 
-// ─── loop() ──────────────────────────────────────────────────────────────────
 void loop() {
   // MQTT reconnect
   if (!mqtt.connected()) {

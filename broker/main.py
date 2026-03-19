@@ -334,9 +334,8 @@ class WinterRiverEngine:
             return f"INPUT:{v_out:.1f} STATUS:{status}"
 
         elif ntype == "RECTIFIER":
-            # Report both AC input side and DC output side
             ac_in = 480.0 if v_out > 0 else 0.0
-            return f"INPUT_AC:{ac_in:.1f} OUTPUT_DC:{v_out:.1f} STATUS:{status}"
+            return f"INPUT_AC:{ac_in:.1f} STATUS:{status}"
 
         elif ntype in ("COOLING", "MONITORING"):
             return f"INPUT:{v_out:.1f} STATUS:{status}"
