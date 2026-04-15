@@ -1,89 +1,10 @@
 # Grafana Visualization Setup
 
-<<<<<<< HEAD
-Grafana is installed directly on the Raspberry Pi via apt (no Docker).
-It queries PostgreSQL directly for live and historical node data.
-=======
 This directory contains Grafana configuration for visualizing MQTT broker metrics
 and ESP32 node telemetry.  The stack runs **natively on the Raspberry Pi** via
 systemd — no Docker required.
->>>>>>> d8a14531abfd618bee7d40d106aa0bec62e21533
 
 ## Architecture
-
-```
-ESP32 → MQTT → Mosquitto → broker/main.py → PostgreSQL ← Grafana
-```
-
-## Directory Structure
-
-```
-grafana/
-<<<<<<< HEAD
-├── README.md
-├── grafana.ini                        # Grafana server config
-├── dashboards/                        # Dashboard JSON exports
-└── provisioning/
-=======
-├── README.md                          # This file
-├── docker-compose.yml                 # DEPRECATED — kept for reference only
-├── grafana.ini                        # Grafana tunables (referenced in docs)
-├── telegraf.conf                      # Telegraf MQTT→InfluxDB bridge config
-├── .env.sample                        # Credential template (copy → .env)
-├── dashboards/                        # Dashboard JSON definitions
-│   ├── broker-overview.json          # MQTT broker metrics dashboard
-│   └── nodes-telemetry.json          # ESP32 nodes telemetry dashboard
-└── provisioning/                      # Grafana auto-provisioning configs
->>>>>>> d8a14531abfd618bee7d40d106aa0bec62e21533
-    ├── dashboards/
-    │   └── dashboard.yml              # Auto-loads dashboards from dashboards/
-    └── datasources/
-        └── datasource.yml             # PostgreSQL datasource (auto-provisioned)
-```
-
-<<<<<<< HEAD
-## Setup
-
-Grafana and PostgreSQL are installed automatically by `scripts/setup_pi.sh`.
-
-After setup:
-- Grafana runs at `http://192.168.4.1:3000`
-- Default login: `admin` / `admin` (change on first login)
-- PostgreSQL datasource is auto-provisioned from `provisioning/datasources/datasource.yml`
-
-## PostgreSQL Tables Available
-
-| Table | Contents |
-|---|---|
-| `live_status` | Current digital twin state for all 16 nodes |
-| `historical_data` | Full telemetry history with JSON metrics |
-| `nodes` | Static topology (node type, side, parent, v_ratio) |
-
-## Example Grafana Queries
-
-**Live node status:**
-```sql
-SELECT node_id, status_msg, v_out, is_present, last_update
-FROM live_status
-ORDER BY node_id
-```
-
-**Historical voltage for a node:**
-```sql
-SELECT timestamp, metrics->>'v_out' AS v_out
-FROM historical_data
-WHERE node_id = '$node_id'
-ORDER BY timestamp DESC
-LIMIT 100
-```
-
-## Datasource Credentials
-
-The datasource provisioning file uses a `grafana_reader` PostgreSQL user.
-`setup_pi.sh` creates this user with read-only access to `winter_river`.
-Update the password in `provisioning/datasources/datasource.yml` before deploying.
-=======
-## Data flow
 
 ```
 ESP32 nodes
@@ -101,10 +22,28 @@ InfluxDB 2  (localhost:8086, bucket: mqtt_metrics)
 Grafana  (http://192.168.4.1:3000)
 ```
 
+## Directory Structure
+
+```
+grafana/
+├── README.md                          # This file
+├── docker-compose.yml                 # DEPRECATED — kept for reference only
+├── grafana.ini                        # Grafana tunables (referenced in docs)
+├── telegraf.conf                      # Telegraf MQTT→InfluxDB bridge config
+├── .env.sample                        # Credential template (copy → .env)
+├── dashboards/                        # Dashboard JSON definitions
+│   ├── broker-overview.json          # MQTT broker metrics dashboard
+│   └── nodes-telemetry.json          # ESP32 nodes telemetry dashboard
+└── provisioning/                      # Grafana auto-provisioning configs
+    ├── dashboards/
+    │   └── dashboard.yml              # Auto-loads dashboards from dashboards/
+    └── datasources/
+        └── datasource.yml             # InfluxDB + MQTT Live datasources (auto-provisioned)
+```
+
 ## Prerequisites
 
 - Raspberry Pi 5 running Debian Trixie (arm64)
-- Grafana installed natively (e.g. via the official Grafana apt repo)
 - Project cloned to `~/ECE-26.1-Winter-River`
 
 ## Setup
@@ -143,7 +82,6 @@ It will:
 6. Copy `grafana/dashboards/` → `/var/lib/grafana/dashboards/`
 7. Install the `grafana-mqtt-datasource` Grafana plugin
 8. Enable and start `influxdb`, `telegraf`, and `grafana-server` via systemd
-9. Add Mosquitto WebSocket listener on port 9001
 
 ### 3. Access Grafana
 
@@ -175,7 +113,7 @@ Two datasources are provisioned automatically:
 | `InfluxDB-MQTT` | InfluxDB v2 (Flux) | `http://localhost:8086` | Historical time-series |
 | `MQTT-Live` | grafana-mqtt-datasource | `ws://192.168.4.1:9001` | Real-time panel streaming |
 
-The InfluxDB token is injected at startup via `GF_*` environment variables in
+The InfluxDB token is injected at startup via environment variables in
 `/etc/default/grafana-server` — no plain-text tokens in the repo.
 
 ## Dashboards
@@ -240,5 +178,3 @@ Telegraf subscribes to `winter-river/#` and writes all numeric fields to the
 | `GF_SECURITY_ADMIN_USER` | Grafana admin username |
 | `GF_SECURITY_ADMIN_PASSWORD` | Grafana admin password |
 | `INFLUXDB_TOKEN` | Grafana datasource token (expanded in `datasource.yml`) |
-| `GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH` | Home dashboard path |
->>>>>>> d8a14531abfd618bee7d40d106aa0bec62e21533

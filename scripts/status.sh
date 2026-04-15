@@ -61,6 +61,8 @@ echo ""
 bold "Services:"
 svc_status winter-river-hotspot
 svc_status mosquitto
+svc_status influxdb
+svc_status telegraf
 svc_status postgresql
 svc_status grafana-server
 
@@ -73,17 +75,6 @@ elif systemctl is-active --quiet ntpd 2>/dev/null; then
     green "  ✔  ntpd: RUNNING"
 else
     red   "  ✘  ntp: STOPPED"
-fi
-
-# Docker stack (optional — only if docker is present)
-if command -v docker &>/dev/null; then
-    for container in influxdb telegraf; do
-        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${container}"; then
-            green "  ✔  ${container} (docker): RUNNING"
-        else
-            yellow "  -  ${container} (docker): not running"
-        fi
-    done
 fi
 echo ""
 
@@ -187,7 +178,8 @@ echo ""
 
 bold "========================================="
 echo "  Tip: ./status.sh mqtt   — live MQTT feed"
-echo "  Tip: sudo journalctl -u winter-river-hotspot -n 20"
 echo "  Tip: sudo journalctl -u mosquitto -n 20"
+echo "  Tip: sudo journalctl -u influxdb -n 20"
+echo "  Tip: sudo journalctl -u telegraf -n 20"
 echo "  Tip: sudo journalctl -u grafana-server -n 20"
 bold "========================================="

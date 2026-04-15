@@ -13,17 +13,17 @@
 #include <Adafruit_SSD1306.h>
 #include <time.h>
 
-// ── Network constants ────────────────────────────────────────
+// Network constants
 const char* ssid        = "WinterRiver-AP";
 const char* password    = "winterriver";
 const char* mqtt_server = "192.168.4.1";
 
-// ── NTP ─────────────────────────────────────────────────────
+// NTP
 const char* ntp_server          = "192.168.4.1";
 const long  gmt_offset_sec      = -28800;
 const int   daylight_offset_sec = 3600;
 
-// ── OLED ─────────────────────────────────────────────────────
+// OLED
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
@@ -38,11 +38,11 @@ uint8_t detectOLEDAddr() {
   return 0x3C;
 }
 
-// ── MQTT ─────────────────────────────────────────────────────
+// MQTT
 WiFiClient   espClient;
 PubSubClient mqtt(espClient);
 
-// ── Node state ───────────────────────────────────────────────
+// Node state
 const int  ac_voltage_rating = 480;
 const int  dc_voltage_rating = 48;
 float      input_v_ac  = 480.0;
@@ -50,10 +50,10 @@ float      output_v_dc = 48.0;
 int        load_pct    = 30;
 String     rect_state  = "NORMAL";  // NORMAL, FAULT, OFF
 
-// ── Message counter ──────────────────────────────────────────
+// Message counter
 int message_count = 0;
 
-// ── Helpers ──────────────────────────────────────────────────
+// Helpers
 String getTimestamp() {
     struct tm ti;
     if (!getLocalTime(&ti)) return "00:00:00";
@@ -71,7 +71,7 @@ void updateState() {
     // NORMAL is set explicitly on recovery from OFF in callback
 }
 
-// ── MQTT callback ─────────────────────────────────────────────
+// MQTT callback
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
     String msg;
     for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
@@ -105,7 +105,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     updateState();
 }
 
-// ── OLED draw ────────────────────────────────────────────────
+// OLED draw
 void drawDisplay(bool mqtt_ok) {
     display.clearDisplay();
     display.setTextSize(1);
@@ -157,7 +157,7 @@ void drawDisplay(bool mqtt_ok) {
     display.display();
 }
 
-// ── Setup ─────────────────────────────────────────────────────
+// Setup
 void setup() {
     Serial.begin(115200);
 
@@ -221,7 +221,7 @@ void setup() {
     mqtt.setCallback(mqttCallback);
 }
 
-// ── Loop ──────────────────────────────────────────────────────
+// Loop
 void loop() {
     // MQTT connect / reconnect
     if (!mqtt.connected()) {
