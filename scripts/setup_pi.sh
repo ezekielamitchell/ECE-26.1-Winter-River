@@ -218,13 +218,22 @@ if [ -d "$PROJECT_DIR/grafana/dashboards" ] && \
     chown -R grafana:grafana /var/lib/grafana/dashboards
 fi
 
-# Inject InfluxDB token + Grafana credentials into grafana-server environment
-# so datasource.yml can resolve ${INFLUXDB_TOKEN} at startup
+# Inject paths + credentials into grafana-server environment.
+# The systemd unit reads CONF_FILE, DATA_DIR, etc. from this file.
+# Without them, Grafana falls back to /usr/share/grafana/ (read-only).
 cat > /etc/default/grafana-server <<GRAFENV
+CONF_FILE=/etc/grafana/grafana.ini
+DATA_DIR=/var/lib/grafana
+LOG_DIR=/var/log/grafana
+PLUGINS_DIR=/var/lib/grafana/plugins
+PID_FILE_DIR=/run/grafana
+
 GF_SECURITY_ADMIN_USER=$GF_SECURITY_ADMIN_USER
 GF_SECURITY_ADMIN_PASSWORD=$GF_SECURITY_ADMIN_PASSWORD
 INFLUXDB_TOKEN=$INFLUXDB_ADMIN_TOKEN
 GRAFENV
+mkdir -p /var/lib/grafana /var/log/grafana /var/lib/grafana/plugins /run/grafana
+chown -R grafana:grafana /var/lib/grafana /var/log/grafana /run/grafana
 
 # Install MQTT Live datasource plugin (for real-time WebSocket panels)
 grafana-cli plugins install grafana-mqtt-datasource 2>/dev/null || true
