@@ -76,6 +76,9 @@ INFLUX_KEY_ID="AC10D7449F343ADCEFDDC2B6DA61C26A0585BD3B"
 INFLUX_LIST="/etc/apt/sources.list.d/influxdata.list"
 
 if [ ! -f "$INFLUX_KEYRING" ] || ! apt-key --keyring "$INFLUX_KEYRING" list "$INFLUX_KEY_ID" &>/dev/null; then
+    # Ensure root's gnupg directory exists (dirmngr needs it for keyserver access)
+    mkdir -p /root/.gnupg
+    chmod 700 /root/.gnupg
     TMPRING=$(mktemp /tmp/influx-keyring-XXXXXX.gpg)
     gpg --no-default-keyring \
         --keyring "$TMPRING" \
