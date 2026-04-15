@@ -37,18 +37,18 @@ By combining physical modularity (plug-and-play components on a custom PCB basep
 
 ## Technical Specifications
 
-| Component              | Specification                  | Details                                                                         |
-| ---------------------- | ------------------------------ | ------------------------------------------------------------------------------- |
-| Microcontroller        | ESP-32 Development Board USB-C | Dual-core, WiFi/BLE, integrated OLED display interface                          |
-| Central Controller     | Raspberry Pi 5                 | Simulation engine, Mosquitto MQTT broker, system-wide calculations              |
-| Communication Protocol | MQTT Publish-Subscribe         | Industry-standard, scalable, low-bandwidth IoT communication                    |
-| Display                | OLED per component             | Real-time operational parameters (voltage, current, power, temperature, status) |
-| PCB Architecture       | Custom modular baseplate       | USB-C connectors at each node, plug-and-play components                         |
-| Power Topology         | 2N Redundancy                  | OCP Open Rack V3 specifications, dual power paths                               |
+| Component              | Specification                                 | Details                                                                                                                       |
+| ---------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Microcontroller        | ESP-32 Development Board USB-C                | Dual-core, WiFi/BLE, integrated OLED display interface                                                                        |
+| Central Controller     | Raspberry Pi 5                                | Simulation engine, Mosquitto MQTT broker, system-wide calculations                                                            |
+| Communication Protocol | MQTT Publish-Subscribe                        | Industry-standard, scalable, low-bandwidth IoT communication                                                                  |
+| Display                | OLED per component                            | Real-time operational parameters (voltage, current, power, temperature, status)                                               |
+| PCB Architecture       | Custom modular baseplate                      | USB-C connectors at each node, plug-and-play components                                                                       |
+| Power Topology         | 2N Redundancy                                 | OCP Open Rack V3 specifications, dual power paths                                                                             |
 | Component Types        | 25 modules (12 Side A + 12 Side B + 1 shared) | Utility, MV switchgear, transformer, generator, ATS, LV dist, UPS, PDU, rectifier, cooling, lighting, monitoring, server rack |
-| Simulation Features    | Real-time system states        | Power flow, thermal modeling, failure propagation, hot-swap detection           |
-| Development Platform   | PlatformIO + Python            | ESP32 firmware, Raspberry Pi controller scripts, GitHub CI/CD                   |
-| Visualization          | Grafana Dashboard              | Real-time metrics, system topology view, historical data analysis               |
+| Simulation Features    | Real-time system states                       | Power flow, thermal modeling, failure propagation, hot-swap detection                                                         |
+| Development Platform   | PlatformIO + Python                           | ESP32 firmware, Raspberry Pi controller scripts, GitHub CI/CD                                                                 |
+| Visualization          | Grafana Dashboard                             | Real-time metrics, system topology view, historical data analysis                                                             |
 
 ***
 
@@ -56,26 +56,26 @@ By combining physical modularity (plug-and-play components on a custom PCB basep
 
 ### Winter Quarter 2026
 
-| Metric | Target | Status |
-|--------|--------|--------|
-| Proof-of-concept nodes operational | 6–12 ESP32 nodes with MQTT | ✅ Achieved |
-| PCB design completed and ordered | Custom power distribution PCB | ✅ Achieved |
-| Firmware architecture established | Base ESP32 template for all primaries | ✅ Achieved |
-| Mosquitto MQTT broker running on Pi | port 1883, anonymous, persistence | ✅ Achieved |
-| 24-node firmware written | All 25 envs in platformio.ini | ✅ Achieved |
-| Simulation engine (`broker/main.py`) | Topological sort + cascade logic | ✅ Achieved |
-| PostgreSQL schema (25 nodes) | `secondary_parent_id`, 2N support | ✅ Achieved |
+| Metric                               | Target                                | Status     |
+| ------------------------------------ | ------------------------------------- | ---------- |
+| Proof-of-concept nodes operational   | 6–12 ESP32 nodes with MQTT            | ✅ Achieved |
+| PCB design completed and ordered     | Custom power distribution PCB         | ✅ Achieved |
+| Firmware architecture established    | Base ESP32 template for all primaries | ✅ Achieved |
+| Mosquitto MQTT broker running on Pi  | port 1883, anonymous, persistence     | ✅ Achieved |
+| 24-node firmware written             | All 25 envs in platformio.ini         | ✅ Achieved |
+| Simulation engine (`broker/main.py`) | Topological sort + cascade logic      | ✅ Achieved |
+| PostgreSQL schema (25 nodes)         | `secondary_parent_id`, 2N support     | ✅ Achieved |
 
 ### Spring Quarter 2026
 
-| Metric | Target | Status |
-|--------|--------|--------|
-| Full 2N redundancy hardware | 25 physical ESP32 nodes on PCB baseplate | 🔲 Planned |
-| 3+ automated failure scenarios | Utility loss, UPS switchover, cooling fault | 🔲 Planned |
-| Grafana dashboard deployed | Real-time visualization at :3000 | 🔲 Planned |
-| InfluxDB / Telegraf integration | MQTT → InfluxDB live pipeline | 🔲 Planned |
-| Documentation complete | User + technical manuals | 🔲 Planned |
-| AWS delivery | Functional prototype delivered | 🔲 Planned |
+| Metric                          | Target                                      | Status     |
+| ------------------------------- | ------------------------------------------- | ---------- |
+| Full 2N redundancy hardware     | 25 physical ESP32 nodes on PCB baseplate    | ✅ Planned  |
+| 3+ automated failure scenarios  | Utility loss, UPS switchover, cooling fault | 🔲 Planned |
+| Grafana dashboard deployed      | Real-time visualization at :3000            | 🔲 Planned |
+| InfluxDB / Telegraf integration | MQTT → InfluxDB live pipeline               | 🔲 Planned |
+| Documentation complete          | User + technical manuals                    | 🔲 Planned |
+| AWS delivery                    | Functional prototype delivered              | 🔲 Planned |
 
 ***
 
@@ -136,41 +136,41 @@ ECE-26.1-Winter-River/
 
 ### Power Chain (Side A — 12 nodes)
 
-| # | Node | Role | Voltage |
-|---|------|------|---------|
-| ① | `utility_a` | MV utility grid feed (chain root) | 230 kV |
-| ② | `mv_switchgear_a` | Main disconnect & protection relay | 34.5 kV |
-| ③ | `mv_lv_transformer_a` | Step-down transformer 34.5 kV → 480 V | 480 V out |
-| ④ | `generator_a` | Backup diesel generator (ATS secondary input) | 480 V |
-| ⑤ | `ats_a` | Automatic transfer switch — utility or generator | 480 V |
-| ⑥ | `lv_dist_a` | LV distribution board — IT + mechanical loads | 480 V, 384 kW |
-| ⑦ | `ups_a` | Uninterruptible power supply (IT path) | 480 V AC |
-| ⑧ | `pdu_a` | Rack power distribution unit | 480 V AC |
-| ⑨ | `rectifier_a` | AC→DC rectifier (HVDC) | 480 V AC → 48 V DC |
-| ⑩ | `cooling_a` | CRAC/CRAH cooling unit | 480 V AC |
-| ⑪ | `lighting_a` | 277 V lighting circuit | 277 V AC |
-| ⑫ | `monitoring_a` | DCIM / BMS monitoring systems | 120 V AC |
+| # | Node                  | Role                                             | Voltage            |
+| - | --------------------- | ------------------------------------------------ | ------------------ |
+| ① | `utility_a`           | MV utility grid feed (chain root)                | 230 kV             |
+| ② | `mv_switchgear_a`     | Main disconnect & protection relay               | 34.5 kV            |
+| ③ | `mv_lv_transformer_a` | Step-down transformer 34.5 kV → 480 V            | 480 V out          |
+| ④ | `generator_a`         | Backup diesel generator (ATS secondary input)    | 480 V              |
+| ⑤ | `ats_a`               | Automatic transfer switch — utility or generator | 480 V              |
+| ⑥ | `lv_dist_a`           | LV distribution board — IT + mechanical loads    | 480 V, 384 kW      |
+| ⑦ | `ups_a`               | Uninterruptible power supply (IT path)           | 480 V AC           |
+| ⑧ | `pdu_a`               | Rack power distribution unit                     | 480 V AC           |
+| ⑨ | `rectifier_a`         | AC→DC rectifier (HVDC)                           | 480 V AC → 48 V DC |
+| ⑩ | `cooling_a`           | CRAC/CRAH cooling unit                           | 480 V AC           |
+| ⑪ | `lighting_a`          | 277 V lighting circuit                           | 277 V AC           |
+| ⑫ | `monitoring_a`        | DCIM / BMS monitoring systems                    | 120 V AC           |
 
 Side B mirrors Side A exactly with `_b` suffix on all node IDs.
 
 ### Shared Node
 
-| Node | Role | Parents |
-|------|------|---------|
+| Node          | Role                              | Parents                                             |
+| ------------- | --------------------------------- | --------------------------------------------------- |
 | `server_rack` | 2N redundant server rack endpoint | `rectifier_a` (primary) + `rectifier_b` (secondary) |
 
 ### Key Configuration Files
 
-| File | Purpose |
-|------|---------|
-| `esp32-nodes/platformio.ini` | PlatformIO build environments (25 active envs) |
-| `broker/config.sample.toml` | Template for runtime config — copy to `config.toml` |
-| `scripts/init_db.sql` | PostgreSQL schema (25-node seed data, `secondary_parent_id` support) |
-| `deploy/mosquitto_setup.sh` | Configures Mosquitto (TCP 1883, anonymous, persistence on) |
-| `deploy/winter-river-hotspot.service` | Systemd unit for the Pi 2.4 GHz AP |
-| `scripts/setup_pi.sh` | Run first — provisions the entire Pi stack end-to-end |
-| `scripts/status.sh` | Checks all nodes + Pi services at a glance |
-| `grafana/telegraf.conf` | Telegraf config — MQTT consumer → InfluxDB v2 bridge |
-| `grafana/.env.sample` | Credential template; copy to `grafana/.env` before setup |
+| File                                  | Purpose                                                              |
+| ------------------------------------- | -------------------------------------------------------------------- |
+| `esp32-nodes/platformio.ini`          | PlatformIO build environments (25 active envs)                       |
+| `broker/config.sample.toml`           | Template for runtime config — copy to `config.toml`                  |
+| `scripts/init_db.sql`                 | PostgreSQL schema (25-node seed data, `secondary_parent_id` support) |
+| `deploy/mosquitto_setup.sh`           | Configures Mosquitto (TCP 1883, anonymous, persistence on)           |
+| `deploy/winter-river-hotspot.service` | Systemd unit for the Pi 2.4 GHz AP                                   |
+| `scripts/setup_pi.sh`                 | Run first — provisions the entire Pi stack end-to-end                |
+| `scripts/status.sh`                   | Checks all nodes + Pi services at a glance                           |
+| `grafana/telegraf.conf`               | Telegraf config — MQTT consumer → InfluxDB v2 bridge                 |
+| `grafana/.env.sample`                 | Credential template; copy to `grafana/.env` before setup             |
 
 <br>
