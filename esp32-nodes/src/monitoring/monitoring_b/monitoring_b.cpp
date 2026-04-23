@@ -1,267 +1,106 @@
-// ============================================================
-// monitoring_b.cpp — Monitoring / BMS Equipment, Side B
-// Chain: lv_dist_b → [monitoring_b]
-// Node ID: monitoring_b | 120V Monitoring & BMS
-// ECE 26.1 Winter River — Seattle University
-// ============================================================
+// monitoring_b.cpp — BMS/sensor monitoring, 120 V, Side B.
+// States: NORMAL, ALERT, FAULT, OFF
+#include <winter_river.h>
 
-#include <Arduino.h>
-#include <PubSubClient.h>
-#include <WiFi.h>
-#include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
-#include <time.h>
+static const char *NODE_ID = "monitoring_b";
+static const char *LABEL   = "mon_b";
 
-// ── Network constants ────────────────────────────────────────
-const char* ssid        = "WinterRiver-AP";
-const char* password    = "winterriver";
-const char* mqtt_server = "192.168.4.1";
+static constexpr int VOLTAGE_RATING = 120;
 
-// ── NTP ─────────────────────────────────────────────────────
-const char* ntp_server          = "192.168.4.1";
-const long  gmt_offset_sec      = -28800;
-const int   daylight_offset_sec = 3600;
+static float  input_v      = 120.0f;
+static int    sensor_count = 12;
+static int    alert_count  = 0;
+static int    uptime_pct   = 100;
+static int    load_pct     = 15;
+static String state        = "NORMAL";
 
-// ── OLED ─────────────────────────────────────────────────────
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
-#define OLED_RESET -1
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+static void recalcMetrics() {
+  if (sensor_count < 0) sensor_count = 0;
+  load_pct   = sensor_count + 3;
+  if (load_pct > 100) load_pct = 100;
+  uptime_pct = (input_v < 100.0f) ? 0 : 100;
 
-// Probe 0x3C then 0x3D — returns whichever ACKs, defaults to 0x3C
-uint8_t detectOLEDAddr() {
-  for (uint8_t addr : {0x3C, 0x3D}) {
-    Wire.beginTransmission(addr);
-    if (Wire.endTransmission() == 0) return addr;
+  if (state == "NORMAL" || state == "OFF") alert_count = 0;
+  else if (alert_count < 1)                alert_count = 1;
+}
+
+static void updateState() {
+  if (input_v > 145.0f)      state = "FAULT";
+  else if (input_v < 100.0f) state = "OFF";
+  else if (alert_count > 0)  state = "ALERT";
+  else                       state = "NORMAL";
+  recalcMetrics();
+}
+
+static void applyForcedState(const String &forced_state) {
+  state = forced_state;
+  if (state == "OFF") {
+    input_v = 0.0f;
+  } else if (input_v < 100.0f) {
+    input_v = (float)VOLTAGE_RATING;
   }
-  return 0x3C;
+  recalcMetrics();
 }
 
-// ── MQTT ─────────────────────────────────────────────────────
-WiFiClient   espClient;
-PubSubClient mqtt(espClient);
-
-// ── Node state ───────────────────────────────────────────────
-const int  voltage_rating = 120;
-float      input_v        = 120.0;
-int        load_pct       = 15;
-String     mon_state      = "NORMAL";  // NORMAL, FAULT, OFF
-
-// ── Message counter ──────────────────────────────────────────
-int message_count = 0;
-
-// ── Helpers ──────────────────────────────────────────────────
-String getTimestamp() {
-    struct tm ti;
-    if (!getLocalTime(&ti)) return "00:00:00";
-    char buf[9];
-    snprintf(buf, sizeof(buf), "%02d:%02d:%02d", ti.tm_hour, ti.tm_min, ti.tm_sec);
-    return String(buf);
+static void handleToken(const String &tok, bool &status_set) {
+  if (tok.startsWith("INPUT:")) {
+    input_v = tok.substring(6).toFloat();
+  } else if (tok.startsWith("SENSORS:")) {
+    sensor_count = tok.substring(8).toInt();
+    recalcMetrics();
+  } else if (tok.startsWith("STATUS:")) {
+    applyForcedState(tok.substring(7));
+    status_set = true;
+  }
 }
 
-void updateState() {
-    if (input_v > 145.0) {
-        mon_state = "FAULT";
-    } else if (input_v < 100.0) {
-        mon_state = "OFF";
-    }
-    // NORMAL is set explicitly in callback on recovery
+static void onMqtt(char *, byte *p, unsigned int l) {
+  bool status_set = false;
+  String msg;
+  msg.reserve(l);
+  for (unsigned int i = 0; i < l; i++) msg += (char)p[i];
+
+  int start = 0;
+  while (start <= (int)msg.length()) {
+    int sp = msg.indexOf(' ', start);
+    String tok = (sp < 0) ? msg.substring(start) : msg.substring(start, sp);
+    if (tok.length() > 0) handleToken(tok, status_set);
+    if (sp < 0) break;
+    start = sp + 1;
+  }
+
+  if (!status_set) updateState();
 }
 
-// ── MQTT callback ─────────────────────────────────────────────
-void mqttCallback(char* topic, byte* payload, unsigned int length) {
-    String msg;
-    for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
-    msg.trim();
-
-    // Parse space-separated tokens so compound commands work.
-    // e.g. "TOKEN1:val1 TOKEN2:val2" sets both fields.
-    int start = 0;
-    while (start <= (int)msg.length()) {
-        int sp = msg.indexOf(' ', start);
-        String tok = (sp < 0) ? msg.substring(start) : msg.substring(start, sp);
-
-        if (tok.startsWith("INPUT:")) {
-            input_v = tok.substring(6).toFloat();
-            if (input_v < 100.0) {
-                mon_state = "OFF";
-            } else if (mon_state == "OFF") {
-                mon_state = "NORMAL";
-            }
-        } else if (tok.startsWith("LOAD:")) {
-            load_pct = tok.substring(5).toInt();
-        } else if (tok.startsWith("STATUS:")) {
-            mon_state = tok.substring(7);
-        }
-
-        if (sp < 0) break;
-        start = sp + 1;
-    }
-
-    updateState();
+static void renderDisplay() {
+  wr::displayHeader(LABEL, state);
+  wr::displayNetLine();
+  wr::display.print(F("Vin:  ")); wr::display.print((int)input_v); wr::display.println(F("V"));
+  wr::display.print(F("Sens: ")); wr::display.print(sensor_count); wr::display.print(F(" Alrt:"));
+  wr::display.println(alert_count);
+  wr::display.print(F("Up:   ")); wr::display.print(uptime_pct);   wr::display.println(F("%"));
+  wr::displayFooter();
+  wr::display.display();
 }
 
-// ── OLED draw ────────────────────────────────────────────────
-void drawDisplay(bool mqtt_ok) {
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
+void setup() { wr::begin(NODE_ID, onMqtt); }
 
-    // Line 1: node id + state
-    display.setCursor(0, 0);
-    display.print("mon_b [");
-    display.print(mon_state);
-    display.print("]");
-
-    // Line 2: IP + RSSI
-    display.setCursor(0, 10);
-    if (WiFi.status() == WL_CONNECTED) {
-        display.print("IP:");
-        display.print(WiFi.localIP().toString());
-        display.print(" ");
-        display.print(WiFi.RSSI());
-        display.print("dB");
-    } else {
-        display.print("WiFi disconnected");
-    }
-
-    // Line 3: input voltage
-    display.setCursor(0, 20);
-    display.print("Vin:  ");
-    display.print((int)input_v);
-    display.print("V");
-
-    // Line 4: load
-    display.setCursor(0, 30);
-    display.print("Load: ");
-    display.print(load_pct);
-    display.print("%");
-
-    // Line 5: subsystem description
-    display.setCursor(0, 40);
-    display.print("120V BMS/Sensors");
-
-    // Line 6: MQTT status + message count
-    display.setCursor(0, 54);
-    display.print("MQTT:");
-    display.print(mqtt_ok ? "OK" : "ERR");
-    display.print(" Msgs:");
-    display.print(message_count);
-
-    display.display();
-}
-
-// ── Setup ─────────────────────────────────────────────────────
-void setup() {
-    Serial.begin(115200);
-
-    // OLED before WiFi (prevent I2C interference)
-    Wire.begin();
-    uint8_t oledAddr = detectOLEDAddr();
-    Serial.print("OLED addr: 0x"); Serial.println(oledAddr, HEX);
-    if (!display.begin(SSD1306_SWITCHCAPVCC, oledAddr)) {
-        Serial.println("SSD1306 allocation failed");
-        for (;;);
-    }
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(0, 0);
-    display.println("monitoring_b starting...");
-    display.display();
-
-    // WiFi reset sequence
-    WiFi.persistent(false);
-    WiFi.mode(WIFI_OFF);
-    delay(200);
-    WiFi.mode(WIFI_STA);
-    WiFi.disconnect(false);
-    delay(200);
-    WiFi.setMinSecurity(WIFI_AUTH_WPA_PSK);
-    WiFi.begin(ssid, password);
-
-    Serial.print("Connecting to WiFi");
-    unsigned long wifiStart = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - wifiStart < 20000) {
-        delay(500);
-        Serial.print(".");
-    }
-
-    if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("\nWiFi FAILED");
-        display.clearDisplay();
-        display.setCursor(0, 0);
-        display.println("WiFi FAILED");
-        display.println("SSID: WinterRiver-AP");
-        display.println("Retrying in 30s...");
-        display.display();
-        delay(30000);
-        ESP.restart();
-    }
-
-    Serial.println("\nWiFi connected: " + WiFi.localIP().toString());
-
-    // NTP sync
-    configTime(gmt_offset_sec, daylight_offset_sec, ntp_server);
-    struct tm ti;
-    int ntpTries = 0;
-    while (!getLocalTime(&ti) && ntpTries < 10) {
-        delay(500);
-        ntpTries++;
-    }
-
-    // MQTT setup
-    mqtt.setServer(mqtt_server, 1883);
-    mqtt.setCallback(mqttCallback);
-}
-
-// ── Loop ──────────────────────────────────────────────────────
 void loop() {
-    // MQTT connect / reconnect
-    if (!mqtt.connected()) {
-        String lwt_topic = "winter-river/monitoring_b/status";
-        String lwt_msg   = "{\"node\":\"monitoring_b\",\"status\":\"OFFLINE\"}";
+  if (!wr::mqttReconnect(NODE_ID)) { delay(2000); return; }
+  wr::message_count++;
+  renderDisplay();
+  wr::mqtt.loop();
 
-        if (!mqtt.connect("monitoring_b", NULL, NULL,
-                          lwt_topic.c_str(), 1, true, lwt_msg.c_str())) {
-            Serial.println("MQTT FAILED, rc=" + String(mqtt.state()));
-            display.clearDisplay();
-            display.setCursor(0, 0);
-            display.println("MQTT FAILED");
-            display.print("rc=");
-            display.println(mqtt.state());
-            display.display();
-            delay(2000);
-            return;
-        }
-
-        // Publish ONLINE
-        String online_msg = "{\"ts\":\"" + getTimestamp() +
-                            "\",\"node\":\"monitoring_b\",\"status\":\"ONLINE\"}";
-        mqtt.publish("winter-river/monitoring_b/status", online_msg.c_str(), true);
-
-        // Subscribe to control topic
-        mqtt.subscribe("winter-river/monitoring_b/control");
-        Serial.println("MQTT connected, subscribed to winter-river/monitoring_b/control");
-    }
-
-    mqtt.loop();
-
-    // Build and publish telemetry
-    String ts      = getTimestamp();
-    String payload = "{\"ts\":\"" + ts + "\""
-                   + ",\"input_v\":"  + String(input_v, 1)
-                   + ",\"load_pct\":" + String(load_pct)
-                   + ",\"state\":\""  + mon_state + "\""
-                   + ",\"voltage\":"  + String(voltage_rating)
-                   + "}";
-
-    mqtt.publish("winter-river/monitoring_b/status", payload.c_str());
-    Serial.println("Published: " + payload);
-
-    message_count++;
-    drawDisplay(mqtt.connected());
-
-    delay(5000);
+  String payload = String("{\"ts\":\"") + wr::timestamp() +
+                   "\",\"input_v\":"      + String(input_v, 1) +
+                   ",\"sensor_count\":"   + String(sensor_count) +
+                   ",\"alert_count\":"    + String(alert_count) +
+                   ",\"uptime_pct\":"     + String(uptime_pct) +
+                   ",\"load_pct\":"       + String(load_pct) +
+                   ",\"state\":\""        + state + "\"" +
+                   ",\"voltage\":"        + String(VOLTAGE_RATING) +
+                   "}";
+  wr::mqtt.publish(wr::statusTopic(NODE_ID).c_str(), payload.c_str(), true);
+  Serial.println(payload);
+  delay(wr::TELEMETRY_INTERVAL_MS);
 }

@@ -1,185 +1,61 @@
-#include <Arduino.h>
-#include <PubSubClient.h>
-#include <WiFi.h>
-#include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
-#include <time.h>
+// ups_b.cpp — 480 V UPS, Side B.
+// States: NORMAL, ON_BATTERY, CHARGING, FAULT
+#include <winter_river.h>
 
-// ** NODE
-const char *node_id = "ups_b";
-const int voltage_rating = 480; // volts
+static const char *NODE_ID = "ups_b";
 
-// ** SIMULATED METRICS (controllable via MQTT)
-int    battery_pct  = 100;      // battery charge %
-int    load_pct     = 40;       // output load %
-float  input_v      = 480.0;    // AC input voltage
-float  output_v     = 480.0;    // AC output voltage
-String charge_state = "NORMAL"; // NORMAL, ON_BATTERY, CHARGING, FAULT
+static constexpr int VOLTAGE_RATING = 480;
 
-// ** NETWORK
-const char *ssid        = "WinterRiver-AP";
-const char *password    = "winterriver";
-const char *mqtt_server = "192.168.4.1";
+static int    battery_pct = 100;
+static int    load_pct    = 40;
+static float  input_v     = 480.0f;
+static float  output_v    = 480.0f;
+static String state       = "NORMAL";
 
-// ** NTP
-const char* ntp_server          = "192.168.4.1";
-const long  gmt_offset_sec      = -28800;
-const int   daylight_offset_sec = 3600;
-
-String getTimestamp() {
-  struct tm timeinfo;
-  if (!getLocalTime(&timeinfo)) return "00:00:00";
-  char buf[10];
-  strftime(buf, sizeof(buf), "%H:%M:%S", &timeinfo);
-  return String(buf);
+static void handleToken(const String &tok) {
+  if      (tok.startsWith("BATT:"))   battery_pct = tok.substring(5).toInt();
+  else if (tok.startsWith("LOAD:"))   load_pct    = tok.substring(5).toInt();
+  else if (tok.startsWith("INPUT:"))  input_v     = tok.substring(6).toFloat();
+  else if (tok.startsWith("STATUS:")) state       = tok.substring(7);
 }
 
-WiFiClient espClient;
-PubSubClient mqtt(espClient);
-
-// ** OLED (128x64 SSD1306, I2C address 0x3C)
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
-#define OLED_RESET -1
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-
-// Probe 0x3C then 0x3D — returns whichever ACKs, defaults to 0x3C
-uint8_t detectOLEDAddr() {
-  for (uint8_t addr : {0x3C, 0x3D}) {
-    Wire.beginTransmission(addr);
-    if (Wire.endTransmission() == 0) return addr;
-  }
-  return 0x3C;
-}
-int message_count = 0;
-
-void mqttCallback(char* topic, byte* payload, unsigned int length) {
-  String msg;
-  for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
-  Serial.println("Received: " + msg);
-
-  // Parse space-separated tokens so compound commands work.
-  // e.g. "TOKEN1:val1 TOKEN2:val2" sets both fields.
-  int start = 0;
-  while (start <= (int)msg.length()) {
-    int sp = msg.indexOf(' ', start);
-    String tok = (sp < 0) ? msg.substring(start) : msg.substring(start, sp);
-
-    if      (tok.startsWith("BATT:"))   battery_pct  = tok.substring(5).toInt();
-    else if (tok.startsWith("LOAD:"))   load_pct     = tok.substring(5).toInt();
-    else if (tok.startsWith("INPUT:"))  input_v      = tok.substring(6).toFloat();
-    else if (tok.startsWith("STATUS:")) charge_state = tok.substring(7);
-
-    if (sp < 0) break;
-    start = sp + 1;
-  }
-
-  if (battery_pct < 10 || input_v < 400.0) {
-    charge_state = "FAULT";
-  } else if (battery_pct < 25 || input_v < 440.0) {
-    charge_state = "ON_BATTERY";
-  }
+static void applyGuard() {
+  if (battery_pct < 10 || input_v < 400.0f)      state = "FAULT";
+  else if (battery_pct < 25 || input_v < 440.0f) state = "ON_BATTERY";
 }
 
-void setup() {
-  Serial.begin(115200);
-
-  // OLED first — before WiFi radio to avoid I2C interference
-  Wire.begin();
-  uint8_t oledAddr = detectOLEDAddr();
-  Serial.print("OLED addr: 0x"); Serial.println(oledAddr, HEX);
-  if (!display.begin(SSD1306_SWITCHCAPVCC, oledAddr)) {
-    Serial.println("SSD1306 allocation failed");
-  }
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SSD1306_WHITE);
-  display.setCursor(0, 0);
-  display.println("Connecting...");
-  display.display();
-
-  // WiFi — full radio reset
-  WiFi.persistent(false);
-  WiFi.mode(WIFI_OFF);
-  delay(200);
-  WiFi.mode(WIFI_STA);
-  WiFi.disconnect(false);
-  delay(200);
-  WiFi.setMinSecurity(WIFI_AUTH_WPA_PSK);
-  WiFi.begin(ssid, password);
-
-  unsigned long wifi_start = millis();
-  while (WiFi.status() != WL_CONNECTED) {
-    if (millis() - wifi_start > 20000) {
-      int s = WiFi.status();
-      Serial.println("\nWiFi failed (status=" + String(s) + ") — waiting 30 s for hotspot then restarting");
-      display.clearDisplay(); display.setCursor(0, 0);
-      display.println("WiFi FAILED"); display.println("status=" + String(s)); display.println("Wait 30s...");
-      display.display();
-      delay(30000); ESP.restart();
-    }
-    delay(500); Serial.print(".");
-  }
-
-  display.clearDisplay(); display.setCursor(0, 0);
-  display.println(node_id); display.println("WiFi OK");
-  display.display();
-  Serial.println("\nWiFi connected: " + WiFi.localIP().toString());
-
-  configTime(gmt_offset_sec, daylight_offset_sec, ntp_server);
-  struct tm timeinfo;
-  int retries = 0;
-  while (!getLocalTime(&timeinfo) && retries++ < 10) delay(500);
-  Serial.println(retries >= 10 ? "\nNTP failed" : "\nTime: " + getTimestamp());
-
-  mqtt.setServer(mqtt_server, 1883);
-  mqtt.setCallback(mqttCallback);
+static void onMqtt(char *, byte *p, unsigned int l) {
+  wr::forEachToken(p, l, handleToken);
+  applyGuard();
 }
+
+static void renderDisplay() {
+  wr::displayHeader(NODE_ID, state);
+  wr::displayNetLine();
+  wr::display.print(F("Batt: ")); wr::display.print(battery_pct);   wr::display.println(F("%"));
+  wr::display.print(F("Load: ")); wr::display.print(load_pct);      wr::display.println(F("%"));
+  wr::display.print(F("Vin:  ")); wr::display.print((int)input_v);  wr::display.println(F("V"));
+  wr::displayFooter();
+  wr::display.display();
+}
+
+void setup() { wr::begin(NODE_ID, onMqtt); }
 
 void loop() {
-  if (!mqtt.connected()) {
-    Serial.print("MQTT connecting...");
-    String lwt_topic = String("winter-river/") + node_id + "/status";
-    String lwt_msg   = String("{\"node\":\"") + node_id + "\",\"status\":\"OFFLINE\"}";
-    if (mqtt.connect(node_id, lwt_topic.c_str(), 1, true, lwt_msg.c_str())) {
-      Serial.println("connected");
-      String online = String("{\"ts\":\"") + getTimestamp() + "\",\"node\":\"" + node_id + "\",\"status\":\"ONLINE\"}";
-      mqtt.publish(lwt_topic.c_str(), online.c_str(), true);
-      String ctrl = String("winter-river/") + node_id + "/control";
-      mqtt.subscribe(ctrl.c_str());
-    } else {
-      Serial.println("failed, state=" + String(mqtt.state()));
-      display.clearDisplay(); display.setCursor(0, 0);
-      display.println("MQTT FAILED"); display.println("state=" + String(mqtt.state()));
-      display.display();
-      delay(2000); return;
-    }
-  }
+  if (!wr::mqttReconnect(NODE_ID)) { delay(2000); return; }
+  wr::message_count++;
+  renderDisplay();
+  wr::mqtt.loop();
 
-  display.clearDisplay();
-  display.setCursor(0, 0);
-  display.print(node_id); display.print(" ["); display.print(charge_state); display.println("]");
-  display.print("IP:"); display.print(WiFi.localIP()); display.print(" "); display.print(WiFi.RSSI()); display.println("dB");
-  display.print("Batt:   "); display.print(battery_pct); display.println("%");
-  display.print("Load:   "); display.print(load_pct); display.println("%");
-  display.print("Vin:    "); display.print((int)input_v); display.println("V");
-  display.print("MQTT:"); display.print(mqtt.connected() ? "OK" : "DISC");
-  display.print(" Msgs:"); display.println(message_count);
-  display.display();
-  message_count++;
-
-  mqtt.loop();
-
-  String topic   = String("winter-river/") + node_id + "/status";
-  String payload = String("{\"ts\":\"") + getTimestamp() +
-                   "\",\"battery_pct\":"  + battery_pct  +
-                   ",\"load_pct\":"       + load_pct     +
-                   ",\"input_v\":"        + input_v      +
-                   ",\"output_v\":"       + output_v     +
-                   ",\"state\":\""        + charge_state +
-                   "\",\"voltage\":"      + voltage_rating + "}";
-  mqtt.publish(topic.c_str(), payload.c_str());
-  Serial.println("Published: " + payload);
-  delay(5000);
+  String payload = String("{\"ts\":\"") + wr::timestamp() +
+                   "\",\"battery_pct\":" + String(battery_pct) +
+                   ",\"load_pct\":"      + String(load_pct) +
+                   ",\"input_v\":"       + String(input_v, 1) +
+                   ",\"output_v\":"      + String(output_v, 1) +
+                   ",\"state\":\""       + state + "\"" +
+                   ",\"voltage\":"       + String(VOLTAGE_RATING) +
+                   "}";
+  wr::mqtt.publish(wr::statusTopic(NODE_ID).c_str(), payload.c_str(), true);
+  Serial.println(payload);
+  delay(wr::TELEMETRY_INTERVAL_MS);
 }

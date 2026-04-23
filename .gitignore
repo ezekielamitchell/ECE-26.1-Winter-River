@@ -91,4 +91,5 @@ config/secrets.yaml
 
 # Agents
 *.claude/
+AGENTS.md
 CLAUDE.md

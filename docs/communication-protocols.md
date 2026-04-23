@@ -151,10 +151,10 @@ All payloads include `"ts"` (HH:MM:SS from NTP) and `"state"`.
 {"ts":"14:32:01","input_v":480.0,"coolant_temp_f":65,"fan_speed_pct":60,"load_pct":60,"state":"NORMAL","voltage":480}
 
 // lighting_a / _b
-{"ts":"14:32:01","input_v":480.0,"zones_active":4,"brightness_pct":100,"load_pct":40,"state":"NORMAL","voltage":480}
+{"ts":"14:32:01","input_v":277.0,"zones_active":4,"brightness_pct":100,"load_pct":40,"state":"NORMAL","voltage":277}
 
 // monitoring_a / _b
-{"ts":"14:32:01","input_v":480.0,"sensor_count":12,"alert_count":0,"uptime_pct":100,"load_pct":15,"state":"NORMAL","voltage":480}
+{"ts":"14:32:01","input_v":120.0,"sensor_count":12,"alert_count":0,"uptime_pct":100,"load_pct":15,"state":"NORMAL","voltage":120}
 
 // server_rack (2N shared)
 {"ts":"14:32:01","cpu_pct":42,"inlet_f":75,"power_kw":3.2,"units":8,"path_a":1,"path_b":1,"state":"NORMAL","voltage":48}
@@ -177,7 +177,7 @@ CLOSE STATUS:CLOSED
 RPM:1800 STATUS:RUNNING
 SOURCE:GENERATOR STATUS:GENERATOR
 INPUT:480.0 BATT:100 STATUS:NORMAL
-INPUT_AC:480.0 OUTPUT_DC:48.0 STATUS:NORMAL
+INPUT_AC:480.0 STATUS:NORMAL
 PATH_A:1 PATH_B:0 STATUS:DEGRADED
 ```
 
@@ -215,17 +215,16 @@ PATH_A:1 PATH_B:0 STATUS:DEGRADED
 | `pdu_a/b` | `LOAD:<pct>` | `LOAD:60` |
 | `pdu_a/b` | `STATUS:<state>` | `STATUS:OVERLOAD` |
 | `rectifier_a/b` | `INPUT_AC:<v>` | `INPUT_AC:480` |
-| `rectifier_a/b` | `OUTPUT_DC:<v>` | `OUTPUT_DC:48.0` |
 | `rectifier_a/b` | `LOAD:<pct>` | `LOAD:40` |
 | `rectifier_a/b` | `STATUS:<state>` | `STATUS:FAULT` |
 | `cooling_a/b` | `INPUT:<v>` | `INPUT:480` |
 | `cooling_a/b` | `TEMP:<f>` | `TEMP:75` |
 | `cooling_a/b` | `SPEED:<pct>` | `SPEED:80` |
 | `cooling_a/b` | `STATUS:<state>` | `STATUS:DEGRADED` |
-| `lighting_a/b` | `INPUT:<v>` | `INPUT:480` |
+| `lighting_a/b` | `INPUT:<v>` | `INPUT:277` |
 | `lighting_a/b` | `DIM:<pct>` | `DIM:50` |
 | `lighting_a/b` | `STATUS:<state>` | `STATUS:DIMMED` |
-| `monitoring_a/b` | `INPUT:<v>` | `INPUT:480` |
+| `monitoring_a/b` | `INPUT:<v>` | `INPUT:120` |
 | `monitoring_a/b` | `SENSORS:<n>` | `SENSORS:10` |
 | `monitoring_a/b` | `STATUS:<state>` | `STATUS:ALERT` |
 | `server_rack` | `CPU:<pct>` | `CPU:90` |

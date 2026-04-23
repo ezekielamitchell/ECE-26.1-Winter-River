@@ -22,7 +22,7 @@ Topic: `winter-river/<node_id>/status`
 | Field       | Type   | Default  | Description                                    |
 |-------------|--------|----------|------------------------------------------------|
 | `ts`        | string | HH:MM:SS | Local timestamp from NTP                       |
-| `load`      | int    | 45       | Load as % of rated kVA                         |
+| `load_pct`  | int    | 45       | Load as % of rated kVA                         |
 | `power_kva` | float  | 450.0    | Apparent power output (kVA)                    |
 | `temp_f`    | int    | 112      | Winding temperature (°F)                       |
 | `state`     | string | NORMAL   | Transformer health state (see States below)    |
@@ -56,8 +56,8 @@ Topic: `winter-river/<node_id>/control`
 
 | Condition                           | Resulting State |
 |-------------------------------------|-----------------|
-| `load` > 90% or `temp_f` > 185°F   | `FAULT`         |
-| `load` > 75% or `temp_f` > 149°F   | `WARNING`       |
+| `load_pct` > 90% or `temp_f` > 185°F | `FAULT`       |
+| `load_pct` > 75% or `temp_f` > 149°F | `WARNING`     |
 | Both conditions within limits       | `NORMAL`        |
 
 ---

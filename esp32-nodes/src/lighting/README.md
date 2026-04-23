@@ -19,24 +19,26 @@ Data center lighting is fed from 277V single-phase circuits derived from the 480
 
 Topic: `winter-river/<node_id>/status`
 
-| Field        | Type   | Default  | Description                            |
-|--------------|--------|----------|----------------------------------------|
-| `ts`         | string | HH:MM:SS | Timestamp from NTP                     |
-| `input_v`    | float  | 277.0    | Supply voltage (V)                     |
-| `load_pct`   | int    | 45       | Electrical load as % of rated capacity |
-| `dimmer_pct` | int    | 80       | Dimmer / occupancy control setting (%) |
-| `state`      | string | ON       | Lighting circuit state                 |
-| `voltage`    | int    | 277      | Rated voltage (V)                      |
+| Field            | Type   | Default  | Description                            |
+|------------------|--------|----------|----------------------------------------|
+| `ts`             | string | HH:MM:SS | Timestamp from NTP                     |
+| `input_v`        | float  | 277.0    | Supply voltage (V)                     |
+| `zones_active`   | int    | 4        | Number of energised lighting zones     |
+| `brightness_pct` | int    | 100      | Brightness / occupancy control setting |
+| `load_pct`       | int    | 40       | Electrical load as % of rated capacity |
+| `state`          | string | NORMAL   | Lighting circuit state                 |
+| `voltage`        | int    | 277      | Rated voltage (V)                      |
 
 ---
 
 ## States
 
-| State   | Meaning                                          |
-|---------|--------------------------------------------------|
-| `ON`    | Circuit powered and lighting active              |
-| `OFF`   | No input power or circuit switched off           |
-| `FAULT` | Input voltage anomaly detected                   |
+| State      | Meaning                                          |
+|------------|--------------------------------------------------|
+| `NORMAL`   | Circuit powered and all lighting zones active    |
+| `DIMMED`   | Circuit powered but brightness reduced           |
+| `OFF`      | No input power or circuit switched off           |
+| `FAULT`    | Input voltage anomaly detected                   |
 
 ---
 
@@ -46,20 +48,20 @@ Topic: `winter-river/<node_id>/control`
 
 | Command          | Example      | Effect                                                        |
 |------------------|--------------|---------------------------------------------------------------|
-| `INPUT:<v>`      | `INPUT:0`    | Set input voltage; < 240V transitions to OFF                  |
-| `DIM:<pct>`      | `DIM:50`     | Set dimmer level %; `load_pct` scales proportionally          |
-| `STATUS:ON`      | `STATUS:ON`  | Turn lights on                                                |
-| `STATUS:OFF`     | `STATUS:OFF` | Turn lights off                                               |
-| `STATUS:<state>` | `STATUS:FAULT`| Force state string                                           |
+| `INPUT:<v>`      | `INPUT:277`         | Set input voltage; < 240V transitions to OFF                  |
+| `DIM:<pct>`      | `DIM:50`            | Set brightness %; drives `brightness_pct` and `load_pct`      |
+| `STATUS:<state>` | `STATUS:DIMMED`     | Force state string directly                                   |
 
 ---
 
 ## Auto-Thresholds
 
-| Condition                   | Resulting State |
-|-----------------------------|-----------------|
-| `input_v < 240`             | `OFF`           |
-| `input_v >= 240`, was `OFF` | `ON`            |
+| Condition                          | Resulting State |
+|------------------------------------|-----------------|
+| `input_v < 240` or `brightness=0`  | `OFF`           |
+| `input_v > 305`                    | `FAULT`         |
+| `brightness_pct < 100`             | `DIMMED`        |
+| `input_v` nominal and brightness 100 | `NORMAL`      |
 
 ---
 
@@ -85,8 +87,8 @@ pio run -e lighting_b
 # Subscribe to live telemetry
 mosquitto_sub -h 192.168.4.1 -t "winter-river/lighting_a/status" -v
 
-# Switch lights off
-mosquitto_pub -h 192.168.4.1 -t "winter-river/lighting_a/control" -m "STATUS:OFF"
+# Dim lights to 50%
+mosquitto_pub -h 192.168.4.1 -t "winter-river/lighting_a/control" -m "DIM:50"
 
-# Set dimmer to 50% and restore power
-mosquitto_pub -h 192.168.4.1 -t "winter-river/lighting_a/control" -m "INPUT:277 DIM:50"
+# Restore full brightness
+mosquitto_pub -h 192.168.4.1 -t "winter-river/lighting_a/control" -m "INPUT:277 DIM:100"

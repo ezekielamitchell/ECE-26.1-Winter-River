@@ -19,13 +19,16 @@ Data center infrastructure management (DCIM) systems, building management system
 
 Topic: `winter-river/<node_id>/status`
 
-| Field      | Type   | Default  | Description                       |
-|------------|--------|----------|-----------------------------------|
-| `ts`       | string | HH:MM:SS | Timestamp from NTP                |
-| `input_v`  | float  | 120.0    | Supply voltage (V)                |
-| `load_pct` | int    | 15       | Load as % of rated capacity       |
-| `state`    | string | NORMAL   | Monitoring system state           |
-| `voltage`  | int    | 120      | Rated voltage (V)                 |
+| Field          | Type   | Default  | Description                       |
+|----------------|--------|----------|-----------------------------------|
+| `ts`           | string | HH:MM:SS | Timestamp from NTP                |
+| `input_v`      | float  | 120.0    | Supply voltage (V)                |
+| `sensor_count` | int    | 12       | Number of active sensors          |
+| `alert_count`  | int    | 0        | Number of active alerts           |
+| `uptime_pct`   | int    | 100      | Monitoring subsystem uptime       |
+| `load_pct`     | int    | 15       | Load as % of rated capacity       |
+| `state`        | string | NORMAL   | Monitoring system state           |
+| `voltage`      | int    | 120      | Rated voltage (V)                 |
 
 ---
 
@@ -34,6 +37,7 @@ Topic: `winter-river/<node_id>/status`
 | State    | Meaning                                                 |
 |----------|---------------------------------------------------------|
 | `NORMAL` | Powered — all monitoring systems operating              |
+| `ALERT`  | Powered, but one or more monitoring alerts are active   |
 | `FAULT`  | Overvoltage (> 145V) or other electrical anomaly        |
 | `OFF`    | No input power (< 100V) — monitoring systems dark       |
 
@@ -45,9 +49,9 @@ Topic: `winter-river/<node_id>/control`
 
 | Command          | Example          | Effect                                          |
 |------------------|------------------|-------------------------------------------------|
-| `INPUT:<v>`      | `INPUT:0`        | Set input voltage; < 100V → OFF, > 145V → FAULT |
-| `LOAD:<pct>`     | `LOAD:30`        | Set load percentage                             |
-| `STATUS:<state>` | `STATUS:FAULT`   | Force state string                              |
+| `INPUT:<v>`      | `INPUT:120`      | Set input voltage; < 100V → OFF, > 145V → FAULT |
+| `SENSORS:<n>`    | `SENSORS:10`     | Set active sensor count; recalculates `load_pct`|
+| `STATUS:<state>` | `STATUS:ALERT`   | Force state string                              |
 
 ---
 
@@ -86,5 +90,8 @@ mosquitto_sub -h 192.168.4.1 -t "winter-river/monitoring_a/status" -v
 # Simulate power loss to monitoring (triggers OFF)
 mosquitto_pub -h 192.168.4.1 -t "winter-river/monitoring_a/control" -m "INPUT:0"
 
-# Restore power to monitoring
-mosquitto_pub -h 192.168.4.1 -t "winter-river/monitoring_a/control" -m "INPUT:120"
+# Raise a monitoring alert
+mosquitto_pub -h 192.168.4.1 -t "winter-river/monitoring_a/control" -m "STATUS:ALERT"
+
+# Restore normal monitoring
+mosquitto_pub -h 192.168.4.1 -t "winter-river/monitoring_a/control" -m "INPUT:120 STATUS:NORMAL"
