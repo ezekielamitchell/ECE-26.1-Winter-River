@@ -6,7 +6,7 @@
 
 <p align="center">Team: Leilani Gonzalez, Ton Dam Lam (Adam), William McDonald, Ezekiel A. Mitchell, Keshav Verma<br>{lgonzalez1, tlam, wmcdonald, emitchell4, kverma1}@seattleu.edu</p>
 
-<p align="center"><a href="https://github.com/ezekielamitchell/GUARDEN/blob/main/LICENSE/README.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a> <a href="https://www.espressif.com/en/products/socs/esp32-c3"><img src="https://img.shields.io/badge/platform-ESP32--C3-green.svg" alt="Platform"></a> <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.8+-blue.svg" alt="Python"></a></p>
+<p align="center"><a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a> <a href="https://www.espressif.com/en/products/socs/esp32"><img src="https://img.shields.io/badge/platform-ESP32-green.svg" alt="Platform"></a> <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.9+-blue.svg" alt="Python"></a></p>
 
 ***
 
@@ -60,9 +60,9 @@ By combining physical modularity (plug-and-play components on a custom PCB basep
 | ------------------------------------ | ------------------------------------- | ---------- |
 | Proof-of-concept nodes operational   | 6–12 ESP32 nodes with MQTT            | ✅ Achieved |
 | PCB design completed and ordered     | Custom power distribution PCB         | ✅ Achieved |
-| Firmware architecture established    | Base ESP32 template for all primaries | ✅ Achieved |
+| Firmware architecture established    | Shared `winter_river` ESP32 helper + active node matrix | ✅ Achieved |
 | Mosquitto MQTT broker running on Pi  | port 1883, anonymous, persistence     | ✅ Achieved |
-| 24-node firmware written             | All 25 envs in platformio.ini         | ✅ Achieved |
+| 25-node firmware matrix written      | All 25 active envs in `platformio.ini` | ✅ Achieved |
 | Simulation engine (`broker/main.py`) | Topological sort + cascade logic      | ✅ Achieved |
 | PostgreSQL schema (25 nodes)         | `secondary_parent_id`, 2N support     | ✅ Achieved |
 
@@ -70,7 +70,7 @@ By combining physical modularity (plug-and-play components on a custom PCB basep
 
 | Metric                          | Target                                      | Status     |
 | ------------------------------- | ------------------------------------------- | ---------- |
-| Full 2N redundancy hardware     | 25 physical ESP32 nodes on PCB baseplate    | ✅ Planned  |
+| Full 2N redundancy hardware     | 25 physical ESP32 nodes on PCB baseplate    | 🔲 Planned |
 | 3+ automated failure scenarios  | Utility loss, UPS switchover, cooling fault | 🔲 Planned |
 | Grafana dashboard deployed      | Real-time visualization at :3000            | 🔲 Planned |
 | InfluxDB / Telegraf integration | MQTT → InfluxDB live pipeline               | 🔲 Planned |
@@ -88,7 +88,7 @@ ECE-26.1-Winter-River/
 ├── SUMMARY.md                         # GitBook navigation index
 ├── LICENSE
 ├── .gitignore
-├── config.toml                        # Runtime config (git-ignored; copy from broker/config.sample.toml)
+├── config.toml                        # Runtime config (tracked repo default settings)
 ├── .gitbook/
 │   └── assets/
 ├── .github/
@@ -96,15 +96,17 @@ ECE-26.1-Winter-River/
 │       └── ci.yml                     # GitHub Actions: python lint + pio build
 ├── broker/                            # Python simulation engine + MQTT bridge
 │   ├── main.py                        # WinterRiverEngine: topo sort, cascade logic, InfluxDB writes
-│   ├── config.sample.toml             # Copy to root config.toml
-│   ├── requirements.txt               # Runtime: paho-mqtt, toml, influxdb-client
+│   ├── config.sample.toml             # Reference template for runtime config format
+│   ├── requirements.txt               # Runtime: paho-mqtt, toml, psycopg2-binary, influxdb-client
 │   └── requirements-dev.txt           # Dev: pytest, black, flake8, mypy
 ├── deploy/                            # Raspberry Pi systemd units & setup
 │   ├── mosquitto_setup.sh             # Configures Mosquitto (TCP 1883, anonymous, persistence)
 │   └── winter-river-hotspot.service   # Systemd unit — Pi 2.4 GHz access point
 ├── docs/
 ├── esp32-nodes/                       # PlatformIO firmware for all 25 ESP32 nodes
-│   ├── platformio.ini                 # 25 active envs + legacy section
+│   ├── platformio.ini                 # 25 active build environments
+│   ├── lib/
+│   │   └── winter_river/              # Shared WiFi/MQTT/NTP/OLED/topic helper library
 │   └── src/
 │       ├── utility/                   # ①  230 kV grid feed — Side A + B chain roots
 │       ├── mv_switchgear/             # ②  34.5 kV main disconnect & protection relay
@@ -133,6 +135,12 @@ ECE-26.1-Winter-River/
 │   └── init_db.sql                    # PostgreSQL schema (25 nodes seeded)
 └── typescript/                        # Reserved — future dashboard/API
 ```
+
+### Firmware Architecture
+
+The active ESP32 firmware now shares a common local PlatformIO library at `esp32-nodes/lib/winter_river/`. That helper centralizes WiFi bring-up, MQTT reconnect/LWT handling, NTP time sync, OLED initialization, topic formatting, token parsing, and shared display rows so each node file only owns its local state, control-token handling, display body, and telemetry payload.
+
+This keeps the 25-node matrix consistent across both power paths while making schema updates and bug fixes much cheaper to apply repo-wide.
 
 ### Power Chain (Side A — 12 nodes)
 
@@ -164,7 +172,7 @@ Side B mirrors Side A exactly with `_b` suffix on all node IDs.
 | File                                  | Purpose                                                              |
 | ------------------------------------- | -------------------------------------------------------------------- |
 | `esp32-nodes/platformio.ini`          | PlatformIO build environments (25 active envs)                       |
-| `broker/config.sample.toml`           | Template for runtime config — copy to `config.toml`                  |
+| `broker/config.sample.toml`           | Reference template for runtime config structure                      |
 | `scripts/init_db.sql`                 | PostgreSQL schema (25-node seed data, `secondary_parent_id` support) |
 | `deploy/mosquitto_setup.sh`           | Configures Mosquitto (TCP 1883, anonymous, persistence on)           |
 | `deploy/winter-river-hotspot.service` | Systemd unit for the Pi 2.4 GHz AP                                   |
