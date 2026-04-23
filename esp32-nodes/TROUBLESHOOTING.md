@@ -24,21 +24,25 @@ double voltage = esp_raw_value * (3.3 / 4095.0);
 
 ---
 
-## 16x2 I2C LCD Not Displaying
+## SSD1306 OLED Not Displaying
 
-**Problem:** LCD backlight is on but no text appears.
+**Problem:** The OLED stays blank, shows only noise, or never gets past the boot screen.
 
-**Cause:** Wrong library or wrong I2C address.
+**Cause:** Most active nodes now use the shared `winter_river` helper, which initializes an SSD1306 OLED and probes I2C addresses `0x3C` then `0x3D`. Blank output usually means the module is not ACKing on either address, wiring is wrong, or the wrong display library was installed.
 
 **Solution:**
-1. Use `LiquidCrystal_I2C` library (not Adafruit SSD1306 which is for OLEDs)
-2. Try I2C address `0x27` or `0x3F` - these are the most common
-3. Run an I2C scanner to find the correct address
+1. Confirm the node is using `Adafruit SSD1306` and `Adafruit GFX` rather than `LiquidCrystal_I2C`
+2. Check SDA/SCL wiring and power before debugging firmware
+3. Watch serial boot output for the detected OLED address from `wr::begin()`
+4. If needed, run a simple I2C scanner sketch to verify whether the panel responds at `0x3C` or `0x3D`
 
 **platformio.ini:**
 ```ini
 lib_deps =
-    marcoschwartz/LiquidCrystal_I2C@^1.1.4
+    adafruit/Adafruit SSD1306@^2.5.7
+    adafruit/Adafruit GFX Library@^1.11.5
 ```
+
+**Historical note:** Older prototype docs may mention `LiquidCrystal_I2C` LCD modules. Those notes do not apply to the active 25-node SSD1306 firmware set.
 
 ---

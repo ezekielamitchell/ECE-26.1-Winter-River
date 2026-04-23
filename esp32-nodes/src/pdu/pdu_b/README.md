@@ -1,50 +1,22 @@
 # PDU B
 
-ESP32 node simulating Power Distribution Unit B in the Winter River data center training simulator.
+`pdu_b` is the active Side B Power Distribution Unit in the Winter River 25-node topology. It now uses the same SSD1306 + MQTT/LWT + shared `winter_river` helper pattern as `pdu_a`.
 
-## Features
+## Current Behavior
 
-- Connects to Pi hotspot (`WinterRiver-AP`) and Mosquitto broker at `192.168.4.1`
-- Publishes heartbeat string to `winter-river` topic every second
-- ADC voltage reading on GPIO 34 — averaged over 64 samples, 0–3.3V range (11dB attenuation)
-- 16x2 LCD display (I2C) showing node ID and local IP
-- 480V voltage rating
+- Connects to `WinterRiver-AP`
+- Publishes retained JSON telemetry every 5 seconds on `winter-river/pdu_b/status`
+- Subscribes to `winter-river/pdu_b/control`
+- Uses SSD1306 OLED output via the shared `wr::begin()` initialization path
+- Reports `input_v`, `output_v`, `load_pct`, `state`, and `voltage`
 
-## Network
+## Source of Truth
 
-| Setting | Value |
-|---------|-------|
-| WiFi SSID | `WinterRiver-AP` |
-| WiFi Password | `winterriver` |
-| MQTT Broker | `192.168.4.1:1883` |
+For the active protocol, thresholds, build commands, and test examples, use the shared PDU documentation:
 
-## MQTT Topics
+- [../README.md](/Users/house/Developer/ECE-26.1-Winter-River/esp32-nodes/src/pdu/README.md)
+- [pdu_b.cpp](/Users/house/Developer/ECE-26.1-Winter-River/esp32-nodes/src/pdu/pdu_b/pdu_b.cpp)
 
-| Topic | Direction | Description |
-|-------|-----------|-------------|
-| `winter-river` | Publish | Heartbeat string every 1 s |
+## Historical Note
 
-## ADC Note
-
-GPIO 34 is sampled 64 times per loop and averaged to reduce ESP32 ADC noise. The raw value maps to 0–3.3V via:
-
-```cpp
-double voltage = esp_raw_value * (3.3 / 4095.0);
-```
-
-ADC1 pins (GPIO 32–39) must be used when WiFi is active — ADC2 is internally shared with the WiFi radio.
-
-## Display
-
-16x2 LCD via I2C (`LiquidCrystal_I2C`). Default address is `0x3F` — if the display shows only a backlight with no text, try `0x27` instead (edit the constructor in `pdu_b.cpp` line 25).
-
-Library provided by `marcoschwartz/LiquidCrystal_I2C@^1.1.4` — declared in the shared `[env]` block of `platformio.ini`.
-
-## Build & Flash
-
-```bash
-cd esp32-nodes
-pio run -e pdu_b           # compile
-pio run -e pdu_b -t upload # flash
-pio device monitor         # serial output (115200 baud)
-```
+Older notes may describe `pdu_b` as an ADC/LCD prototype that published simple heartbeat strings. That is no longer the active firmware and should not be used as a template.

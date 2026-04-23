@@ -347,12 +347,12 @@ WiFi.begin(ssid, password);
 
 ## 12. Telegraf → InfluxDB Mapping
 
-Telegraf subscribes to `winter-river/#` (all topics) and parses JSON payloads.
+Telegraf subscribes to `winter-river/+/status` and parses JSON payloads from the node status topics only.
 
 ```toml
 [[inputs.mqtt_consumer]]
   servers    = ["tcp://192.168.4.1:1883"]
-  topics     = ["winter-river/#"]
+  topics     = ["winter-river/+/status"]
   client_id  = "telegraf-winter-river"
   qos        = 0
   topic_tag  = "topic"           # full topic stored as tag
@@ -401,7 +401,7 @@ mosquitto_sub -h 192.168.4.1 -t "winter-river/utility_a/status" -C 1
 
 | Issue | Status | Detail |
 |---|---|---|
-| Telegraf topic schema | **Fixed** | `telegraf.conf` now subscribes to `winter-river/#` (was `iot/node/+/...`) |
+| Telegraf topic schema | **Fixed** | `telegraf.conf` now subscribes to `winter-river/+/status` (was `iot/node/+/...`) |
 | `broker/main.py` DB schema | **Open** | `telemetry_history` table and `live_status.current_state` column referenced in Python but not in `scripts/init_db.sql` — reconcile before running engine against fresh DB |
-| `pdu_b` legacy firmware | **Do not use** | Still uses `LiquidCrystal_I2C` — not in active chain, not a template |
+| `pdu_b` legacy firmware note | **Stale docs removed** | `pdu_b` is part of the active SSD1306/MQTT node matrix and should be treated like `pdu_a` |
 | InfluxDB auth token | **Change for production** | Default `my-super-secret-auth-token` in `config.sample.toml` and `grafana/.env.sample` |

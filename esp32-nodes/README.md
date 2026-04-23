@@ -6,13 +6,27 @@ PlatformIO firmware for all 25 ESP32 nodes in the ECE 26.1 Winter River simulato
 
 ## Network Configuration
 
-All nodes connect to the Raspberry Pi hotspot. These constants are set at the top of each `.cpp` file:
+All active nodes connect to the Raspberry Pi hotspot through the shared `esp32-nodes/lib/winter_river/` helper. The common network settings live there rather than being duplicated in every `.cpp` file:
 
 | Constant | Value |
 |----------|-------|
-| `ssid` | `WinterRiver-AP` |
-| `password` | `winterriver` |
-| `mqtt_server` | `192.168.4.1` |
+| `SSID` | `WinterRiver-AP` |
+| `PASSWORD` | `winterriver` |
+| `MQTT_SERVER` | `192.168.4.1` |
+
+---
+
+## Shared Firmware Helper
+
+Most active node files are now intentionally small because common behavior lives in `lib/winter_river/`. The helper provides:
+
+- OLED initialization and shared display rows
+- WiFi reset + reconnect behavior
+- NTP setup and timestamp formatting
+- MQTT reconnect, LWT, and topic helpers
+- token-loop parsing for compound control commands
+
+When adding or updating nodes, prefer extending that helper-driven pattern instead of reintroducing per-file WiFi/MQTT boilerplate.
 
 The Pi must be running its hotspot and Mosquitto before nodes can connect:
 
@@ -120,23 +134,24 @@ pio device monitor
 
 ## Creating a New Node
 
-1. **Create the source file.** Copy the closest existing node:
+1. **Create the source file.** Copy the closest existing helper-based node:
    ```bash
    cp -r src/ups/ups_a src/ups/ups_c
    ```
-2. **Edit `ups_c.cpp`:** change `node_id`, rated voltage, and any component-specific constants.
+2. **Edit `ups_c.cpp`:** change `NODE_ID`, label, rated voltage, and any component-specific state/constants.
 3. **Add a PlatformIO environment** in `platformio.ini`:
    ```ini
    [env:ups_c]
    build_src_filter = +<ups/ups_c/>
    ```
-4. **Build and upload:**
+4. **Keep the helper pattern intact.** New nodes should use `wr::begin()`, `wr::timestamp()`, `wr::statusTopic()`, and `wr::forEachToken()` rather than open-coding WiFi/NTP/MQTT setup.
+5. **Build and upload:**
    ```bash
    pio run -e ups_c --target upload
    ```
-5. **Add a PostgreSQL row** in `scripts/init_db.sql` so the simulation engine tracks it.
+6. **Add a PostgreSQL row** in `scripts/init_db.sql` so the simulation engine tracks it.
 
-> **OLED address:** new nodes should hardcode `0x3C`. Only use `detectOLEDAddr()` if you physically confirm the SA0 pin is pulled HIGH (making the module `0x3D`).
+> **OLED address:** the shared `wr::begin()` helper already probes `0x3C` then `0x3D` during boot. Keep using that path unless you have a hardware-specific reason to override it.
 
 ---
 
@@ -148,9 +163,9 @@ pio device monitor
 | Full WiFi reset | `WIFI_OFF → delay(200) → WIFI_STA → disconnect → setMinSecurity(WPA_PSK) → begin()` |
 | Timeout + restart | 20s WiFi timeout → 30s wait → `ESP.restart()` |
 | LWT required | Every node must set a retained LWT OFFLINE on connect |
-| Control topic | Every node must subscribe to `winter-river/<node_id>/control` and implement `mqttCallback` |
-| Telemetry interval | `delay(5000)` at end of `loop()` |
-| NTP | `configTime(-28800, 3600, "192.168.4.1")` — Pacific time, served by Pi |
+| Control topic | Every node must subscribe to `winter-river/<node_id>/control` and provide a callback for `wr::begin()` |
+| Telemetry interval | Use `wr::TELEMETRY_INTERVAL_MS` |
+| NTP | Use `wr::timestamp()` from the shared helper |
 | OLED driver | `Adafruit SSD1306` only — never `LiquidCrystal_I2C` |
 
 ---
