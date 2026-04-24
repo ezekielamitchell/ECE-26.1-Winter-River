@@ -54,7 +54,7 @@ void loop() {
   wr::mqtt.loop();
 
   String payload = String("{\"ts\":\"") + wr::timestamp() +
-                   ",\"load_pct\":"   + String(load_pct) +
+                   "\",\"load_pct\":"  + String(load_pct) +
                    ",\"power_kva\":"  + String(power_kva, 1) +
                    ",\"temp_f\":"     + String(temp_f) +
                    ",\"state\":\""    + state + "\"" +
