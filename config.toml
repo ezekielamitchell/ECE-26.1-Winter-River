@@ -1,10 +1,38 @@
-[mqtt] 
-host = "0.0.0.0" # Listen for all ESP32s 
-port = 1883
-keepalive = 60 
+[mqtt]
+broker_host = "192.168.4.1"   # Pi hotspot gateway; "localhost" if running on Pi
+broker_port = 1883
+keepalive = 60
 
-[database] 
-url = "postgresql://postgres:password@localhost/sensor_data" 
+[database]
+dsn = "host=localhost dbname=winter_river user=postgres password=changeme"
 
-[simulation] 
-tick_rate = 1.0 # Seconds between physics updates 
+[simulation]
+tick_rate = 1.0   # seconds between physics updates
+
+[logging]
+level = "INFO"
+
+[influxdb]
+url    = "http://localhost:8086"
+token  = "my-super-secret-auth-token"
+org    = "iot-project"
+bucket = "mqtt_metrics"
+
+# Outdoor weather feeding the thermal model.
+# preset: 1=Virginia Summer, 2=Eastern Oregon Winter, 3=Ohio Spring,
+#         4=Arizona Summer, 5=Stockholm Winter, 6=Singapore Monsoon
+# Set outdoor_f / rh_pct to override the preset's defaults.
+[weather]
+preset = 1
+# outdoor_f = 95.0
+# rh_pct    = 50.0
+
+# Thermal / airflow model parameters. See broker/thermal.py for full schema.
+[thermal]
+fan_modules        = 2
+fan_diff           = 0
+standard_modules   = 1
+storage_modules    = 0
+ai_modules         = 0
+overheat_threshold_f       = 120.0
+underpressure_threshold_pa = 20.0

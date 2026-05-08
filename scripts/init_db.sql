@@ -42,6 +42,30 @@ CREATE TABLE historical_data (
     metrics   JSONB
 );
 
+-- Computed facility metrics from broker/thermal.py — one row per simulation tick
+-- when thermal output is published (winter-river/facility/status).
+CREATE TABLE facility_metrics (
+    id              SERIAL PRIMARY KEY,
+    timestamp       TIMESTAMP DEFAULT NOW(),
+    mode            VARCHAR(30),
+    outdoor_f       FLOAT,
+    rh_pct          FLOAT,
+    cold_aisle_f    FLOAT,
+    hot_aisle_f     FLOAT,
+    pue             FLOAT,
+    p_data_w        FLOAT,
+    p_fan_w         FLOAT,
+    p_loss_w        FLOAT,
+    p_consumption_w FLOAT,
+    q_cfm           FLOAT,
+    fan_pct_max     FLOAT,
+    flow_pct_max    FLOAT,
+    rack_dp_pa      FLOAT,
+    fan_dp_pa       FLOAT,
+    fan_count       INT
+);
+CREATE INDEX facility_metrics_ts_idx ON facility_metrics(timestamp DESC);
+
 -- ── SEED DATA: SIDE A ─────────────────────────────────────────────────────────
 -- Chain (IT path): utility_a → mv_switchgear_a → mv_lv_transformer_a
 --                  generator_a ↗ ats_a → lv_dist_a → ups_a → pdu_a → rectifier_a → server_rack

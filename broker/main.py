@@ -7,6 +7,7 @@ Tick rate: 1 Hz (configurable in config.toml).
 
 import json
 import logging
+import math
 import os
 import time
 from collections import defaultdict
@@ -15,6 +16,8 @@ import paho.mqtt.client as mqtt
 import psycopg2
 import toml
 from psycopg2.extras import RealDictCursor
+
+from thermal import ThermalConfig, compute_thermal, resolve_weather
 
 try:
     from influxdb_client import InfluxDBClient, Point
@@ -54,6 +57,17 @@ class WinterRiverEngine:
         self.mqtt_client.subscribe("winter-river/+/status", qos=1)
         self.mqtt_client.loop_start()
         log.info("MQTT connected to %s:%d", MQTT_BROKER, MQTT_PORT)
+
+        self._thermal_cfg = ThermalConfig.from_mapping(_cfg.get("thermal"))
+        self._weather     = resolve_weather(_cfg.get("weather", {}))
+        self._latest_thermal = None
+        self._facility_metrics_disabled = False
+        log.info(
+            "Thermal model: weather=%s (%.1f F / %.0f%% RH), modules=std:%d stor:%d ai:%d, fan_modules=%d",
+            self._weather.get("name"), self._weather["outdoor_f"], self._weather["rh_pct"],
+            self._thermal_cfg.standard_modules, self._thermal_cfg.storage_modules,
+            self._thermal_cfg.ai_modules, self._thermal_cfg.fan_modules,
+        )
 
         # Optional InfluxDB direct writes (computed state, 1 Hz)
         self._influx_write_api = None
@@ -337,24 +351,40 @@ class WinterRiverEngine:
             ac_in = 480.0 if v_out > 0 else 0.0
             return f"INPUT_AC:{ac_in:.1f} STATUS:{status}"
 
-        elif ntype in ("COOLING", "MONITORING"):
+        elif ntype == "COOLING":
+            t = self._latest_thermal
+            if v_out > 0 and t is not None:
+                cool_status = (
+                    "DEGRADED" if t["mode"] in ("OVERHEATING", "UNDERPRESSURED")
+                    else status
+                )
+                return (
+                    f"INPUT:{v_out:.1f} TEMP:{t['cold_aisle_f']:.1f} "
+                    f"SPEED:{t['flow_pct_max']:.0f} STATUS:{cool_status}"
+                )
+            return f"INPUT:{v_out:.1f} STATUS:{status}"
+
+        elif ntype == "MONITORING":
             return f"INPUT:{v_out:.1f} STATUS:{status}"
 
         elif ntype == "LIGHTING":
             return f"INPUT:{v_out:.1f} STATUS:{status}"
 
         elif ntype == "SERVER_RACK":
-            # Indicate which rectifier paths are live
             path_a = 1 if (node.get("parent_v_a", 0) > 0) else 0
             path_b = 1 if (node.get("parent_v_b", 0) > 0) else 0
-            return f"PATH_A:{path_a} PATH_B:{path_b} STATUS:{status}"
+            base = f"PATH_A:{path_a} PATH_B:{path_b} STATUS:{status}"
+            t = self._latest_thermal
+            if t is not None and math.isfinite(t["hot_aisle_f"]):
+                base += f" TEMP:{t['hot_aisle_f']:.1f}"
+            return base
 
         return f"STATUS:{status}"
 
     # ── Main simulation tick ──────────────────────────────────────────────────
 
     def run_simulation_tick(self):
-        """Fetch all node states, propagate voltages top-down, push commands."""
+        """Fetch all node states, propagate voltages, run thermal, push commands."""
         try:
             with self.db.cursor() as cur:
                 cur.execute(
@@ -371,28 +401,33 @@ class WinterRiverEngine:
 
             order = self._topo_sort(nodes)
 
+            # Pass 1: power propagation (mutates each node dict in place).
             for nid in order:
-                node       = nodes[nid]
+                node = nodes[nid]
                 v_out, status = self._compute_node(node, nodes)
-
-                # Stash for SERVER_RACK path indicator in control cmd
                 if node["node_type"] == "SERVER_RACK":
-                    parent   = nodes.get(node.get("parent_id"))
-                    sec      = nodes.get(node.get("secondary_parent_id"))
+                    parent = nodes.get(node.get("parent_id"))
+                    sec    = nodes.get(node.get("secondary_parent_id"))
                     node["parent_v_a"] = parent["v_out"] if parent else 0.0
                     node["parent_v_b"] = sec["v_out"]    if sec    else 0.0
-
-                node["v_out"]     = v_out
+                node["v_out"]      = v_out
                 node["status_msg"] = status
 
-                # Publish control command to ESP32
-                cmd = self._control_cmd(node, v_out, status)
-                self.mqtt_client.publish(
-                    f"winter-river/{nid}/control", cmd, qos=1,
-                )
+            # Compute thermal from updated node state — needed before publishing
+            # cooling/server_rack control commands so they can carry TEMP/SPEED.
+            self._latest_thermal = self._compute_tick_thermal(nodes)
+
+            # Pass 2: publish control commands.
+            for nid in order:
+                node = nodes[nid]
+                cmd  = self._control_cmd(node, node["v_out"], node["status_msg"])
+                self.mqtt_client.publish(f"winter-river/{nid}/control", cmd, qos=1)
                 log.debug("→ %s/control: %s", nid, cmd)
 
-            # Persist updated state for all nodes in one batch
+            # Publish derived facility + weather state for Telegraf / Grafana.
+            self._publish_facility_status(self._latest_thermal)
+            self._publish_weather_status()
+
             with self.db.cursor() as cur:
                 for nid, node in nodes.items():
                     cur.execute(
@@ -411,9 +446,11 @@ class WinterRiverEngine:
                     )
             self.db.commit()
 
-            # Write computed state to InfluxDB (optional)
+            self._persist_facility_metrics(self._latest_thermal)
+
             if self._influx_write_api:
                 self._write_influx(nodes)
+                self._write_influx_facility(self._latest_thermal)
 
         except Exception as exc:
             log.error("Simulation tick error: %s", exc)
@@ -421,6 +458,119 @@ class WinterRiverEngine:
                 self.db.rollback()
             except Exception:
                 pass
+
+    # ── Thermal coupling ──────────────────────────────────────────────────────
+
+    def _compute_tick_thermal(self, nodes):
+        """Run the thermal model using current cooling-node state for fan count."""
+        cool_a = nodes.get("cooling_a")
+        cool_b = nodes.get("cooling_b")
+        a_on = bool(cool_a and cool_a.get("v_out", 0) > 0)
+        b_on = bool(cool_b and cool_b.get("v_out", 0) > 0)
+        cooling_online = a_on or b_on
+
+        nominal = (
+            self._thermal_cfg.fan_modules * self._thermal_cfg.fans_per_module
+            + self._thermal_cfg.fan_diff
+        )
+        if a_on and b_on:
+            fan_override = nominal
+        elif a_on or b_on:
+            fan_override = nominal // 2
+        else:
+            fan_override = 0
+
+        return compute_thermal(
+            outdoor_f=self._weather["outdoor_f"],
+            rh_pct=self._weather["rh_pct"],
+            cfg=self._thermal_cfg,
+            fan_count_override=fan_override,
+            cooling_online=cooling_online,
+        )
+
+    def _publish_facility_status(self, t):
+        if not t:
+            return
+        payload = {
+            "ts":              time.strftime("%H:%M:%S"),
+            "node":            "facility",
+            "mode":            t["mode"],
+            "pue":             round(t["pue"], 3),
+            "p_consumption_mw": round(t["p_consumption_w"] / 1e6, 4),
+            "p_data_mw":       round(t["p_data_w"]        / 1e6, 4),
+            "p_fan_kw":        round(t["p_fan_w"]         / 1e3, 2),
+            "p_loss_kw":       round(t["p_loss_w"]        / 1e3, 2),
+            "cold_aisle_f":    round(t["cold_aisle_f"], 2),
+            "hot_aisle_f":     round(t["hot_aisle_f"], 2) if math.isfinite(t["hot_aisle_f"]) else None,
+            "q_cfm":           int(t["q_cfm"]),
+            "fan_pct_max":     round(t["fan_pct_max"], 1),
+            "flow_pct_max":    round(t["flow_pct_max"], 1),
+            "fan_count":       t["fan_count"],
+            "rack_dp_pa":      round(t["rack_dp_pa"], 2),
+            "fan_dp_pa":       round(t["fan_dp_pa"], 2),
+            "racks_total":     t["racks_total"],
+        }
+        self.mqtt_client.publish(
+            "winter-river/facility/status",
+            json.dumps(payload), qos=1, retain=True,
+        )
+
+    def _publish_weather_status(self):
+        w = self._weather
+        payload = {
+            "ts":        time.strftime("%H:%M:%S"),
+            "node":      "weather",
+            "name":      w.get("name", ""),
+            "preset":    w.get("preset", 0),
+            "outdoor_f": w["outdoor_f"],
+            "rh_pct":    w["rh_pct"],
+        }
+        self.mqtt_client.publish(
+            "winter-river/weather/status",
+            json.dumps(payload), qos=1, retain=True,
+        )
+
+    def _persist_facility_metrics(self, t):
+        if not t or self._facility_metrics_disabled:
+            return
+        try:
+            with self.db.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO facility_metrics (
+                        mode, outdoor_f, rh_pct, cold_aisle_f, hot_aisle_f,
+                        pue, p_data_w, p_fan_w, p_loss_w, p_consumption_w,
+                        q_cfm, fan_pct_max, flow_pct_max,
+                        rack_dp_pa, fan_dp_pa, fan_count
+                    ) VALUES (
+                        %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s,
+                        %s, %s, %s,
+                        %s, %s, %s
+                    )
+                    """,
+                    (
+                        t["mode"], t["outdoor_f"], t["rh_pct"],
+                        t["cold_aisle_f"],
+                        t["hot_aisle_f"] if math.isfinite(t["hot_aisle_f"]) else None,
+                        t["pue"], t["p_data_w"], t["p_fan_w"],
+                        t["p_loss_w"], t["p_consumption_w"],
+                        t["q_cfm"], t["fan_pct_max"], t["flow_pct_max"],
+                        t["rack_dp_pa"], t["fan_dp_pa"], t["fan_count"],
+                    ),
+                )
+                self.db.commit()
+        except psycopg2.errors.UndefinedTable:
+            log.warning(
+                "facility_metrics table missing — re-run scripts/init_db.sql to enable "
+                "thermal history. Disabling facility_metrics writes for this session."
+            )
+            self.db.rollback()
+            self._facility_metrics_disabled = True
+        except Exception as exc:
+            log.warning("facility_metrics write failed: %s", exc)
+            try: self.db.rollback()
+            except Exception: pass
 
     # ── InfluxDB writer ───────────────────────────────────────────────────────
 
@@ -446,6 +596,35 @@ class WinterRiverEngine:
             )
         except Exception as exc:
             log.warning("InfluxDB write error: %s", exc)
+
+    def _write_influx_facility(self, t):
+        """Write computed facility metrics (PUE, airflow, pressures) to InfluxDB."""
+        if not t:
+            return
+        p = (
+            Point("facility_metrics")
+            .tag("mode", t["mode"])
+            .field("pue",             float(t["pue"]))
+            .field("p_data_w",        float(t["p_data_w"]))
+            .field("p_fan_w",         float(t["p_fan_w"]))
+            .field("p_loss_w",        float(t["p_loss_w"]))
+            .field("p_consumption_w", float(t["p_consumption_w"]))
+            .field("cold_aisle_f",    float(t["cold_aisle_f"]))
+            .field("q_cfm",           float(t["q_cfm"]))
+            .field("fan_pct_max",     float(t["fan_pct_max"]))
+            .field("flow_pct_max",    float(t["flow_pct_max"]))
+            .field("rack_dp_pa",      float(t["rack_dp_pa"]))
+            .field("fan_dp_pa",       float(t["fan_dp_pa"]))
+            .field("outdoor_f",       float(t["outdoor_f"]))
+            .field("rh_pct",          float(t["rh_pct"]))
+            .field("fan_count",       int(t["fan_count"]))
+        )
+        if math.isfinite(t["hot_aisle_f"]):
+            p = p.field("hot_aisle_f", float(t["hot_aisle_f"]))
+        try:
+            self._influx_write_api.write(bucket=self._influx_bucket, record=[p])
+        except Exception as exc:
+            log.warning("InfluxDB facility write error: %s", exc)
 
 
 # ── ENTRY POINT ───────────────────────────────────────────────────────────────

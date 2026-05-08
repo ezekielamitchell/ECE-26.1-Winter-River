@@ -23,3 +23,38 @@ url    = "http://localhost:8086"
 token  = "my-super-secret-auth-token"   # change for production
 org    = "iot-project"
 bucket = "mqtt_metrics"
+
+# ── Thermal / airflow model ──────────────────────────────────────────────────
+# Outdoor weather feeding the thermal model.
+# preset: 1=Virginia Summer, 2=Eastern Oregon Winter, 3=Ohio Spring,
+#         4=Arizona Summer, 5=Stockholm Winter, 6=Singapore Monsoon
+# Set outdoor_f / rh_pct to override the preset's defaults at any time.
+[weather]
+preset = 1
+# outdoor_f = 95.0
+# rh_pct    = 50.0
+
+# Thermal model parameters. Defaults match the simulator's industrial-scale
+# baseline (8.8 MW fan capacity, 4000 servers/module). See broker/thermal.py
+# for the full ThermalConfig schema.
+[thermal]
+fan_modules        = 2
+fan_diff           = 0       # +/- fans past nominal
+standard_modules   = 1
+storage_modules    = 0
+ai_modules         = 0
+# Tunables (uncomment to override defaults from broker/thermal.py):
+# rho                          = 1.177
+# facility_w                   = 500000.0
+# p_max_per_fan_w              = 80000.0
+# fans_per_module              = 55
+# servers_per_module           = 4000
+# servers_per_rack             = 40
+# p_per_standard_w             = 500.0
+# p_per_storage_w              = 800.0
+# p_per_ai_w                   = 2500.0
+# rh_target                    = 0.80
+# free_cooling_floor_c         = 18.0
+# overheat_threshold_f         = 120.0
+# underpressure_threshold_pa   = 20.0
+# loss_fraction                = 0.08
