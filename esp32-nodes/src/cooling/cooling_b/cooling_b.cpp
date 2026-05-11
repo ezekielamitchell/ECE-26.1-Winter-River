@@ -1,4 +1,5 @@
-// cooling_b.cpp — CRAC/CRAH cooling unit, 480 V, Side B.
+// cooling_b.cpp — CRAC/CRAH fan bank, 480 V, Side B.
+// Simulates 55 fans. Side A + Side B → 110 fans total feeding the thermal model.
 // States: NORMAL, DEGRADED, FAULT, OFF
 #include <winter_river.h>
 
@@ -6,12 +7,27 @@ static const char *NODE_ID = "cooling_b";
 static const char *LABEL   = "cool_b";
 
 static constexpr int VOLTAGE_RATING = 480;
+static constexpr int FAN_COUNT      = 55;   // physical fans modeled by this node
 
 static float  input_v        = 480.0f;
 static int    coolant_temp_f = 65;
 static int    fan_speed_pct  = 60;
+static int    fans_running   = FAN_COUNT;
 static int    load_pct       = 60;
 static String state          = "NORMAL";
+
+static void recomputeFanState() {
+  if (fans_running < 0)             fans_running = 0;
+  if (fans_running > FAN_COUNT)     fans_running = FAN_COUNT;
+
+  if (input_v < 48.0f) {
+    state = "OFF";
+  } else if (fans_running == 0) {
+    state = "FAULT";
+  } else if (fans_running < (FAN_COUNT * 8) / 10) {
+    if (state != "FAULT") state = "DEGRADED";
+  }
+}
 
 static void handleToken(const String &tok) {
   if (tok.startsWith("INPUT:")) {
@@ -25,21 +41,29 @@ static void handleToken(const String &tok) {
   } else if (tok.startsWith("SPEED:")) {
     fan_speed_pct = tok.substring(6).toInt();
     load_pct      = fan_speed_pct;
+  } else if (tok.startsWith("FANS_RUNNING:")) {
+    fans_running = tok.substring(13).toInt();
+    recomputeFanState();
   } else if (tok.startsWith("STATUS:")) {
     state = tok.substring(7);
+    if (state == "FAULT") fans_running = 0;
+    if (state == "OFF")   input_v = 0.0f;
   }
 }
 
 static void onMqtt(char *, byte *p, unsigned int l) {
   wr::forEachToken(p, l, handleToken);
+  recomputeFanState();
 }
 
 static void renderDisplay() {
   wr::displayHeader(LABEL, state);
   wr::displayNetLine();
-  wr::display.print(F("Vin:  "));  wr::display.print((int)input_v);  wr::display.println(F("V"));
-  wr::display.print(F("CoolT: ")); wr::display.print(coolant_temp_f); wr::display.println(F("F"));
-  wr::display.print(F("Fan:  "));  wr::display.print(fan_speed_pct);  wr::display.println(F("%"));
+  wr::display.print(F("Vin: "));  wr::display.print((int)input_v);  wr::display.print(F("V "));
+  wr::display.print(F("Spd:")); wr::display.print(fan_speed_pct); wr::display.println(F("%"));
+  wr::display.print(F("Fans:")); wr::display.print(fans_running); wr::display.print(F("/"));
+  wr::display.println(FAN_COUNT);
+  wr::display.print(F("CoolT:")); wr::display.print(coolant_temp_f); wr::display.println(F("F"));
   wr::displayFooter();
   wr::display.display();
 }
@@ -56,6 +80,8 @@ void loop() {
                    "\",\"input_v\":"        + String(input_v, 1) +
                    ",\"coolant_temp_f\":"   + String(coolant_temp_f) +
                    ",\"fan_speed_pct\":"    + String(fan_speed_pct) +
+                   ",\"fan_count\":"        + String(FAN_COUNT) +
+                   ",\"fans_running\":"     + String(fans_running) +
                    ",\"load_pct\":"         + String(load_pct) +
                    ",\"state\":\""          + state + "\"" +
                    ",\"voltage\":"          + String(VOLTAGE_RATING) +

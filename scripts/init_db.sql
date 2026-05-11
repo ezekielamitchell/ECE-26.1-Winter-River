@@ -12,7 +12,7 @@ CREATE TABLE nodes (
     node_type            VARCHAR(30) NOT NULL,
     -- UTILITY | MV_SWITCHGEAR | MV_LV_TRANSFORMER | GENERATOR |
     -- ATS | LV_DIST | UPS | PDU | RECTIFIER | COOLING | LIGHTING |
-    -- MONITORING | SERVER_RACK
+    -- SERVER_RACK
     side                 CHAR(1),           -- 'A', 'B', or NULL (shared)
     parent_id            VARCHAR(50) REFERENCES nodes(node_id),
     secondary_parent_id  VARCHAR(50) REFERENCES nodes(node_id),
@@ -69,7 +69,7 @@ CREATE INDEX facility_metrics_ts_idx ON facility_metrics(timestamp DESC);
 -- ── SEED DATA: SIDE A ─────────────────────────────────────────────────────────
 -- Chain (IT path): utility_a → mv_switchgear_a → mv_lv_transformer_a
 --                  generator_a ↗ ats_a → lv_dist_a → ups_a → pdu_a → rectifier_a → server_rack
--- Facility branches off lv_dist_a: cooling_a, lighting_a, monitoring_a
+-- Facility branches off lv_dist_a: cooling_a (fan bank), lighting_a
 
 INSERT INTO nodes (node_id, node_type, side, parent_id, secondary_parent_id, rated_voltage, v_ratio) VALUES
 -- ① Root: 230 kV utility grid
@@ -93,9 +93,7 @@ INSERT INTO nodes (node_id, node_type, side, parent_id, secondary_parent_id, rat
 -- ⑩ Cooling: 480 V, branches off lv_dist_a
 ('cooling_a',           'COOLING',           'A', 'lv_dist_a',           NULL,             480.0, 1.0),
 -- ⑪ Lighting: 277 V (phase-to-neutral of 480Y/277V system)
-('lighting_a',          'LIGHTING',          'A', 'lv_dist_a',           NULL,             277.0, 0.577),
--- ⑫ Monitoring: 120 V (transformer-derived from 480V bus)
-('monitoring_a',        'MONITORING',        'A', 'lv_dist_a',           NULL,             120.0, 0.25);
+('lighting_a',          'LIGHTING',          'A', 'lv_dist_a',           NULL,             277.0, 0.577);
 
 -- ── SEED DATA: SIDE B ─────────────────────────────────────────────────────────
 
@@ -110,8 +108,7 @@ INSERT INTO nodes (node_id, node_type, side, parent_id, secondary_parent_id, rat
 ('pdu_b',               'PDU',               'B', 'ups_b',               NULL,             480.0, 1.0),
 ('rectifier_b',         'RECTIFIER',         'B', 'pdu_b',               NULL,              48.0, 0.1),
 ('cooling_b',           'COOLING',           'B', 'lv_dist_b',           NULL,             480.0, 1.0),
-('lighting_b',          'LIGHTING',          'B', 'lv_dist_b',           NULL,             277.0, 0.577),
-('monitoring_b',        'MONITORING',        'B', 'lv_dist_b',           NULL,             120.0, 0.25);
+('lighting_b',          'LIGHTING',          'B', 'lv_dist_b',           NULL,             277.0, 0.577);
 
 -- ── SEED DATA: SHARED 2N NODE ─────────────────────────────────────────────────
 -- server_rack is fed by BOTH rectifier_a (primary) and rectifier_b (secondary).

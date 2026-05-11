@@ -62,6 +62,15 @@ class WinterRiverEngine:
         self._weather     = resolve_weather(_cfg.get("weather", {}))
         self._latest_thermal = None
         self._facility_metrics_disabled = False
+
+        # Live fan-bank counts reported by cooling_a / cooling_b telemetry.
+        # Default = nominal so the first tick (before any telemetry arrives)
+        # has sane values; on_message keeps these in sync from MQTT.
+        per_side_nominal = self._thermal_cfg.fans_per_module
+        self._cooling_fans = {
+            "cooling_a": per_side_nominal,
+            "cooling_b": per_side_nominal,
+        }
         log.info(
             "Thermal model: weather=%s (%.1f F / %.0f%% RH), modules=std:%d stor:%d ai:%d, fan_modules=%d",
             self._weather.get("name"), self._weather["outdoor_f"], self._weather["rh_pct"],
@@ -119,6 +128,17 @@ class WinterRiverEngine:
             status_from_telemetry = (
                 payload.get("state") or payload.get("status") or None
             )
+
+            # Snapshot live fan-bank count from cooling node telemetry so the
+            # thermal model gets a measured fan_count instead of a config constant.
+            if node_id in self._cooling_fans:
+                fr = payload.get("fans_running")
+                if isinstance(fr, (int, float)):
+                    self._cooling_fans[node_id] = max(
+                        0, min(int(fr), self._thermal_cfg.fans_per_module)
+                    )
+                if not is_present:
+                    self._cooling_fans[node_id] = 0
 
             with self.db.cursor() as cur:
                 if status_from_telemetry:
@@ -295,10 +315,6 @@ class WinterRiverEngine:
         elif ntype == "LIGHTING":
             return (277.0, "ON") if parent_v > 0 else (0.0, "OFF")
 
-        # ── MONITORING ────────────────────────────────────────────────────────
-        elif ntype == "MONITORING":
-            return (120.0, "NORMAL") if parent_v > 0 else (0.0, "OFF")
-
         # ── SERVER_RACK (2N) ──────────────────────────────────────────────────
         # parent          = rectifier_a
         # secondary_parent = rectifier_b
@@ -362,9 +378,6 @@ class WinterRiverEngine:
                     f"INPUT:{v_out:.1f} TEMP:{t['cold_aisle_f']:.1f} "
                     f"SPEED:{t['flow_pct_max']:.0f} STATUS:{cool_status}"
                 )
-            return f"INPUT:{v_out:.1f} STATUS:{status}"
-
-        elif ntype == "MONITORING":
             return f"INPUT:{v_out:.1f} STATUS:{status}"
 
         elif ntype == "LIGHTING":
@@ -462,23 +475,19 @@ class WinterRiverEngine:
     # ── Thermal coupling ──────────────────────────────────────────────────────
 
     def _compute_tick_thermal(self, nodes):
-        """Run the thermal model using current cooling-node state for fan count."""
+        """Run the thermal model using live fans_running counts from cooling_a/_b.
+        Each cooling node simulates 55 fans; A + B → 110 nominal. A side that
+        is power-offline contributes 0 fans regardless of its last reported value.
+        """
         cool_a = nodes.get("cooling_a")
         cool_b = nodes.get("cooling_b")
         a_on = bool(cool_a and cool_a.get("v_out", 0) > 0)
         b_on = bool(cool_b and cool_b.get("v_out", 0) > 0)
         cooling_online = a_on or b_on
 
-        nominal = (
-            self._thermal_cfg.fan_modules * self._thermal_cfg.fans_per_module
-            + self._thermal_cfg.fan_diff
-        )
-        if a_on and b_on:
-            fan_override = nominal
-        elif a_on or b_on:
-            fan_override = nominal // 2
-        else:
-            fan_override = 0
+        fans_a = self._cooling_fans.get("cooling_a", 0) if a_on else 0
+        fans_b = self._cooling_fans.get("cooling_b", 0) if b_on else 0
+        fan_override = max(0, fans_a + fans_b + self._thermal_cfg.fan_diff)
 
         return compute_thermal(
             outdoor_f=self._weather["outdoor_f"],
@@ -491,6 +500,8 @@ class WinterRiverEngine:
     def _publish_facility_status(self, t):
         if not t:
             return
+        per_side_nominal = self._thermal_cfg.fans_per_module
+        fans_nominal     = per_side_nominal * 2
         payload = {
             "ts":              time.strftime("%H:%M:%S"),
             "node":            "facility",
@@ -506,6 +517,9 @@ class WinterRiverEngine:
             "fan_pct_max":     round(t["fan_pct_max"], 1),
             "flow_pct_max":    round(t["flow_pct_max"], 1),
             "fan_count":       t["fan_count"],
+            "fans_running_a":  self._cooling_fans.get("cooling_a", 0),
+            "fans_running_b":  self._cooling_fans.get("cooling_b", 0),
+            "fans_nominal":    fans_nominal,
             "rack_dp_pa":      round(t["rack_dp_pa"], 2),
             "fan_dp_pa":       round(t["fan_dp_pa"], 2),
             "racks_total":     t["racks_total"],

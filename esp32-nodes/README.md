@@ -54,11 +54,10 @@ sudo systemctl start mosquitto
 | ⑦ | `ups_a` | `ups/ups_a/` | 480 V AC |
 | ⑧ | `pdu_a` | `pdu/pdu_a/` | 480 V AC |
 | ⑨ | `rectifier_a` | `rectifier/rectifier_a/` | 48 V DC |
-| ⑩ | `cooling_a` | `cooling/cooling_a/` | 480 V |
+| ⑩ | `cooling_a` | `cooling/cooling_a/` | 480 V (fan bank — 55 fans) |
 | ⑪ | `lighting_a` | `lighting/lighting_a/` | 277 V |
-| ⑫ | `monitoring_a` | `monitoring/monitoring_a/` | 120 V |
 
-### Side B (12 nodes — mirror of Side A)
+### Side B (11 nodes — mirror of Side A)
 
 All `_a` suffixes replaced with `_b`. Component type directories are identical.
 
@@ -116,7 +115,6 @@ pio run -e pdu_a --target upload
 pio run -e rectifier_a --target upload
 pio run -e cooling_a --target upload
 pio run -e lighting_a --target upload
-pio run -e monitoring_a --target upload
 pio run -e server_rack --target upload
 
 # Flash Side B (same pattern with _b suffix)

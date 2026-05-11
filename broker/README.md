@@ -40,9 +40,8 @@ WinterRiverEngine (broker/main.py)
 | `UPS` | `ups_a`, `ups_b` | Passes voltage with battery tracking; 0 V on `FAULT` |
 | `PDU` | `pdu_a`, `pdu_b` | Passes UPS voltage; 0 V on `FAULT` |
 | `RECTIFIER` | `rectifier_a/b` | 480 V AC → 48 V DC; 0 on `OFF`/`FAULT` |
-| `COOLING` | `cooling_a/b` | Mechanical load — monitored but not in IT power chain |
+| `COOLING` | `cooling_a/b` | Fan bank (55 fans/side, 110 total) — drives broker thermal model |
 | `LIGHTING` | `lighting_a/b` | Mechanical load — monitored but not in IT power chain |
-| `MONITORING` | `monitoring_a/b` | 120 V monitoring load — not in IT power chain |
 | `SERVER_RACK` | `server_rack` | 2N node — NORMAL if both paths live, DEGRADED if one path down, FAULT if both down |
 
 ---

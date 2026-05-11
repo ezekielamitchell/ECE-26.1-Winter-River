@@ -155,7 +155,6 @@ else
     node_status "rectifier_a      " rectifier_a
     node_status "cooling_a        " cooling_a
     node_status "lighting_a       " lighting_a
-    node_status "monitoring_a     " monitoring_a
 
     echo "  Side B:"
     node_status "utility_b        " utility_b
@@ -169,9 +168,10 @@ else
     node_status "rectifier_b      " rectifier_b
     node_status "cooling_b        " cooling_b
     node_status "lighting_b       " lighting_b
-    node_status "monitoring_b     " monitoring_b
 
     echo "  Shared:"
+    node_status "facility         " facility
+    node_status "weather          " weather
     node_status "server_rack      " server_rack
 fi
 echo ""

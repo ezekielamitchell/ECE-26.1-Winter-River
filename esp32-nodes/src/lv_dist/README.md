@@ -10,8 +10,8 @@ The low-voltage (LV) distribution board — also called a main switchboard or LV
 
 | node_id     | Side | Rated Voltage | Rating | Parent  | Children                                     |
 |-------------|------|---------------|--------|---------|----------------------------------------------|
-| `lv_dist_a` | A    | 480 V         | 384 kW | `ats_a` | `ups_a`, `cooling_a`, `lighting_a`, `monitoring_a` |
-| `lv_dist_b` | B    | 480 V         | 384 kW | `ats_b` | `ups_b`, `cooling_b`, `lighting_b`, `monitoring_b` |
+| `lv_dist_a` | A    | 480 V         | 384 kW | `ats_a` | `ups_a`, `cooling_a`, `lighting_a` |
+| `lv_dist_b` | B    | 480 V         | 384 kW | `ats_b` | `ups_b`, `cooling_b`, `lighting_b` |
 
 ---
 
