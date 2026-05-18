@@ -3,8 +3,8 @@
 #include <unity.h>
 
 // WiFi credentials - update these for your network
-const char* WIFI_SSID = "endr";
-const char* WIFI_PASSWORD = "SeattleUniversity01$$";
+const char* WIFI_SSID = "WinterRiver-AP";
+const char* WIFI_PASSWORD = "winterriver";
 
 void setUp(void) {
     // Disconnect any existing connection before each test
