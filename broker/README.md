@@ -19,7 +19,7 @@ WinterRiverEngine (broker/main.py)
     ├── _load_topology()     PostgreSQL → in-memory node graph
     ├── _topo_sort()         Kahn's BFS — respects secondary_parent_id
     ├── _tick()              1 Hz cascade propagation loop
-    │     ├── node type handlers (13 types)
+    │     ├── node type handlers (12 types)
     │     ├── publish control commands → MQTT
     │     └── write_to_influx() → InfluxDB (optional)
     └── PostgreSQL live_status updates
@@ -32,17 +32,17 @@ WinterRiverEngine (broker/main.py)
 | Type | node_ids | Key Logic |
 |------|----------|-----------|
 | `UTILITY` | `utility_a`, `utility_b` | Root nodes; `v_out` = 230 kV when `GRID_OK/SAG/SWELL`, 0 on `OUTAGE/FAULT/OFFLINE` |
+| `HV_MV_TRANSFORMER` | `hv_mv_transformer_a/b` | 230 kV → 34.5 kV step-down; passes when `NORMAL/WARNING`, 0 on `FAULT` |
 | `MV_SWITCHGEAR` | `mv_switchgear_a/b` | Passes parent voltage when `CLOSED`; 0 when `OPEN/TRIPPED/FAULT` |
-| `MV_LV_TRANSFORMER` | `mv_lv_transformer_a/b` | Passes parent voltage when `NORMAL/WARNING`; 0 when `FAULT` |
+| `MV_LV_TRANSFORMER` | `mv_lv_transformer_a/b` | 34.5 kV → 480 V; passes when `NORMAL/WARNING`, 0 on `FAULT` |
 | `GENERATOR` | `generator_a`, `generator_b` | Standby while utility is live; 10-tick startup delay on utility loss; 480 V when `RUNNING` |
 | `ATS` | `ats_a`, `ats_b` | Prefers transformer (utility) path; falls back to generator; `OPEN` if both down |
 | `LV_DIST` | `lv_dist_a/b` | Distributes ATS voltage to all downstream IT + mechanical branches |
-| `UPS` | `ups_a`, `ups_b` | Passes voltage with battery tracking; 0 V on `FAULT` |
-| `PDU` | `pdu_a`, `pdu_b` | Passes UPS voltage; 0 V on `FAULT` |
-| `RECTIFIER` | `rectifier_a/b` | 480 V AC → 48 V DC; 0 on `OFF`/`FAULT` |
+| `UPS` | `ups_a`, `ups_b` | Passes voltage with battery tracking; feeds the shared rectifier |
+| `RECTIFIER` | `rectifier` (shared, 2N) | 480 V AC → 48 V DC; NORMAL when both UPS feeds live, DEGRADED if one is down, OFF if both down |
 | `COOLING` | `cooling_a/b` | Fan bank (55 fans/side, 110 total) — drives broker thermal model |
 | `LIGHTING` | `lighting_a/b` | Mechanical load — monitored but not in IT power chain |
-| `SERVER_RACK` | `server_rack` | 2N node — NORMAL if both paths live, DEGRADED if one path down, FAULT if both down |
+| `SERVER_RACK` | `server_rack` | Single-fed from `rectifier`; inherits its `NORMAL` / `DEGRADED` status, `FAULT` if rectifier is off |
 
 ---
 
@@ -73,16 +73,22 @@ This means the ATS output drops to 0 V for ~10 seconds before generator power ar
 
 ---
 
-## 2N Server Rack Logic
+## 2N Rectifier Logic
 
-`server_rack` has two parents (`rectifier_a` and `rectifier_b`) and combines their status:
+The shared `rectifier` is now the 2N convergence point. It has two parents
+(`ups_a` and `ups_b`) and combines their status:
 
-| Path A | Path B | server_rack state | v_out |
-|--------|--------|-------------------|-------|
-| live   | live   | `NORMAL`          | 48 V  |
-| live   | dead   | `DEGRADED`        | 48 V  |
-| dead   | live   | `DEGRADED`        | 48 V  |
-| dead   | dead   | `FAULT`           | 0 V   |
+| Path A (ups_a) | Path B (ups_b) | rectifier state | v_out |
+|----------------|----------------|-----------------|-------|
+| live           | live           | `NORMAL`        | 48 V  |
+| live           | dead           | `DEGRADED`      | 48 V  |
+| dead           | live           | `DEGRADED`      | 48 V  |
+| dead           | dead           | `OFF`           | 0 V   |
+
+`server_rack` is single-fed from the rectifier and inherits its state. The
+broker mirrors the rectifier's `PATH_A` / `PATH_B` indicators into the
+server_rack control payload so the downstream display still reflects upstream
+2N health.
 
 ---
 
@@ -171,7 +177,7 @@ nodes (
     node_type            VARCHAR(30),     -- UTILITY, MV_SWITCHGEAR, GENERATOR, ATS, etc.
     side                 CHAR(1),         -- 'A', 'B', or NULL (shared)
     parent_id            VARCHAR(50),     -- primary upstream node
-    secondary_parent_id  VARCHAR(50),     -- ATS generator input / server_rack Side B
+    secondary_parent_id  VARCHAR(50),     -- ATS generator input / rectifier Side B
     rated_voltage        FLOAT,
     v_ratio              FLOAT
 )

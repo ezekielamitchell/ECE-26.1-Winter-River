@@ -8,10 +8,10 @@ Medium-voltage (MV) switchgear is the primary electrical isolation and protectio
 
 ## Nodes in This Topology
 
-| node_id           | Side | Rated Voltage | Parent      | Child                  |
-|-------------------|------|---------------|-------------|------------------------|
-| `mv_switchgear_a` | A    | 34.5 kV       | `utility_a` | `mv_lv_transformer_a`  |
-| `mv_switchgear_b` | B    | 34.5 kV       | `utility_b` | `mv_lv_transformer_b`  |
+| node_id           | Side | Rated Voltage | Parent                  | Child                 |
+|-------------------|------|---------------|-------------------------|-----------------------|
+| `mv_switchgear_a` | A    | 34.5 kV       | `hv_mv_transformer_a`   | `mv_lv_transformer_a` |
+| `mv_switchgear_b` | B    | 34.5 kV       | `hv_mv_transformer_b`   | `mv_lv_transformer_b` |
 
 ---
 

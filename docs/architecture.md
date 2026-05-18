@@ -30,7 +30,7 @@ The Winter River system consists of three main layers:
     ▼                    ▼                       ▼
 ┌──────────┐      ┌──────────┐           ┌──────────┐
 │  ESP32   │      │  ESP32   │    ...    │  ESP32   │
-│  pdu_a   │      │  ups_a   │           │  srv_a   │
+│  ups_a   │      │  ups_b   │           │ rectifier│
 │          │      │          │           │          │
 │ - OLED   │      │ - OLED   │           │ - OLED   │
 │ - WiFi   │      │ - WiFi   │           │ - WiFi   │
@@ -112,7 +112,10 @@ winter-river/
 │   ├── status     # Node telemetry + health (JSON) — published by ESP32
 │   └── command    # Commands to the node (JSON)   — published by broker/Pi
 │
-│   Node IDs: util_a, trf_a, sw_a, gen_a, dist_a, ups_a, pdu_a, srv_a, ...
+│   Node IDs: utility_a, hv_mv_transformer_a, mv_switchgear_a, mv_lv_transformer_a,
+│             generator_a, ats_a, lv_dist_a, ups_a, cooling_a, lighting_a,
+│             (mirrored on Side B), rectifier, server_rack
+
 ```
 
 ## Data Format
@@ -121,11 +124,12 @@ winter-river/
 
 ```json
 {
-  "node_id": "pdu_a",
+  "node_id": "ups_a",
   "voltage_in": 480.0,
-  "current": 12.5,
-  "power_kw": 6.0,
-  "status": "ok",
+  "voltage_out": 480.0,
+  "battery_pct": 100,
+  "load_pct": 40,
+  "status": "NORMAL",
   "wifi_rssi": -62,
   "uptime": 3600
 }

@@ -1,6 +1,10 @@
-# PDU A
+# PDU A *(deprecated — removed from topology)*
 
-`pdu_a` is the active Side A Power Distribution Unit in the Winter River 25-node topology. It uses the SSD1306 + MQTT/LWT + shared `winter_river` helper pattern used across the active node fleet.
+`pdu_a` was the Side A Power Distribution Unit in earlier Winter River
+revisions. The 2N redesign routes `ups_a` directly into the shared
+`rectifier`, so `pdu_a` is no longer present in `scripts/init_db.sql` and the
+broker no longer dispatches a `PDU` handler. This firmware folder is kept for
+historical reference only.
 
 ## Current Behavior
 

@@ -1,6 +1,10 @@
-# PDU B
+# PDU B *(deprecated — removed from topology)*
 
-`pdu_b` is the active Side B Power Distribution Unit in the Winter River 25-node topology. It now uses the same SSD1306 + MQTT/LWT + shared `winter_river` helper pattern as `pdu_a`.
+`pdu_b` was the Side B Power Distribution Unit in earlier Winter River
+revisions. The 2N redesign routes `ups_b` directly into the shared
+`rectifier`, so `pdu_b` is no longer present in `scripts/init_db.sql` and the
+broker no longer dispatches a `PDU` handler. This firmware folder is kept for
+historical reference only.
 
 ## Current Behavior
 

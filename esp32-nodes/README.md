@@ -1,6 +1,6 @@
 # ESP32 Nodes — Firmware Reference
 
-PlatformIO firmware for all 25 ESP32 nodes in the ECE 26.1 Winter River simulator. Each node simulates one component in a 2N-redundant data centre power chain, publishes JSON telemetry every 5 seconds, subscribes to MQTT control commands, and drives an SSD1306 128×64 OLED display.
+PlatformIO firmware for the 22 ESP32 nodes in the ECE 26.1 Winter River simulator. Each node simulates one component in a 2N-redundant data centre power chain, publishes JSON telemetry every 5 seconds, subscribes to MQTT control commands, and drives an SSD1306 128×64 OLED display.
 
 ---
 
@@ -41,31 +41,31 @@ sudo systemctl start mosquitto
 
 ## Node Inventory
 
-### Side A (12 nodes)
+### Side A (10 nodes)
 
-| # | `node_id` | Component type dir | Rated voltage |
-|---|-----------|-------------------|---------------|
-| ① | `utility_a` | `utility/utility_a/` | 230 kV |
-| ② | `mv_switchgear_a` | `mv_switchgear/mv_switchgear_a/` | 34.5 kV |
-| ③ | `mv_lv_transformer_a` | `mv_lv_transformer/mv_lv_transformer_a/` | 480 V out |
-| ④ | `generator_a` | `generator/generator_a/` | 480 V |
-| ⑤ | `ats_a` | `ats/ats_a/` | 480 V |
-| ⑥ | `lv_dist_a` | `lv_dist/lv_dist_a/` | 480 V |
-| ⑦ | `ups_a` | `ups/ups_a/` | 480 V AC |
-| ⑧ | `pdu_a` | `pdu/pdu_a/` | 480 V AC |
-| ⑨ | `rectifier_a` | `rectifier/rectifier_a/` | 48 V DC |
-| ⑩ | `cooling_a` | `cooling/cooling_a/` | 480 V (fan bank — 55 fans) |
-| ⑪ | `lighting_a` | `lighting/lighting_a/` | 277 V |
+| #  | `node_id`                | Component type dir                         | Rated voltage              |
+|----|--------------------------|--------------------------------------------|----------------------------|
+| ①  | `utility_a`              | `utility/utility_a/`                       | 230 kV                     |
+| ②  | `hv_mv_transformer_a`    | `hv_mv_transformer/hv_mv_transformer_a/`   | 34.5 kV out                |
+| ③  | `mv_switchgear_a`        | `mv_switchgear/mv_switchgear_a/`           | 34.5 kV                    |
+| ④  | `mv_lv_transformer_a`    | `mv_lv_transformer/mv_lv_transformer_a/`   | 480 V out                  |
+| ⑤  | `generator_a`            | `generator/generator_a/`                   | 480 V                      |
+| ⑥  | `ats_a`                  | `ats/ats_a/`                               | 480 V                      |
+| ⑦  | `lv_dist_a`              | `lv_dist/lv_dist_a/`                       | 480 V                      |
+| ⑧  | `ups_a`                  | `ups/ups_a/`                               | 480 V AC                   |
+| ⑨  | `cooling_a`              | `cooling/cooling_a/`                       | 480 V (fan bank — 55 fans) |
+| ⑩  | `lighting_a`             | `lighting/lighting_a/`                     | 277 V                      |
 
-### Side B (11 nodes — mirror of Side A)
+### Side B (10 nodes — mirror of Side A)
 
 All `_a` suffixes replaced with `_b`. Component type directories are identical.
 
-### Shared (1 node)
+### Shared (2 nodes — 2N convergence)
 
-| `node_id` | Component type dir | Rated voltage | Parents |
-|-----------|--------------------|---------------|---------|
-| `server_rack` | `server_rack/server_rack/` | 48 V DC | `rectifier_a` + `rectifier_b` |
+| `node_id`     | Component type dir          | Rated voltage      | Parents                       |
+|---------------|-----------------------------|--------------------|-------------------------------|
+| `rectifier`   | `rectifier/rectifier/`      | 480 V AC → 48 V DC | `ups_a` + `ups_b`             |
+| `server_rack` | `server_rack/server_rack/`  | 48 V DC            | `rectifier` (single feed)     |
 
 ---
 
@@ -105,23 +105,25 @@ All commands run from the `esp32-nodes/` directory:
 ```bash
 # Build + flash a single node
 pio run -e utility_a --target upload
+pio run -e hv_mv_transformer_a --target upload
 pio run -e mv_switchgear_a --target upload
 pio run -e mv_lv_transformer_a --target upload
 pio run -e generator_a --target upload
 pio run -e ats_a --target upload
 pio run -e lv_dist_a --target upload
 pio run -e ups_a --target upload
-pio run -e pdu_a --target upload
-pio run -e rectifier_a --target upload
 pio run -e cooling_a --target upload
 pio run -e lighting_a --target upload
+
+# Shared 2N nodes
+pio run -e rectifier --target upload
 pio run -e server_rack --target upload
 
 # Flash Side B (same pattern with _b suffix)
 pio run -e utility_b --target upload
 # ... etc.
 
-# Build all 25 envs without flashing
+# Build all envs without flashing
 pio run
 
 # Serial monitor (115200 baud)
@@ -178,7 +180,7 @@ Declared in the shared `[env]` block in `platformio.ini` — available to all en
 | `adafruit/Adafruit SSD1306@^2.5.7` | 128×64 OLED driver |
 | `adafruit/Adafruit GFX Library@^1.11.5` | OLED graphics primitives |
 
-> `LiquidCrystal_I2C` is **not** included. The only legacy node that used it (`pdu_b`) has been replaced with SSD1306-based firmware.
+> `LiquidCrystal_I2C` is **not** included — every active node uses the shared SSD1306 driver.
 
 ---
 
@@ -201,15 +203,14 @@ mosquitto_pub -h 192.168.4.1 -t "winter-river/utility_a/control" -m "STATUS:OUTA
 For per-node control commands, see the `README.md` inside each component type directory:
 
 - [`src/utility/README.md`](src/utility/README.md)
+- [`src/hv_mv_transformer/README.md`](src/hv_mv_transformer/README.md)
 - [`src/mv_switchgear/README.md`](src/mv_switchgear/README.md)
 - [`src/mv_lv_transformer/README.md`](src/mv_lv_transformer/README.md)
 - [`src/generator/README.md`](src/generator/README.md)
 - [`src/ats/README.md`](src/ats/README.md)
 - [`src/lv_dist/README.md`](src/lv_dist/README.md)
 - [`src/ups/README.md`](src/ups/README.md)
-- [`src/pdu/README.md`](src/pdu/README.md)
-- [`src/rectifier/README.md`](src/rectifier/README.md)
 - [`src/cooling/README.md`](src/cooling/README.md)
 - [`src/lighting/README.md`](src/lighting/README.md)
-- [`src/monitoring/README.md`](src/monitoring/README.md)
+- [`src/rectifier/README.md`](src/rectifier/README.md)
 - [`src/server_rack/README.md`](src/server_rack/README.md)
