@@ -1,6 +1,6 @@
 # UPS A
 
-`ups_a` is the active Side A Uninterruptible Power Supply in the Winter River 25-node topology. It uses the same SSD1306 + MQTT/LWT + shared `winter_river` helper pattern as `ups_b`.
+`ups_a` is the active Side A Uninterruptible Power Supply in the Winter River topology. It feeds the shared 2N `rectifier` (primary input) alongside `ups_b` (secondary), and uses the same SSD1306 + MQTT/LWT + shared `winter_river` helper pattern as `ups_b`.
 
 ## Current Behavior
 

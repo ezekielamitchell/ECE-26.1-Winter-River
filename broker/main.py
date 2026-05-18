@@ -1,7 +1,7 @@
 """
 Winter River Simulation Engine
 Reads ESP32 MQTT telemetry → propagates power hierarchy → publishes control commands.
-Topology: 24 nodes (12 Side A + 12 Side B) + 1 shared server_rack (2N).
+Topology: Side A + Side B converge at a single shared rectifier (2N) → server_rack.
 Tick rate: 1 Hz (configurable in config.toml).
 """
 
@@ -119,7 +119,6 @@ class WinterRiverEngine:
             try:
                 payload = json.loads(msg.payload)
             except (json.JSONDecodeError, UnicodeDecodeError):
-                # pdu_a still publishes a plain string
                 payload = {"status": "ONLINE"}
 
             is_present = payload.get("status") != "OFFLINE"
@@ -233,6 +232,14 @@ class WinterRiverEngine:
             v_out  = 0.0 if status in ("OUTAGE", "FAULT", "OFFLINE") else 230000.0
             return v_out, status
 
+        # ── HV_MV_TRANSFORMER ─────────────────────────────────────────────────
+        # 230 kV → 34.5 kV step-down between the utility and MV switchgear.
+        elif ntype == "HV_MV_TRANSFORMER":
+            if parent_v > 0:
+                status = node["status_msg"]
+                return 34500.0, "NORMAL" if status not in ("WARNING", "FAULT") else status
+            return 0.0, "FAULT" if node["status_msg"] == "FAULT" else "NO_INPUT"
+
         # ── MV_SWITCHGEAR ─────────────────────────────────────────────────────
         elif ntype == "MV_SWITCHGEAR":
             status = node["status_msg"]
@@ -299,13 +306,17 @@ class WinterRiverEngine:
                 return 480.0, "ON_BATTERY"
             return 0.0, "FAULT"
 
-        # ── PDU ───────────────────────────────────────────────────────────────
-        elif ntype == "PDU":
-            return (480.0, "NORMAL") if parent_v > 0 else (0.0, "OFF")
-
-        # ── RECTIFIER (480 V AC → 48 V DC) ───────────────────────────────────
+        # ── RECTIFIER (480 V AC → 48 V DC, 2N shared) ────────────────────────
+        # parent           = ups_a (primary feed)
+        # secondary_parent = ups_b (secondary feed)
         elif ntype == "RECTIFIER":
-            return (48.0, "NORMAL") if parent_v > 0 else (0.0, "OFF")
+            a_ok = parent_v > 0
+            b_ok = sec_parent_v > 0
+            if a_ok and b_ok:
+                return 48.0, "NORMAL"
+            if a_ok or b_ok:
+                return 48.0, "DEGRADED"
+            return 0.0, "OFF"
 
         # ── COOLING ───────────────────────────────────────────────────────────
         elif ntype == "COOLING":
@@ -315,16 +326,13 @@ class WinterRiverEngine:
         elif ntype == "LIGHTING":
             return (277.0, "ON") if parent_v > 0 else (0.0, "OFF")
 
-        # ── SERVER_RACK (2N) ──────────────────────────────────────────────────
-        # parent          = rectifier_a
-        # secondary_parent = rectifier_b
+        # ── SERVER_RACK ───────────────────────────────────────────────────────
+        # Single-fed from the shared rectifier; redundancy lives upstream
+        # (rectifier owns the 2N path status from ups_a/ups_b).
         elif ntype == "SERVER_RACK":
-            a_ok = parent_v > 0
-            b_ok = sec_parent_v > 0
-            if a_ok and b_ok:
-                return 48.0, "NORMAL"
-            if a_ok or b_ok:
-                return 48.0, "DEGRADED"
+            if parent_v > 0:
+                rect_status = parent["status_msg"] if parent else "NORMAL"
+                return 48.0, rect_status if rect_status in ("DEGRADED",) else "NORMAL"
             return 0.0, "FAULT"
 
         log.warning("Unknown node_type %r for %s", ntype, node["node_id"])
@@ -338,6 +346,9 @@ class WinterRiverEngine:
 
         if ntype == "UTILITY":
             return f"VOLT:{v_out} STATUS:{status}"
+
+        elif ntype == "HV_MV_TRANSFORMER":
+            return f"STATUS:{status}"
 
         elif ntype == "MV_SWITCHGEAR":
             return f"CLOSE STATUS:{status}" if v_out > 0 else f"OPEN STATUS:{status}"
@@ -360,12 +371,14 @@ class WinterRiverEngine:
                 f"INPUT:{v_out:.1f} BATT:{node['battery_level']} STATUS:{status}"
             )
 
-        elif ntype == "PDU":
-            return f"INPUT:{v_out:.1f} STATUS:{status}"
-
         elif ntype == "RECTIFIER":
+            path_a = 1 if (node.get("parent_v_a", 0) > 0) else 0
+            path_b = 1 if (node.get("parent_v_b", 0) > 0) else 0
             ac_in = 480.0 if v_out > 0 else 0.0
-            return f"INPUT_AC:{ac_in:.1f} STATUS:{status}"
+            return (
+                f"INPUT_AC:{ac_in:.1f} PATH_A:{path_a} PATH_B:{path_b} "
+                f"STATUS:{status}"
+            )
 
         elif ntype == "COOLING":
             t = self._latest_thermal
@@ -386,7 +399,11 @@ class WinterRiverEngine:
         elif ntype == "SERVER_RACK":
             path_a = 1 if (node.get("parent_v_a", 0) > 0) else 0
             path_b = 1 if (node.get("parent_v_b", 0) > 0) else 0
-            base = f"PATH_A:{path_a} PATH_B:{path_b} STATUS:{status}"
+            input_v = 48.0 if v_out > 0 else 0.0
+            base = (
+                f"INPUT:{input_v:.1f} PATH_A:{path_a} PATH_B:{path_b} "
+                f"STATUS:{status}"
+            )
             t = self._latest_thermal
             if t is not None and math.isfinite(t["hot_aisle_f"]):
                 base += f" TEMP:{t['hot_aisle_f']:.1f}"
@@ -418,13 +435,25 @@ class WinterRiverEngine:
             for nid in order:
                 node = nodes[nid]
                 v_out, status = self._compute_node(node, nodes)
-                if node["node_type"] == "SERVER_RACK":
+                # Rectifier is the 2N convergence point — record both UPS
+                # feeds so its control cmd (and the downstream server_rack)
+                # can report PATH_A / PATH_B health.
+                if node["node_type"] == "RECTIFIER":
                     parent = nodes.get(node.get("parent_id"))
                     sec    = nodes.get(node.get("secondary_parent_id"))
                     node["parent_v_a"] = parent["v_out"] if parent else 0.0
                     node["parent_v_b"] = sec["v_out"]    if sec    else 0.0
                 node["v_out"]      = v_out
                 node["status_msg"] = status
+
+            # Mirror the rectifier's PATH_A / PATH_B onto the server_rack so
+            # its control cmd reflects the upstream 2N state.
+            rectifier = nodes.get("rectifier")
+            if rectifier is not None:
+                for n in nodes.values():
+                    if n["node_type"] == "SERVER_RACK":
+                        n["parent_v_a"] = rectifier.get("parent_v_a", 0.0)
+                        n["parent_v_b"] = rectifier.get("parent_v_b", 0.0)
 
             # Compute thermal from updated node state — needed before publishing
             # cooling/server_rack control commands so they can carry TEMP/SPEED.

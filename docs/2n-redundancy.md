@@ -8,47 +8,47 @@ This document explains how the Winter River simulator implements 2N redundancy: 
 
 2N means **two independent, full-capacity power paths** feed every load. If one path fails completely, the other carries 100% of the load with no interruption. Real data centers use this to achieve continuous uptime even during a full side failure.
 
-In Winter River, the load is the `server_rack`. It receives 48V DC from two completely separate chains:
+In Winter River, the load is the `server_rack`. The two utility paths converge at a single shared `rectifier`, which accepts dual AC inputs:
 
-- **Side A** — `utility_a → ... → rectifier_a → server_rack`
-- **Side B** — `utility_b → ... → rectifier_b → server_rack`
+- **Side A** — `utility_a → ... → ups_a → rectifier (primary feed)`
+- **Side B** — `utility_b → ... → ups_b → rectifier (secondary feed)`
+- **Output** — `rectifier → server_rack (48V DC)`
 
-Both paths run simultaneously. The server rack reports which paths are live.
+Both AC feeds run simultaneously. The rectifier reports which feeds are live (PATH_A / PATH_B); the server rack mirrors that status on its OLED.
 
 ---
 
 ## Full Dual-Path Topology
 
 ```
-SIDE A                                      SIDE B
+SIDE A                                          SIDE B
 ──────────────────────────────────────────────────────────────────
-utility_a (230kV grid)                      utility_b (230kV grid)
-    │                                           │
-mv_switchgear_a (breaker)               mv_switchgear_b (breaker)
-    │                                           │
-mv_lv_transformer_a (→480V)         mv_lv_transformer_b (→480V)
-    │                      ┌──────────────────┐ │
-    └──────────┐            │    generator_a/b │ │
-           ats_a ←──────────┘                └─→ ats_b
-               │   (switches to generator          │
-               │    if transformer fails)           │
-          lv_dist_a (480V bus)              lv_dist_b (480V bus)
-          ├── cooling_a                     ├── cooling_b
-          ├── lighting_a                    ├── lighting_b
-          ├── monitoring_a                  ├── monitoring_b
-          └── ups_a                         └── ups_b
-                 │                                 │
-              pdu_a                             pdu_b
-                 │                                 │
-           rectifier_a (→48V DC)          rectifier_b (→48V DC)
-                 │                                 │
-                 └──────────┬────────────────────┘
+utility_a (230kV grid)                          utility_b (230kV grid)
+    │                                               │
+hv_mv_transformer_a (230kV→34.5kV)          hv_mv_transformer_b (230kV→34.5kV)
+    │                                               │
+mv_switchgear_a (breaker)                   mv_switchgear_b (breaker)
+    │                                               │
+mv_lv_transformer_a (→480V)             mv_lv_transformer_b (→480V)
+    │                      ┌──────────────────┐     │
+    └──────────┐            │    generator_a/b │    │
+           ats_a ←──────────┘                └─────→ ats_b
+               │   (switches to generator               │
+               │    if transformer fails)                │
+          lv_dist_a (480V bus)                  lv_dist_b (480V bus)
+          ├── cooling_a                         ├── cooling_b
+          ├── lighting_a                        ├── lighting_b
+          └── ups_a                             └── ups_b
+                 │                                     │
+                 └──────────┬────────────────────────┘
+                            │
+                       rectifier (shared, 480V AC → 48V DC, 2N inputs)
                             │
                        server_rack
-                    (48V DC, 2N shared)
+                       (48V DC)
 ```
 
-Each side is a complete, independent chain. The `server_rack` is the only shared node — it deliberately receives input from both sides.
+Each side is a complete, independent AC chain. The shared `rectifier` is the 2N convergence point — it receives both AC feeds and produces a single 48V DC bus to the `server_rack`. PATH_A / PATH_B health on the rack OLED reflects the upstream `ups_a` / `ups_b` AC feeds.
 
 ---
 
@@ -82,20 +82,20 @@ When utility recovers, the generator returns to `STANDBY` and the ATS switches b
 
 ### Layer 2 — Side A vs Side B Independence
 
-The two sides share nothing except the server rack. A complete failure of Side A (utility outage + generator fault) leaves Side B fully operational, keeping the server rack powered. The engine computes each side independently in topological order.
+The two AC sides share nothing upstream of the rectifier. A complete failure of Side A (utility outage + generator fault) leaves Side B fully operational, still delivering 480V AC to the shared rectifier and keeping the server rack powered. The engine computes each side independently in topological order.
 
-### Layer 3 — Dual Rectifier Paths to Server Rack
+### Layer 3 — Dual AC Inputs at the Shared Rectifier
 
-The `server_rack` node has two DC inputs: `rectifier_a` and `rectifier_b`. The engine checks both every tick:
+The `rectifier` node has two AC inputs: `ups_a` (primary) and `ups_b` (secondary). The engine checks both every tick:
 
-| rectifier_a | rectifier_b | server_rack state |
-|---|---|---|
-| alive (48V) | alive (48V) | `NORMAL` |
-| alive | dead | `DEGRADED` |
-| dead | alive | `DEGRADED` |
-| dead | dead | `FAULT` |
+| ups_a feed | ups_b feed | rectifier state | server_rack state |
+|---|---|---|---|
+| alive (480V) | alive (480V) | `NORMAL`   | `NORMAL`   |
+| alive        | dead         | `DEGRADED` | `DEGRADED` |
+| dead         | alive        | `DEGRADED` | `DEGRADED` |
+| dead         | dead         | `OFF`      | `FAULT`    |
 
-The server rack OLED shows `PathA: OK/NO` and `PathB: OK/NO` so you can see the live dual-path status at a glance.
+The server rack OLED shows `PathA: OK/NO` and `PathB: OK/NO` so you can see the live dual-feed status at a glance. The broker mirrors the rectifier's `parent_v_a` / `parent_v_b` onto the rack so its control payload still carries `PATH_A` / `PATH_B`.
 
 ---
 
@@ -103,8 +103,8 @@ The server rack OLED shows `PathA: OK/NO` and `PathB: OK/NO` so you can see the 
 
 The engine in `broker/main.py` runs a 1-second tick loop:
 
-1. **Read** — fetch all 25 node states from PostgreSQL `live_status`.
-2. **Sort** — topologically sort nodes so parents are always computed before children. The sort respects both `parent_id` and `secondary_parent_id` (the ATS generator path and the server rack's second rectifier).
+1. **Read** — fetch all 22 node states from PostgreSQL `live_status`.
+2. **Sort** — topologically sort nodes so parents are always computed before children. The sort respects both `parent_id` and `secondary_parent_id` (the ATS generator path and the rectifier's second UPS input).
 3. **Propagate** — walk nodes in order, calling `_compute_node()` which applies the redundancy logic for each node type.
 4. **Command** — publish a control message to each node's MQTT `/control` topic with the computed state.
 5. **Persist** — write updated `v_out`, `status_msg`, `battery_level`, and `gen_timer` back to the DB.
@@ -119,20 +119,23 @@ The database is the source of truth for inter-node state. The ESP32 firmware is 
 
 ```
 utility_a → OUTAGE
+    → hv_mv_transformer_a: NO_INPUT
     → mv_switchgear_a: v_out = 0
     → mv_lv_transformer_a: NO_INPUT
     → ats_a: OPEN (no input)
     → generator_a: STARTING (10-tick delay)
-    → lv_dist_a, ups_a, pdu_a, rectifier_a: cascade to OFF/NO_INPUT
+    → lv_dist_a, ups_a: cascade to OFF/NO_INPUT
+    → rectifier: DEGRADED (only ups_b feed alive)
 
 After 10 ticks:
     → generator_a: RUNNING (480V)
     → ats_a: GENERATOR (480V restored)
-    → lv_dist_a → ups_a → pdu_a → rectifier_a: NORMAL
-    → server_rack: DEGRADED → NORMAL (both paths restored)
+    → lv_dist_a → ups_a: NORMAL
+    → rectifier: NORMAL (both feeds restored)
+    → server_rack: DEGRADED → NORMAL
 
 Side B: unaffected throughout
-server_rack during outage: DEGRADED (only rectifier_b alive)
+server_rack during outage: DEGRADED (rectifier running on ups_b only)
 server_rack after recovery: NORMAL
 ```
 
@@ -143,10 +146,11 @@ utility_a → OUTAGE
 generator_a → FAULT
 
     → ats_a: OPEN
-    → all of Side A: NO_INPUT / OFF
-    → rectifier_a: OFF (0V DC)
+    → all of Side A AC chain: NO_INPUT / OFF
+    → ups_a: drains battery, eventually FAULT
 
-    → server_rack: DEGRADED (rectifier_b still alive)
+    → rectifier: DEGRADED (running on ups_b feed only)
+    → server_rack: DEGRADED
 
 Side B: fully operational, server rack continues running
 ```
@@ -157,11 +161,10 @@ Side B: fully operational, server rack continues running
 utility_a → OUTAGE, generator_a → FAULT
 utility_b → OUTAGE, generator_b → FAULT
 
-    → rectifier_a: OFF
-    → rectifier_b: OFF
-    → server_rack: FAULT (0V, no path)
-
-UPS nodes hold for battery_level ticks before also faulting.
+    → ups_a, ups_b: hold for battery_level ticks, then FAULT
+    → rectifier: DEGRADED while one UPS still has battery,
+                 OFF once both UPS feeds die
+    → server_rack: FAULT (0V, no feed)
 ```
 
 ---
@@ -223,7 +226,7 @@ mosquitto_pub -h 192.168.4.1 \
   -m "BATT:5 STATUS:ON_BATTERY"
 ```
 
-The engine decrements `battery_level` each tick. When it hits 0 the UPS faults and the downstream PDU, rectifier, and server rack path go dark.
+The engine decrements `battery_level` each tick. When it hits 0 the UPS faults; the shared rectifier drops to `DEGRADED` (or `OFF` if both UPS feeds are gone), and the server rack follows.
 
 ### Manually set server rack path status
 
@@ -246,9 +249,9 @@ mosquitto_sub -h 192.168.4.1 -t "winter-river/#" -v
 ### Check retained state for the redundancy-critical nodes
 
 ```bash
-for node in utility_a generator_a ats_a rectifier_a \
-            utility_b generator_b ats_b rectifier_b \
-            server_rack; do
+for node in utility_a generator_a ats_a ups_a \
+            utility_b generator_b ats_b ups_b \
+            rectifier server_rack; do
   echo -n "$node: "
   mosquitto_sub -h 192.168.4.1 \
     -t "winter-river/$node/status" \
@@ -272,8 +275,8 @@ done
 | `utility_a/b` | `GRID_OK`, `OUTAGE`, `FAULT` | Root source — outage triggers generator |
 | `generator_a/b` | `STANDBY`, `STARTING`, `RUNNING`, `FAULT` | Backup source — 10-tick startup delay |
 | `ats_a/b` | `UTILITY`, `GENERATOR`, `OPEN`, `FAULT` | Selects active source for its side |
-| `rectifier_a/b` | `NORMAL`, `OFF`, `FAULT` | Final 48V DC feed to server rack |
-| `server_rack` | `NORMAL`, `DEGRADED`, `FAULT` | Both paths alive / one alive / none alive |
+| `rectifier` (shared) | `NORMAL`, `DEGRADED`, `OFF`, `FAULT` | 2N convergence point; dual AC inputs from `ups_a` + `ups_b` |
+| `server_rack` | `NORMAL`, `DEGRADED`, `FAULT` | Inherits rectifier state; OLED still reports PATH_A / PATH_B |
 
 ---
 
@@ -282,9 +285,13 @@ done
 The topology and dual-parent links live in the `nodes` table:
 
 ```sql
--- server_rack is fed by both rectifiers
-parent_id            = 'rectifier_a'   -- Side A (primary)
-secondary_parent_id  = 'rectifier_b'   -- Side B (secondary)
+-- rectifier (shared) is the 2N convergence point
+parent_id            = 'ups_a'         -- Side A AC feed (primary)
+secondary_parent_id  = 'ups_b'         -- Side B AC feed (secondary)
+
+-- server_rack is single-fed from the shared rectifier
+parent_id            = 'rectifier'
+secondary_parent_id  = NULL
 
 -- ATS is fed by transformer (primary) and generator (backup)
 parent_id            = 'mv_lv_transformer_a'

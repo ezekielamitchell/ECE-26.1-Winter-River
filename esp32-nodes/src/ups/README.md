@@ -8,10 +8,13 @@ The UPS is the critical bridge between utility or generator power and sensitive 
 
 ## Nodes in This Topology
 
-| node_id | Side | Rated Voltage | Parent      | Child   |
-|---------|------|---------------|-------------|---------|
-| `ups_a` | A    | 480 V AC      | `lv_dist_a` | `pdu_a` |
-| `ups_b` | B    | 480 V AC      | `lv_dist_b` | `pdu_b` |
+| node_id | Side | Rated Voltage | Parent      | Child       |
+|---------|------|---------------|-------------|-------------|
+| `ups_a` | A    | 480 V AC      | `lv_dist_a` | `rectifier` (primary feed)   |
+| `ups_b` | B    | 480 V AC      | `lv_dist_b` | `rectifier` (secondary feed) |
+
+Both UPS units feed the same shared `rectifier`, providing the 2N AC source
+for the 48 V DC bus.
 
 ---
 

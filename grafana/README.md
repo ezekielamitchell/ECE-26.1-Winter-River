@@ -161,7 +161,7 @@ winter-river/<node_id>/status
 Example payload:
 
 ```json
-{"node_id": "pdu_a", "voltage": 12.1, "current": 2.3, "status": "ok"}
+{"node_id": "ups_a", "voltage": 480.0, "battery_pct": 100, "status": "ok"}
 ```
 
 Telegraf subscribes to `winter-river/#` and writes all numeric fields to the

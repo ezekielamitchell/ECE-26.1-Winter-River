@@ -8,10 +8,10 @@ The utility feed is the primary power source for a data center — high-voltage 
 
 ## Nodes in This Topology
 
-| node_id     | Side | Rated Voltage | Parent | Child             |
-|-------------|------|---------------|--------|-------------------|
-| `utility_a` | A    | 230 kV        | none   | `mv_switchgear_a` |
-| `utility_b` | B    | 230 kV        | none   | `mv_switchgear_b` |
+| node_id     | Side | Rated Voltage | Parent | Child                   |
+|-------------|------|---------------|--------|-------------------------|
+| `utility_a` | A    | 230 kV        | none   | `hv_mv_transformer_a`   |
+| `utility_b` | B    | 230 kV        | none   | `hv_mv_transformer_b`   |
 
 ---
 

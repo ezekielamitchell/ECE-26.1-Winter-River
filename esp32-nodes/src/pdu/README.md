@@ -1,4 +1,12 @@
-# Power Distribution Unit (PDU) — `pdu_a` / `pdu_b`
+# Power Distribution Unit (PDU) — `pdu_a` / `pdu_b` *(deprecated)*
+
+> **Removed from the active topology.** The Winter River 2N redesign routes
+> `ups_a` and `ups_b` directly into the shared `rectifier`, bypassing rack
+> PDUs entirely. This firmware folder is kept for reference / historical
+> builds only — the `pdu_a` and `pdu_b` nodes are no longer present in
+> `scripts/init_db.sql`, and the broker no longer dispatches a `PDU`
+> handler. Any retained MQTT telemetry from old `pdu_*` firmware will be
+> rejected by `broker.main.on_message` as an unknown `node_id`.
 
 ## Real-World Role
 
@@ -8,10 +16,12 @@ The rack-level PDU distributes conditioned AC power from the UPS to individual s
 
 ## Nodes in This Topology
 
-| node_id | Side | Rated Voltage | Parent  | Child         |
-|---------|------|---------------|---------|---------------|
-| `pdu_a` | A    | 480 V AC      | `ups_a` | `rectifier_a` |
-| `pdu_b` | B    | 480 V AC      | `ups_b` | `rectifier_b` |
+*(Historical positions, no longer wired in the live topology.)*
+
+| node_id | Side | Rated Voltage | Parent  | Child           |
+|---------|------|---------------|---------|-----------------|
+| `pdu_a` | A    | 480 V AC      | `ups_a` | *(was `rectifier_a` — removed)* |
+| `pdu_b` | B    | 480 V AC      | `ups_b` | *(was `rectifier_b` — removed)* |
 
 ---
 

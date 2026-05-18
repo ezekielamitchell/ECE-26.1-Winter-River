@@ -96,7 +96,7 @@ const char* WIFI_SSID     = "WinterRiver-AP";
 const char* WIFI_PASSWORD = "winterriver";
 const char* MQTT_BROKER   = "192.168.4.1";
 const int   MQTT_PORT     = 1883;
-const char* NODE_ID       = "pdu_a";   // unique per node
+const char* NODE_ID       = "ups_a";   // unique per node
 ```
 
 MQTT publish topic: `winter-river/<NODE_ID>/status`
@@ -106,19 +106,21 @@ MQTT publish topic: `winter-river/<NODE_ID>/status`
 ```bash
 # Build a specific node environment (see esp32-nodes/platformio.ini for env names)
 cd esp32-nodes
-pio run -e pdu_a
+pio run -e ups_a
 
 # Upload to connected ESP32
-pio run -e pdu_a --target upload
+pio run -e ups_a --target upload
 
 # Monitor serial output
-pio device monitor -e pdu_a
+pio device monitor -e ups_a
 ```
 
 ### 2.3 Deploy multiple nodes
 
 Repeat section 2.1–2.2 for each node, updating `NODE_ID` to match the node's
-role (`util_a`, `trf_a`, `sw_a`, `gen_a`, `dist_a`, `ups_a`, `pdu_a`, `srv_a`, …).
+role (`utility_a`, `hv_mv_transformer_a`, `mv_switchgear_a`, `mv_lv_transformer_a`,
+`generator_a`, `ats_a`, `lv_dist_a`, `ups_a`, `cooling_a`, `lighting_a`, mirrored
+on Side B, plus the shared `rectifier` and `server_rack`).
 
 ## Part 3: Network Configuration
 

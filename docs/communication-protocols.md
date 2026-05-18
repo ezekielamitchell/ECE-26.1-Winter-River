@@ -35,13 +35,13 @@ winter-river/
 └── <node_id>/control     # Commands:  broker → ESP32
 ```
 
-### Active Node IDs (25 total)
+### Active Node IDs (22 total)
 
 | Side | Nodes (in power-chain order) |
 |---|---|
-| Side A | `utility_a`, `mv_switchgear_a`, `mv_lv_transformer_a`, `generator_a`, `ats_a`, `lv_dist_a`, `ups_a`, `pdu_a`, `rectifier_a`, `cooling_a`, `lighting_a`, `monitoring_a` |
-| Side B | `utility_b`, `mv_switchgear_b`, `mv_lv_transformer_b`, `generator_b`, `ats_b`, `lv_dist_b`, `ups_b`, `pdu_b`, `rectifier_b`, `cooling_b`, `lighting_b`, `monitoring_b` |
-| Shared | `server_rack` |
+| Side A | `utility_a`, `hv_mv_transformer_a`, `mv_switchgear_a`, `mv_lv_transformer_a`, `generator_a`, `ats_a`, `lv_dist_a`, `ups_a`, `cooling_a`, `lighting_a` |
+| Side B | `utility_b`, `hv_mv_transformer_b`, `mv_switchgear_b`, `mv_lv_transformer_b`, `generator_b`, `ats_b`, `lv_dist_b`, `ups_b`, `cooling_b`, `lighting_b` |
+| Shared (2N) | `rectifier`, `server_rack` |
 
 ---
 
@@ -123,8 +123,11 @@ All payloads include `"ts"` (HH:MM:SS from NTP) and `"state"`.
 // utility_a / utility_b
 {"ts":"14:32:01","v_out":230.0,"freq_hz":60.0,"load_pct":12,"state":"GRID_OK","voltage_kv":230.0,"phase":3}
 
+// hv_mv_transformer_a / _b
+{"ts":"14:32:01","load_pct":40,"power_mva":120.0,"temp_f":115,"state":"NORMAL","voltage":34500}
+
 // mv_switchgear_a / _b
-{"ts":"14:32:01","breaker":true,"current_a":120.5,"load_kw":86.5,"load_pct":35,"state":"CLOSED","voltage":230000}
+{"ts":"14:32:01","breaker":true,"current_a":120.5,"load_kw":86.5,"load_pct":35,"state":"CLOSED","voltage":34500}
 
 // mv_lv_transformer_a / _b
 {"ts":"14:32:01","load_pct":45,"power_kva":225.0,"temp_f":108,"state":"NORMAL","voltage":480}
@@ -141,22 +144,17 @@ All payloads include `"ts"` (HH:MM:SS from NTP) and `"state"`.
 // ups_a / _b
 {"ts":"14:32:01","battery_pct":100,"load_pct":40,"input_v":480.0,"output_v":480.0,"state":"NORMAL","voltage":480}
 
-// pdu_a / pdu_b
-{"ts":"14:32:01","input_v":480.0,"output_v":480.0,"load_pct":25,"state":"NORMAL","voltage":480}
-
-// rectifier_a / _b
-{"ts":"14:32:01","input_v_ac":480.0,"output_v_dc":48.0,"load_pct":30,"state":"NORMAL","ac_voltage":480,"dc_voltage":48}
-
 // cooling_a / _b
 {"ts":"14:32:01","input_v":480.0,"coolant_temp_f":65,"fan_speed_pct":60,"load_pct":60,"state":"NORMAL","voltage":480}
 
 // lighting_a / _b
 {"ts":"14:32:01","input_v":277.0,"zones_active":4,"brightness_pct":100,"load_pct":40,"state":"NORMAL","voltage":277}
 
-// monitoring_a / _b
-{"ts":"14:32:01","input_v":120.0,"sensor_count":12,"alert_count":0,"uptime_pct":100,"load_pct":15,"state":"NORMAL","voltage":120}
+// rectifier (shared 2N — dual AC inputs from ups_a + ups_b)
+{"ts":"14:32:01","input_v_ac":480.0,"output_v_dc":48.0,"load_pct":30,"path_a":1,"path_b":1,"state":"NORMAL","ac_voltage":480,"dc_voltage":48}
 
-// server_rack (2N shared)
+// server_rack (shared — fed by the rectifier; PATH_A / PATH_B mirror the
+// rectifier's upstream UPS feeds)
 {"ts":"14:32:01","cpu_pct":42,"inlet_f":75,"power_kw":3.2,"units":8,"path_a":1,"path_b":1,"state":"NORMAL","voltage":48}
 ```
 
@@ -189,6 +187,7 @@ PATH_A:1 PATH_B:0 STATUS:DEGRADED
 | `utility_a/b` | `VOLT:<kv>` | `VOLT:184.0` |
 | `utility_a/b` | `FREQ:<hz>` | `FREQ:58.8` |
 | `utility_a/b` | `LOAD:<pct>` | `LOAD:45` |
+| `hv_mv_transformer_a/b` | `STATUS:<state>` | `STATUS:FAULT` |
 | `mv_switchgear_a/b` | `CLOSE` / `OPEN` | `CLOSE` |
 | `mv_switchgear_a/b` | `LOAD:<pct>` | `LOAD:50` |
 | `mv_switchgear_a/b` | `STATUS:<state>` | `STATUS:TRIPPED` |
@@ -211,12 +210,10 @@ PATH_A:1 PATH_B:0 STATUS:DEGRADED
 | `ups_a/b` | `LOAD:<pct>` | `LOAD:70` |
 | `ups_a/b` | `INPUT:<v>` | `INPUT:0` |
 | `ups_a/b` | `STATUS:<state>` | `STATUS:ON_BATTERY` |
-| `pdu_a/b` | `INPUT:<v>` | `INPUT:480` |
-| `pdu_a/b` | `LOAD:<pct>` | `LOAD:60` |
-| `pdu_a/b` | `STATUS:<state>` | `STATUS:OVERLOAD` |
-| `rectifier_a/b` | `INPUT_AC:<v>` | `INPUT_AC:480` |
-| `rectifier_a/b` | `LOAD:<pct>` | `LOAD:40` |
-| `rectifier_a/b` | `STATUS:<state>` | `STATUS:FAULT` |
+| `rectifier` (shared) | `INPUT_AC:<v>` | `INPUT_AC:480` |
+| `rectifier` (shared) | `PATH_A:<0\|1>` / `PATH_B:<0\|1>` | `PATH_A:0 PATH_B:1` |
+| `rectifier` (shared) | `LOAD:<pct>` | `LOAD:40` |
+| `rectifier` (shared) | `STATUS:<state>` | `STATUS:DEGRADED` |
 | `cooling_a/b` | `INPUT:<v>` | `INPUT:480` |
 | `cooling_a/b` | `TEMP:<f>` | `TEMP:75` |
 | `cooling_a/b` | `SPEED:<pct>` | `SPEED:80` |
@@ -224,9 +221,6 @@ PATH_A:1 PATH_B:0 STATUS:DEGRADED
 | `lighting_a/b` | `INPUT:<v>` | `INPUT:277` |
 | `lighting_a/b` | `DIM:<pct>` | `DIM:50` |
 | `lighting_a/b` | `STATUS:<state>` | `STATUS:DIMMED` |
-| `monitoring_a/b` | `INPUT:<v>` | `INPUT:120` |
-| `monitoring_a/b` | `SENSORS:<n>` | `SENSORS:10` |
-| `monitoring_a/b` | `STATUS:<state>` | `STATUS:ALERT` |
 | `server_rack` | `CPU:<pct>` | `CPU:90` |
 | `server_rack` | `TEMP:<f>` | `TEMP:92` |
 | `server_rack` | `UNITS:<n>` | `UNITS:12` |
@@ -367,7 +361,7 @@ Telegraf subscribes to `winter-river/+/status` and parses JSON payloads from the
   bucket       = "mqtt_metrics"
 ```
 
-**Measurement name:** The MQTT topic string (e.g. `winter-river/pdu_a/status`)
+**Measurement name:** The MQTT topic string (e.g. `winter-river/ups_a/status`)
 **Tags:** `node_id`, `status`, `type` (promoted from JSON fields)
 **Fields:** All remaining numeric JSON fields
 
@@ -403,5 +397,5 @@ mosquitto_sub -h 192.168.4.1 -t "winter-river/utility_a/status" -C 1
 |---|---|---|
 | Telegraf topic schema | **Fixed** | `telegraf.conf` now subscribes to `winter-river/+/status` (was `iot/node/+/...`) |
 | `broker/main.py` DB schema | **Open** | `telemetry_history` table and `live_status.current_state` column referenced in Python but not in `scripts/init_db.sql` — reconcile before running engine against fresh DB |
-| `pdu_b` legacy firmware note | **Stale docs removed** | `pdu_b` is part of the active SSD1306/MQTT node matrix and should be treated like `pdu_a` |
+| `pdu_*` / `rectifier_b` firmware | **Removed from topology** | The 2N redesign drops both PDUs and the second rectifier; their firmware folders remain for historical reference only and any retained telemetry is rejected by `broker.main.on_message` |
 | InfluxDB auth token | **Change for production** | Default `my-super-secret-auth-token` in `config.sample.toml` and `grafana/.env.sample` |
