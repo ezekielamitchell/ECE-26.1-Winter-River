@@ -16,27 +16,25 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            broker/requirements.txt
+            broker/requirements-dev.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
+          pip install -r broker/requirements.txt
+          pip install -r broker/requirements-dev.txt
 
-      - name: Lint with ruff
-        run: |
-          # TODO: Add ruff configuration and linting
-          echo "Linting placeholder - implement checks"
-
+      # Advisory until the codebase is reformatted in a dedicated PR — surfaces
+      # drift without blocking. Flip to a real failure once `black .` is clean.
       - name: Format check with black
-        run: |
-          # TODO: Add black format checking
-          echo "Format check placeholder - implement checks"
+        continue-on-error: true
+        run: black --check --config broker/pyproject.toml broker/ tests/
 
       - name: Run tests
-        run: |
-          # TODO: Add pytest execution
-          echo "Test placeholder - implement tests"
+        run: pytest tests/ -v
 
   platformio-build:
     runs-on: ubuntu-latest
@@ -47,15 +45,41 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: pip
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio/.cache
+            ~/.platformio/platforms
+            ~/.platformio/packages
+          key: pio-${{ runner.os }}-${{ hashFiles('esp32-nodes/platformio.ini') }}
+          restore-keys: |
+            pio-${{ runner.os }}-
 
       - name: Install PlatformIO
         run: |
           python -m pip install --upgrade pip
           pip install platformio
 
-      - name: Build ESP32 firmware
+      # Build one env per node category. Each `_a` env shares its build_src
+      # with its `_b` sibling (same source under a different topic prefix),
+      # so this catches firmware compile errors across the topology without
+      # rebuilding 25 essentially-identical binaries on every PR.
+      - name: Build ESP32 firmware (representative envs)
+        working-directory: esp32-nodes
         run: |
-          # TODO: Implement PlatformIO build
-          cd esp
-          # pio run
-          echo "PlatformIO build placeholder - uncomment when ready"
+          pio run \
+            -e utility_a \
+            -e mv_switchgear_a \
+            -e mv_lv_transformer_a \
+            -e generator_a \
+            -e ats_a \
+            -e lv_dist_a \
+            -e ups_a \
+            -e pdu_a \
+            -e rectifier_a \
+            -e cooling_a \
+            -e lighting_a \
+            -e server_rack

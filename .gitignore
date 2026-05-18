@@ -80,6 +80,7 @@ docs/_build/
 docs/.doctrees/
 
 # Secrets
+broker/config.toml
 config/secrets.yaml
 *.pem
 *.key
