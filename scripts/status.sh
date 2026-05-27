@@ -150,10 +150,12 @@ else
     node_status "mv_lv_transformer_a" mv_lv_transformer_a
     node_status "generator_a        " generator_a
     node_status "ats_a              " ats_a
-    node_status "lv_dist_a          " lv_dist_a
     node_status "ups_a              " ups_a
     node_status "cooling_a          " cooling_a
-    node_status "lighting_a         " lighting_a
+    node_status "server_rack_a1     " server_rack_a1
+    node_status "server_rack_a2     " server_rack_a2
+    node_status "server_rack_a3     " server_rack_a3
+    node_status "server_rack_a4     " server_rack_a4
 
     echo "  Side B:"
     node_status "utility_b          " utility_b
@@ -162,16 +164,17 @@ else
     node_status "mv_lv_transformer_b" mv_lv_transformer_b
     node_status "generator_b        " generator_b
     node_status "ats_b              " ats_b
-    node_status "lv_dist_b          " lv_dist_b
     node_status "ups_b              " ups_b
     node_status "cooling_b          " cooling_b
-    node_status "lighting_b         " lighting_b
+    node_status "server_rack_b1     " server_rack_b1
+    node_status "server_rack_b2     " server_rack_b2
+    node_status "server_rack_b3     " server_rack_b3
+    node_status "server_rack_b4     " server_rack_b4
 
-    echo "  Shared:"
+    echo "  Broker-synthesized:"
     node_status "facility           " facility
     node_status "weather            " weather
-    node_status "rectifier          " rectifier
-    node_status "server_rack        " server_rack
+    node_status "bms                " bms
 fi
 echo ""
 

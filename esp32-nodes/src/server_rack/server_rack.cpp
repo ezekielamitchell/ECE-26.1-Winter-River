@@ -1,14 +1,27 @@
-// server_rack.cpp — 48 V DC shared 2N rack.
-// States: NORMAL, DEGRADED, FAULT
+// server_rack.cpp — 48 V DC IT rack. One source file shared by all 8 racks
+// (server_rack_a1..a4, server_rack_b1..b4). NODE_ID and OLED label are
+// injected via PlatformIO build_flags:
+//   '-DWR_NODE_ID="server_rack_a1"' '-DWR_RACK_LABEL="rack_a1"'
+//
+// Each rack is single-fed from its side's UPS (ups_a or ups_b). There is
+// no rectifier convergence and no PATH_A/PATH_B redundancy at the rack
+// level — redundancy lives at the side (block) level. Side-A failure kills
+// all 4 of side-A's racks; side-B continues independently.
+// States: NORMAL, DEGRADED, FAULT.
 #include <winter_river.h>
 
-static const char *NODE_ID = "server_rack";
-static const char *LABEL   = "srvr";
+#ifndef WR_NODE_ID
+#error "WR_NODE_ID must be defined via build_flags (e.g. -DWR_NODE_ID=\"server_rack_a1\")"
+#endif
+#ifndef WR_RACK_LABEL
+#error "WR_RACK_LABEL must be defined via build_flags (e.g. -DWR_RACK_LABEL=\"rack_a1\")"
+#endif
+
+static const char *NODE_ID = WR_NODE_ID;
+static const char *LABEL   = WR_RACK_LABEL;
 
 static constexpr int VOLTAGE_RATING = 48;
 
-static bool   path_a_ok    = true;
-static bool   path_b_ok    = true;
 static int    cpu_load_pct = 42;
 static int    inlet_temp_f = 75;
 static int    units_active = 8;
@@ -18,7 +31,7 @@ static String state        = "NORMAL";
 static void updateState() {
   if (inlet_temp_f > 95 || cpu_load_pct > 95) {
     state = "FAULT";
-  } else if (!path_a_ok || !path_b_ok || inlet_temp_f > 85 || cpu_load_pct > 80) {
+  } else if (inlet_temp_f > 85 || cpu_load_pct > 80) {
     state = "DEGRADED";
   } else {
     state = "NORMAL";
@@ -33,10 +46,6 @@ static void handleToken(const String &tok) {
     inlet_temp_f = tok.substring(5).toInt();
   } else if (tok.startsWith("UNITS:")) {
     units_active = tok.substring(6).toInt();
-  } else if (tok.startsWith("PATH_A:")) {
-    path_a_ok = (tok.substring(7).toInt() == 1);
-  } else if (tok.startsWith("PATH_B:")) {
-    path_b_ok = (tok.substring(7).toInt() == 1);
   }
 }
 
@@ -74,8 +83,6 @@ static void renderDisplay() {
   wr::display.print(inlet_temp_f); wr::display.println(F("F"));
   wr::display.print(F("Power:")); wr::display.print(power_kw, 1);  wr::display.print(F("kW U:"));
   wr::display.println(units_active);
-  wr::display.print(F("A:"));     wr::display.print(path_a_ok ? F("OK") : F("NO"));
-  wr::display.print(F(" B:"));    wr::display.println(path_b_ok ? F("OK") : F("NO"));
   wr::displayFooter();
   wr::display.display();
 }
@@ -93,8 +100,6 @@ void loop() {
                    ",\"inlet_f\":"     + String(inlet_temp_f) +
                    ",\"power_kw\":"    + String(power_kw, 1) +
                    ",\"units\":"       + String(units_active) +
-                   ",\"path_a\":"      + String(path_a_ok ? 1 : 0) +
-                   ",\"path_b\":"      + String(path_b_ok ? 1 : 0) +
                    ",\"state\":\""     + state + "\"" +
                    ",\"voltage\":"     + String(VOLTAGE_RATING) +
                    "}";

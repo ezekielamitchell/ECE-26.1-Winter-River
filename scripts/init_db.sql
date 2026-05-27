@@ -1,23 +1,32 @@
--- Winter River topology (Side A + Side B + shared rectifier + server_rack)
--- 2N redundant: dual utility paths converge at a single rectifier feeding the
--- server_rack. Run as: psql -U postgres -d winter_river -f scripts/init_db.sql
+-- Winter River topology (Side A + Side B, fully independent block-redundant 2N)
+-- Each side is a complete power chain feeding 4 server racks. Sides do not
+-- share a rectifier or any other power node — side-A failure kills all 4 of
+-- side-A's racks. Redundancy is at the side (block) level, not per-rack.
+--
+-- Chain per side:
+--   utility → hv_mv_transformer → mv_switchgear → mv_lv_transformer
+--   generator ↗ ats (LV transfer switch) → ups → server_rack_{1..4}
+--                                       ↘ cooling (mech load, parallel to ups)
+--
+-- Total: 24 active broker/DB nodes = 12 per side × 2 sides.
+-- `bms` is broker-published only (NOT seeded here); broker/main.py synthesizes
+-- winter-river/bms/status from live node state every tick.
+--
+-- Run as: psql -U postgres -d winter_river -f scripts/init_db.sql
 
 -- ── SCHEMA ────────────────────────────────────────────────────────────────────
 
 -- Static topology: who is plugged into whom
--- secondary_parent_id handles ATS (dual feed: transformer + generator)
--- and rectifier (dual feed: ups_a + ups_b)
+-- secondary_parent_id handles ATS dual feed (transformer + generator).
 CREATE TABLE nodes (
     node_id              VARCHAR(50) PRIMARY KEY,
     node_type            VARCHAR(30) NOT NULL,
     -- UTILITY | HV_MV_TRANSFORMER | MV_SWITCHGEAR | MV_LV_TRANSFORMER |
-    -- GENERATOR | ATS | LV_DIST | UPS | RECTIFIER | COOLING | LIGHTING |
-    -- SERVER_RACK
-    side                 CHAR(1),           -- 'A', 'B', or NULL (shared)
+    -- GENERATOR | ATS | UPS | COOLING | SERVER_RACK
+    side                 CHAR(1),           -- 'A' or 'B' (no shared nodes)
     parent_id            VARCHAR(50) REFERENCES nodes(node_id),
     secondary_parent_id  VARCHAR(50) REFERENCES nodes(node_id),
-    -- ATS:       primary = transformer path, secondary = generator
-    -- RECTIFIER: primary = ups_a,            secondary = ups_b (true 2N)
+    -- ATS only: primary = transformer path, secondary = generator
     rated_voltage        FLOAT DEFAULT 480.0,  -- nominal output voltage (V)
     v_ratio              FLOAT DEFAULT 1.0     -- step-down ratio (metadata only)
 );
@@ -67,10 +76,10 @@ CREATE TABLE facility_metrics (
 CREATE INDEX facility_metrics_ts_idx ON facility_metrics(timestamp DESC);
 
 -- ── SEED DATA: SIDE A ─────────────────────────────────────────────────────────
--- Chain (IT path): utility_a → hv_mv_transformer_a → mv_switchgear_a →
---                  mv_lv_transformer_a; generator_a ↗ ats_a → lv_dist_a →
---                  ups_a → (rectifier) → server_rack
--- Facility branches off lv_dist_a: cooling_a (fan bank), lighting_a
+-- IT path:   utility_a → hv_mv_transformer_a → mv_switchgear_a →
+--            mv_lv_transformer_a; generator_a ↗ ats_a → ups_a →
+--            server_rack_a{1..4}
+-- Mech path: ats_a → cooling_a (parallel to ups_a)
 
 INSERT INTO nodes (node_id, node_type, side, parent_id, secondary_parent_id, rated_voltage, v_ratio) VALUES
 -- ① Root: 230 kV utility grid
@@ -83,18 +92,19 @@ INSERT INTO nodes (node_id, node_type, side, parent_id, secondary_parent_id, rat
 ('mv_lv_transformer_a', 'MV_LV_TRANSFORMER', 'A', 'mv_switchgear_a',        NULL,             480.0, 0.0139),
 -- ⑤ Diesel generator: 480 V backup (no parent — autonomous source)
 ('generator_a',         'GENERATOR',         'A', NULL,                     NULL,             480.0, 1.0),
--- ⑥ ATS: primary = transformer path, secondary = generator
+-- ⑥ ATS (LV transfer switch): primary = transformer path, secondary = generator
 ('ats_a',               'ATS',               'A', 'mv_lv_transformer_a',    'generator_a',    480.0, 1.0),
--- ⑦ LV distribution board: 480 V, feeds IT path + facility loads
-('lv_dist_a',           'LV_DIST',           'A', 'ats_a',                  NULL,             480.0, 1.0),
--- ⑧ UPS: 480 V + battery backup (feeds the shared rectifier)
-('ups_a',               'UPS',               'A', 'lv_dist_a',              NULL,             480.0, 1.0),
--- ⑨ Cooling: 480 V, branches off lv_dist_a
-('cooling_a',           'COOLING',           'A', 'lv_dist_a',              NULL,             480.0, 1.0),
--- ⑩ Lighting: 277 V (phase-to-neutral of 480Y/277V system)
-('lighting_a',          'LIGHTING',          'A', 'lv_dist_a',              NULL,             277.0, 0.577);
+-- ⑦ UPS: 480 V + battery backup, feeds the IT racks
+('ups_a',               'UPS',               'A', 'ats_a',                  NULL,             480.0, 1.0),
+-- ⑧ Cooling: 480 V mech load, branches off ats_a (parallel to ups_a)
+('cooling_a',           'COOLING',           'A', 'ats_a',                  NULL,             480.0, 1.0),
+-- ⑨-⑫ Four server racks, each single-fed from ups_a (480 V AC → 48 V DC inside)
+('server_rack_a1',      'SERVER_RACK',       'A', 'ups_a',                  NULL,              48.0, 0.1),
+('server_rack_a2',      'SERVER_RACK',       'A', 'ups_a',                  NULL,              48.0, 0.1),
+('server_rack_a3',      'SERVER_RACK',       'A', 'ups_a',                  NULL,              48.0, 0.1),
+('server_rack_a4',      'SERVER_RACK',       'A', 'ups_a',                  NULL,              48.0, 0.1);
 
--- ── SEED DATA: SIDE B ─────────────────────────────────────────────────────────
+-- ── SEED DATA: SIDE B (mirror of Side A) ─────────────────────────────────────
 
 INSERT INTO nodes (node_id, node_type, side, parent_id, secondary_parent_id, rated_voltage, v_ratio) VALUES
 ('utility_b',           'UTILITY',           'B', NULL,                     NULL,          230000.0, 1.0),
@@ -103,19 +113,12 @@ INSERT INTO nodes (node_id, node_type, side, parent_id, secondary_parent_id, rat
 ('mv_lv_transformer_b', 'MV_LV_TRANSFORMER', 'B', 'mv_switchgear_b',        NULL,             480.0, 0.0139),
 ('generator_b',         'GENERATOR',         'B', NULL,                     NULL,             480.0, 1.0),
 ('ats_b',               'ATS',               'B', 'mv_lv_transformer_b',    'generator_b',    480.0, 1.0),
-('lv_dist_b',           'LV_DIST',           'B', 'ats_b',                  NULL,             480.0, 1.0),
-('ups_b',               'UPS',               'B', 'lv_dist_b',              NULL,             480.0, 1.0),
-('cooling_b',           'COOLING',           'B', 'lv_dist_b',              NULL,             480.0, 1.0),
-('lighting_b',          'LIGHTING',          'B', 'lv_dist_b',              NULL,             277.0, 0.577);
-
--- ── SEED DATA: SHARED 2N NODES ────────────────────────────────────────────────
--- The single rectifier is the 2N convergence point: ups_a (primary) and
--- ups_b (secondary) both feed it. server_rack hangs off that rectifier.
--- NORMAL: both UPS feeds live. DEGRADED: one feed only. FAULT: both dead.
-
-INSERT INTO nodes (node_id, node_type, side, parent_id, secondary_parent_id, rated_voltage, v_ratio) VALUES
-('rectifier',   'RECTIFIER',   NULL, 'ups_a',     'ups_b', 48.0, 0.1),
-('server_rack', 'SERVER_RACK', NULL, 'rectifier', NULL,    48.0, 1.0);
+('ups_b',               'UPS',               'B', 'ats_b',                  NULL,             480.0, 1.0),
+('cooling_b',           'COOLING',           'B', 'ats_b',                  NULL,             480.0, 1.0),
+('server_rack_b1',      'SERVER_RACK',       'B', 'ups_b',                  NULL,              48.0, 0.1),
+('server_rack_b2',      'SERVER_RACK',       'B', 'ups_b',                  NULL,              48.0, 0.1),
+('server_rack_b3',      'SERVER_RACK',       'B', 'ups_b',                  NULL,              48.0, 0.1),
+('server_rack_b4',      'SERVER_RACK',       'B', 'ups_b',                  NULL,              48.0, 0.1);
 
 -- ── INITIALISE live_status FOR ALL NODES ──────────────────────────────────────
 INSERT INTO live_status (node_id) SELECT node_id FROM nodes;

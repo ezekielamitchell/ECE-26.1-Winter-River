@@ -61,17 +61,20 @@ class TestTopoSort:
         order = engine._topo_sort(nodes)
         assert order == ["a", "b", "c"]
 
-    def test_dual_parent_rectifier_after_both_ups(self, engine):
+    def test_dual_parent_ats_after_both_sources(self, engine):
+        """ATS is the only dual-parent node in the new topology — primary =
+        transformer path, secondary = generator. Topo sort must place ATS
+        after both."""
         nodes = {
-            "ups_a":     _node("ups_a",     "UPS"),
-            "ups_b":     _node("ups_b",     "UPS"),
-            "rectifier": _node("rectifier", "RECTIFIER",
-                               parent_id="ups_a",
-                               secondary_parent_id="ups_b"),
+            "xfmr_a":      _node("xfmr_a",      "MV_LV_TRANSFORMER"),
+            "generator_a": _node("generator_a", "GENERATOR", side="a"),
+            "ats_a":       _node("ats_a",       "ATS",
+                                 parent_id="xfmr_a",
+                                 secondary_parent_id="generator_a"),
         }
         order = engine._topo_sort(nodes)
-        assert order.index("rectifier") > order.index("ups_a")
-        assert order.index("rectifier") > order.index("ups_b")
+        assert order.index("ats_a") > order.index("xfmr_a")
+        assert order.index("ats_a") > order.index("generator_a")
 
     def test_utility_scheduled_before_generator(self, engine):
         """Both are roots; broker prioritises UTILITY so generator can read it."""
@@ -87,8 +90,8 @@ class TestTopoSort:
         The broker must log a warning instead of crashing the tick.
         """
         nodes = {
-            "a": _node("a", "LV_DIST", parent_id="b"),
-            "b": _node("b", "LV_DIST", parent_id="a"),
+            "a": _node("a", "UPS", parent_id="b"),
+            "b": _node("b", "UPS", parent_id="a"),
         }
         order = engine._topo_sort(nodes)
         assert order == []  # nothing was schedulable
@@ -97,7 +100,7 @@ class TestTopoSort:
     def test_parent_outside_node_set_is_ignored(self, engine):
         """parent_id pointing at a node not in the dict shouldn't make us hang."""
         nodes = {
-            "child": _node("child", "LV_DIST", parent_id="ghost"),
+            "child": _node("child", "UPS", parent_id="ghost"),
         }
         order = engine._topo_sort(nodes)
         assert order == ["child"]
@@ -119,7 +122,7 @@ class TestComputeNode:
         assert v == 0.0 and s == status
 
     def test_node_not_present_is_offline(self, engine):
-        n = _node("any", "LV_DIST", is_present=False, status_msg="NORMAL")
+        n = _node("any", "UPS", is_present=False, status_msg="NORMAL")
         v, s = engine._compute_node(n, {n["node_id"]: n})
         assert v == 0.0 and s == "OFFLINE"
 
@@ -197,63 +200,51 @@ class TestComputeNode:
         v, s = engine._compute_node(ats, {"xfmr": prim, "gen": sec, "ats": ats})
         assert (v, s) == (0.0, "OPEN")
 
-    # UPS — charge / discharge state machine
+    # UPS — charge / discharge state machine. Parent = ATS in the
+    # new topology (no lv_dist between ats and ups).
     def test_ups_charging_then_normal(self, engine):
-        parent = _node("dist", "LV_DIST", v_out=480.0)
-        ups = _node("ups", "UPS", parent_id="dist", battery_level=98)
-        v, s = engine._compute_node(ups, {"dist": parent, "ups": ups})
+        parent = _node("ats", "ATS", v_out=480.0)
+        ups = _node("ups", "UPS", parent_id="ats", battery_level=98)
+        v, s = engine._compute_node(ups, {"ats": parent, "ups": ups})
         assert (v, s) == (480.0, "CHARGING") and ups["battery_level"] == 99
-        v, s = engine._compute_node(ups, {"dist": parent, "ups": ups})
+        v, s = engine._compute_node(ups, {"ats": parent, "ups": ups})
         assert (v, s) == (480.0, "NORMAL") and ups["battery_level"] == 100
         # already at 100 — clamp, don't overflow
-        v, s = engine._compute_node(ups, {"dist": parent, "ups": ups})
+        v, s = engine._compute_node(ups, {"ats": parent, "ups": ups})
         assert ups["battery_level"] == 100
 
     def test_ups_on_battery_then_fault(self, engine):
-        parent = _node("dist", "LV_DIST", v_out=0.0)
-        ups = _node("ups", "UPS", parent_id="dist", battery_level=1)
-        v, s = engine._compute_node(ups, {"dist": parent, "ups": ups})
+        parent = _node("ats", "ATS", v_out=0.0)
+        ups = _node("ups", "UPS", parent_id="ats", battery_level=1)
+        v, s = engine._compute_node(ups, {"ats": parent, "ups": ups})
         assert (v, s) == (480.0, "ON_BATTERY") and ups["battery_level"] == 0
-        v, s = engine._compute_node(ups, {"dist": parent, "ups": ups})
+        v, s = engine._compute_node(ups, {"ats": parent, "ups": ups})
         assert (v, s) == (0.0, "FAULT")
 
-    # RECTIFIER — true 2N truth table
-    @pytest.mark.parametrize("a_v, b_v, expected", [
-        (480.0, 480.0, (48.0, "NORMAL")),
-        (480.0,   0.0, (48.0, "DEGRADED")),
-        (  0.0, 480.0, (48.0, "DEGRADED")),
-        (  0.0,   0.0, ( 0.0, "OFF")),
-    ])
-    def test_rectifier_2n_truth_table(self, engine, a_v, b_v, expected):
-        a = _node("ups_a", "UPS", v_out=a_v)
-        b = _node("ups_b", "UPS", v_out=b_v)
-        r = _node("rectifier", "RECTIFIER",
-                  parent_id="ups_a", secondary_parent_id="ups_b")
-        v, s = engine._compute_node(r, {"ups_a": a, "ups_b": b, "rectifier": r})
-        assert (v, s) == expected
-
-    # COOLING / LIGHTING
+    # COOLING
     def test_cooling_off_with_no_input(self, engine):
-        parent = _node("dist", "LV_DIST", v_out=0.0)
-        n = _node("cool", "COOLING", parent_id="dist")
-        assert engine._compute_node(n, {"dist": parent, "cool": n}) == (0.0, "OFF")
+        parent = _node("ats", "ATS", v_out=0.0)
+        n = _node("cool", "COOLING", parent_id="ats")
+        assert engine._compute_node(n, {"ats": parent, "cool": n}) == (0.0, "OFF")
 
-    def test_lighting_on_277v_when_fed(self, engine):
-        parent = _node("dist", "LV_DIST", v_out=480.0)
-        n = _node("light", "LIGHTING", parent_id="dist")
-        assert engine._compute_node(n, {"dist": parent, "light": n}) == (277.0, "ON")
+    # SERVER_RACK — single-fed from this side's UPS (no PATH_A/PATH_B).
+    def test_server_rack_normal_when_ups_normal(self, engine):
+        ups = _node("ups_a", "UPS", v_out=480.0, status_msg="NORMAL")
+        rack = _node("server_rack_a1", "SERVER_RACK", side="A", parent_id="ups_a")
+        v, s = engine._compute_node(rack, {"ups_a": ups, "server_rack_a1": rack})
+        assert (v, s) == (48.0, "NORMAL")
 
-    # SERVER_RACK — inherits rectifier DEGRADED
-    def test_server_rack_inherits_degraded(self, engine):
-        rect = _node("rectifier", "RECTIFIER", v_out=48.0, status_msg="DEGRADED")
-        rack = _node("server_rack", "SERVER_RACK", parent_id="rectifier")
-        v, s = engine._compute_node(rack, {"rectifier": rect, "server_rack": rack})
+    @pytest.mark.parametrize("ups_status", ["ON_BATTERY", "CHARGING"])
+    def test_server_rack_degraded_when_ups_on_battery(self, engine, ups_status):
+        ups = _node("ups_a", "UPS", v_out=480.0, status_msg=ups_status)
+        rack = _node("server_rack_a1", "SERVER_RACK", side="A", parent_id="ups_a")
+        v, s = engine._compute_node(rack, {"ups_a": ups, "server_rack_a1": rack})
         assert (v, s) == (48.0, "DEGRADED")
 
-    def test_server_rack_fault_without_rectifier_feed(self, engine):
-        rect = _node("rectifier", "RECTIFIER", v_out=0.0, status_msg="OFF")
-        rack = _node("server_rack", "SERVER_RACK", parent_id="rectifier")
-        v, s = engine._compute_node(rack, {"rectifier": rect, "server_rack": rack})
+    def test_server_rack_fault_without_ups_feed(self, engine):
+        ups = _node("ups_a", "UPS", v_out=0.0, status_msg="FAULT")
+        rack = _node("server_rack_a1", "SERVER_RACK", side="A", parent_id="ups_a")
+        v, s = engine._compute_node(rack, {"ups_a": ups, "server_rack_a1": rack})
         assert (v, s) == (0.0, "FAULT")
 
     def test_unknown_node_type_returns_unknown(self, engine, caplog):
@@ -286,13 +277,6 @@ class TestControlCmd:
         n = _node("u", "UPS", battery_level=72)
         out = engine._control_cmd(n, 480.0, "CHARGING")
         assert "BATT:72" in out and "STATUS:CHARGING" in out
-
-    def test_rectifier_reports_both_paths(self, engine):
-        n = _node("r", "RECTIFIER")
-        n["parent_v_a"] = 480.0
-        n["parent_v_b"] = 0.0
-        out = engine._control_cmd(n, 48.0, "DEGRADED")
-        assert "PATH_A:1" in out and "PATH_B:0" in out and "INPUT_AC:480.0" in out
 
     def test_cooling_carries_thermal_when_available(self, engine):
         engine._latest_thermal = {
@@ -330,11 +314,82 @@ class TestControlCmd:
             "mode": "FAULT", "hot_aisle_f": math.inf,
             "cold_aisle_f": 100.0, "flow_pct_max": 0.0,
         }
-        n = _node("rack", "SERVER_RACK")
-        n["parent_v_a"] = 0.0
-        n["parent_v_b"] = 0.0
+        n = _node("rack", "SERVER_RACK", side="A")
         out = engine._control_cmd(n, 0.0, "FAULT")
         assert "TEMP" not in out
+
+    def test_server_rack_includes_hot_aisle_when_finite(self, engine):
+        engine._latest_thermal = {
+            "mode": "NORMAL", "hot_aisle_f": 94.7,
+            "cold_aisle_f": 84.1, "flow_pct_max": 11.0,
+        }
+        n = _node("rack", "SERVER_RACK", side="A")
+        out = engine._control_cmd(n, 48.0, "NORMAL")
+        # Single-fed: no PATH_A / PATH_B at the rack any more.
+        assert "PATH_A" not in out and "PATH_B" not in out
+        assert "TEMP:94.7" in out and "INPUT:480.0" in out
+
+
+# ── BMS aggregation helpers ───────────────────────────────────────────────────
+
+class TestPowerState:
+    """`_power_state` now reads UPS health on each side directly — no shared
+    rectifier convergence in the new topology."""
+
+    @pytest.mark.parametrize("a_v, a_present, b_v, b_present, expected", [
+        (480.0, True, 480.0, True,  "2N_HEALTHY"),
+        (480.0, True,   0.0, True,  "A_ONLY"),
+        (  0.0, True, 480.0, True,  "B_ONLY"),
+        (  0.0, True,   0.0, True,  "DOWN"),
+        (480.0, False,480.0, True,  "B_ONLY"),  # ups_a offline → A is down
+        (480.0, True, 480.0, False, "A_ONLY"),  # ups_b offline
+    ])
+    def test_power_state_truth_table(self, engine, a_v, a_present, b_v, b_present, expected):
+        nodes = {
+            "ups_a": _node("ups_a", "UPS", v_out=a_v, is_present=a_present),
+            "ups_b": _node("ups_b", "UPS", v_out=b_v, is_present=b_present),
+        }
+        assert engine._power_state(nodes) == expected
+
+    def test_power_state_down_when_no_ups(self, engine):
+        assert engine._power_state({}) == "DOWN"
+
+
+class TestAggregateRackState:
+    """`_aggregate_rack_state` rolls up 4 racks per side into worst-of state."""
+
+    def _racks(self, side, states):
+        return {
+            f"server_rack_{side.lower()}{i+1}": _node(
+                f"server_rack_{side.lower()}{i+1}", "SERVER_RACK",
+                side=side, status_msg=state,
+            )
+            for i, state in enumerate(states)
+        }
+
+    def test_all_normal(self, engine):
+        nodes = self._racks("A", ["NORMAL", "NORMAL", "NORMAL", "NORMAL"])
+        assert engine._aggregate_rack_state(nodes, "A") == "NORMAL"
+
+    def test_one_degraded(self, engine):
+        nodes = self._racks("A", ["NORMAL", "DEGRADED", "NORMAL", "NORMAL"])
+        assert engine._aggregate_rack_state(nodes, "A") == "DEGRADED"
+
+    def test_one_fault_dominates_degraded(self, engine):
+        nodes = self._racks("A", ["NORMAL", "DEGRADED", "FAULT", "NORMAL"])
+        assert engine._aggregate_rack_state(nodes, "A") == "FAULT"
+
+    def test_no_racks_for_side_returns_offline(self, engine):
+        nodes = self._racks("B", ["NORMAL", "NORMAL", "NORMAL", "NORMAL"])
+        assert engine._aggregate_rack_state(nodes, "A") == "OFFLINE"
+
+    def test_side_filter_isolates_a_from_b(self, engine):
+        nodes = {
+            **self._racks("A", ["NORMAL", "NORMAL", "NORMAL", "NORMAL"]),
+            **self._racks("B", ["FAULT",  "FAULT",  "FAULT",  "FAULT" ]),
+        }
+        assert engine._aggregate_rack_state(nodes, "A") == "NORMAL"
+        assert engine._aggregate_rack_state(nodes, "B") == "FAULT"
 
 
 # ── on_message — MQTT ingestion ───────────────────────────────────────────────

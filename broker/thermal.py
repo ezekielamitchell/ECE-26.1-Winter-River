@@ -1,7 +1,9 @@
 """Winter River thermal & airflow model.
 
 Computes hot-aisle temperature, PUE, airflow, and pressure across the
-fleet given outdoor weather, server module mix, and fan count.
+fleet given outdoor weather, server module mix, and fan count. Implements
+the Capstone Model reference, including the underpressure correction loop
+that ramps fan power 10 kW at a time until rack pressure clears.
 
 Pure functions. SI units internally; Fahrenheit / cfm only at the boundary.
 Drive from broker/main.py — no I/O, no MQTT, no DB here.
@@ -21,6 +23,18 @@ _P_ATM = 101325.0
 _EPS = 0.62198
 _HFG = 2_501_000.0
 _CPV = 1860.0
+
+# Rack pressure-drop coefficient — Capstone Model.py:
+#   PrLossRack = 2.4253 * (q_m3s / (Ndata * rackpermod))**2  [Pa]
+_RACK_DP_COEFF = 2.4253
+
+# Duct pressure-drop coefficient — Capstone Model.py:
+#   PrLossDuct = q_m3s**2 / 8.91e4  [Pa]
+_DUCT_DP_DIVISOR = 8.91e4
+
+# Underpressure correction loop step size (W). Capstone ramps fan power
+# 10 kW at a time until rack pressure clears or fans hit max.
+_BOOST_STEP_W = 10_000.0
 
 
 def f_to_c(f: float) -> float:
@@ -42,7 +56,7 @@ class ThermalConfig:
     pr_fan_max_pa: float = 3.25
     q_max_per_fan_m3s: float = 47.57
 
-    servers_per_module: int = 4000
+    servers_per_module: int = 8000
     servers_per_rack: int = 40
 
     p_per_standard_w: float = 500.0
@@ -173,6 +187,25 @@ def compute_thermal(
     q = min(q, q_fan_max) if q_fan_max > 0 else 0.0
 
     p_fan = min(p_fan_max * (q / q_fan_max) ** 3, p_fan_max) if q_fan_max > 0 else 0.0
+
+    if n_data > 0 and racks_per_module > 0 and q > 0:
+        rack_dp = _RACK_DP_COEFF * (q / (n_data * racks_per_module)) ** 2
+    else:
+        rack_dp = 0.0
+
+    # Underpressure correction loop (Capstone Model.py lines 277-283).
+    # Ramp fan power in _BOOST_STEP_W steps until pressure clears or
+    # fans hit max. Downstream values (m_total, hot_aisle, fan_dp,
+    # duct_loss, p_loss, PUE) are recomputed below using post-boost
+    # q / p_fan so the published facility state stays self-consistent.
+    boost_applied = False
+    if n_data > 0 and racks_per_module > 0 and q_fan_max > 0 and p_fan_max > 0:
+        while rack_dp < cfg.underpressure_threshold_pa and p_fan < p_fan_max:
+            p_fan = min(p_fan + _BOOST_STEP_W, p_fan_max)
+            q = q_fan_max * (p_fan / p_fan_max) ** (1.0 / 3.0)
+            rack_dp = _RACK_DP_COEFF * (q / (n_data * racks_per_module)) ** 2
+            boost_applied = True
+
     p_loss = (p_data + cfg.facility_w + p_fan) * cfg.loss_fraction
     p_consumption = p_fan + p_loss + p_data + cfg.facility_w
 
@@ -189,11 +222,7 @@ def compute_thermal(
         fan_dp = (cfg.pr_fan_max_pa * n_fans) / ((q_fan_max / q) ** 2)
     else:
         fan_dp = 0.0
-    duct_loss = ((q * _M3S_TO_CFM) ** 2) / 4.0e11
-    if n_data > 0 and racks_per_module > 0 and q > 0:
-        rack_dp = (((q * _M3S_TO_CFM) / (n_data * racks_per_module)) ** 2) / 31.5e5
-    else:
-        rack_dp = 0.0
+    duct_loss = (q ** 2) / _DUCT_DP_DIVISOR if q > 0 else 0.0
     exit_pa = fan_dp - rack_dp - duct_loss
 
     hot_f = c_to_f(hot_aisle_c) if math.isfinite(hot_aisle_c) else float("inf")
@@ -233,6 +262,7 @@ def compute_thermal(
         "fan_pct_max": (100.0 * p_fan / p_fan_max) if p_fan_max > 0 else 0.0,
         "flow_pct_max": (100.0 * q / q_fan_max) if q_fan_max > 0 else 0.0,
         "flow_capped": flow_capped,
+        "boost_applied": boost_applied,
         "rack_dp_pa": rack_dp,
         "fan_dp_pa": fan_dp,
         "duct_loss_pa": duct_loss,

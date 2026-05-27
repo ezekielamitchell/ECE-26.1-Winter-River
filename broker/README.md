@@ -36,13 +36,10 @@ WinterRiverEngine (broker/main.py)
 | `MV_SWITCHGEAR` | `mv_switchgear_a/b` | Passes parent voltage when `CLOSED`; 0 when `OPEN/TRIPPED/FAULT` |
 | `MV_LV_TRANSFORMER` | `mv_lv_transformer_a/b` | 34.5 kV → 480 V; passes when `NORMAL/WARNING`, 0 on `FAULT` |
 | `GENERATOR` | `generator_a`, `generator_b` | Standby while utility is live; 10-tick startup delay on utility loss; 480 V when `RUNNING` |
-| `ATS` | `ats_a`, `ats_b` | Prefers transformer (utility) path; falls back to generator; `OPEN` if both down |
-| `LV_DIST` | `lv_dist_a/b` | Distributes ATS voltage to all downstream IT + mechanical branches |
-| `UPS` | `ups_a`, `ups_b` | Passes voltage with battery tracking; feeds the shared rectifier |
-| `RECTIFIER` | `rectifier` (shared, 2N) | 480 V AC → 48 V DC; NORMAL when both UPS feeds live, DEGRADED if one is down, OFF if both down |
-| `COOLING` | `cooling_a/b` | Fan bank (55 fans/side, 110 total) — drives broker thermal model |
-| `LIGHTING` | `lighting_a/b` | Mechanical load — monitored but not in IT power chain |
-| `SERVER_RACK` | `server_rack` | Single-fed from `rectifier`; inherits its `NORMAL` / `DEGRADED` status, `FAULT` if rectifier is off |
+| `ATS` | `ats_a`, `ats_b` | LV transfer switch. Prefers transformer (utility) path; falls back to generator; `OPEN` if both down. Output feeds UPS and cooling in parallel. |
+| `UPS` | `ups_a`, `ups_b` | Parent = ats; passes voltage with battery tracking; feeds the side's 4 server_racks |
+| `COOLING` | `cooling_a/b` | Parent = ats (mech branch). Fan bank (55 fans/side, 110 total) — drives broker thermal model |
+| `SERVER_RACK` | `server_rack_a1..a4`, `server_rack_b1..b4` | Single-fed from this side's UPS; `NORMAL` when UPS is on grid, `DEGRADED` when UPS is on battery/charging, `FAULT` when UPS is down. Side-A failure kills all 4 side-A racks. |
 
 ---
 

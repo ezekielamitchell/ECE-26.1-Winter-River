@@ -1,7 +1,12 @@
 """
 Winter River Simulation Engine
 Reads ESP32 MQTT telemetry → propagates power hierarchy → publishes control commands.
-Topology: Side A + Side B converge at a single shared rectifier (2N) → server_rack.
+Topology: Side A + Side B are two fully independent block-redundant chains.
+Each side feeds 4 server_racks single-sided (no shared rectifier, no rack-level
+2N). Side-A failure kills all 4 of side-A's racks; side-B continues.
+Chain per side: utility → hv_mv_xfmr → mv_switchgear → mv_lv_xfmr; generator
+↗ ats (LV transfer switch) → ups → server_rack_{1..4}; ats ↘ cooling.
+Also publishes a rolled-up `winter-river/bms/status` aggregate every tick.
 Tick rate: 1 Hz (configurable in config.toml).
 """
 
@@ -288,14 +293,8 @@ class WinterRiverEngine:
                 return sec_parent_v, "GENERATOR"
             return 0.0, "OPEN"
 
-        # ── LV_DIST ───────────────────────────────────────────────────────────
-        elif ntype == "LV_DIST":
-            if parent_v > 0:
-                status = node["status_msg"]
-                return 480.0, "NORMAL" if status not in ("OVERLOAD", "FAULT") else status
-            return 0.0, "NO_INPUT"
-
         # ── UPS ───────────────────────────────────────────────────────────────
+        # parent = ats_a / ats_b (LV transfer switch output)
         elif ntype == "UPS":
             if parent_v > 0:
                 node["battery_level"] = min(100, node["battery_level"] + 1)
@@ -306,33 +305,21 @@ class WinterRiverEngine:
                 return 480.0, "ON_BATTERY"
             return 0.0, "FAULT"
 
-        # ── RECTIFIER (480 V AC → 48 V DC, 2N shared) ────────────────────────
-        # parent           = ups_a (primary feed)
-        # secondary_parent = ups_b (secondary feed)
-        elif ntype == "RECTIFIER":
-            a_ok = parent_v > 0
-            b_ok = sec_parent_v > 0
-            if a_ok and b_ok:
-                return 48.0, "NORMAL"
-            if a_ok or b_ok:
-                return 48.0, "DEGRADED"
-            return 0.0, "OFF"
-
         # ── COOLING ───────────────────────────────────────────────────────────
+        # parent = ats_a / ats_b (parallel to UPS — mech load off LV bus)
         elif ntype == "COOLING":
             return (480.0, "NORMAL") if parent_v > 0 else (0.0, "OFF")
 
-        # ── LIGHTING ──────────────────────────────────────────────────────────
-        elif ntype == "LIGHTING":
-            return (277.0, "ON") if parent_v > 0 else (0.0, "OFF")
-
         # ── SERVER_RACK ───────────────────────────────────────────────────────
-        # Single-fed from the shared rectifier; redundancy lives upstream
-        # (rectifier owns the 2N path status from ups_a/ups_b).
+        # Single-fed from this side's UPS (480 V AC → 48 V DC inside the rack).
+        # No rack-level 2N — side-level (block) redundancy only. If parent UPS
+        # is on battery (DEGRADED operational state) the rack reports DEGRADED.
         elif ntype == "SERVER_RACK":
             if parent_v > 0:
-                rect_status = parent["status_msg"] if parent else "NORMAL"
-                return 48.0, rect_status if rect_status in ("DEGRADED",) else "NORMAL"
+                ups_status = parent["status_msg"] if parent else "NORMAL"
+                if ups_status in ("ON_BATTERY", "CHARGING"):
+                    return 48.0, "DEGRADED"
+                return 48.0, "NORMAL"
             return 0.0, "FAULT"
 
         log.warning("Unknown node_type %r for %s", ntype, node["node_id"])
@@ -363,21 +350,9 @@ class WinterRiverEngine:
         elif ntype == "ATS":
             return f"SOURCE:{status} STATUS:{status}"
 
-        elif ntype == "LV_DIST":
-            return f"INPUT:{v_out:.1f} STATUS:{status}"
-
         elif ntype == "UPS":
             return (
                 f"INPUT:{v_out:.1f} BATT:{node['battery_level']} STATUS:{status}"
-            )
-
-        elif ntype == "RECTIFIER":
-            path_a = 1 if (node.get("parent_v_a", 0) > 0) else 0
-            path_b = 1 if (node.get("parent_v_b", 0) > 0) else 0
-            ac_in = 480.0 if v_out > 0 else 0.0
-            return (
-                f"INPUT_AC:{ac_in:.1f} PATH_A:{path_a} PATH_B:{path_b} "
-                f"STATUS:{status}"
             )
 
         elif ntype == "COOLING":
@@ -393,17 +368,10 @@ class WinterRiverEngine:
                 )
             return f"INPUT:{v_out:.1f} STATUS:{status}"
 
-        elif ntype == "LIGHTING":
-            return f"INPUT:{v_out:.1f} STATUS:{status}"
-
         elif ntype == "SERVER_RACK":
-            path_a = 1 if (node.get("parent_v_a", 0) > 0) else 0
-            path_b = 1 if (node.get("parent_v_b", 0) > 0) else 0
-            input_v = 48.0 if v_out > 0 else 0.0
-            base = (
-                f"INPUT:{input_v:.1f} PATH_A:{path_a} PATH_B:{path_b} "
-                f"STATUS:{status}"
-            )
+            # Single-fed from this side's UPS — no PATH_A / PATH_B at the rack.
+            input_v = 480.0 if v_out > 0 else 0.0
+            base = f"INPUT:{input_v:.1f} STATUS:{status}"
             t = self._latest_thermal
             if t is not None and math.isfinite(t["hot_aisle_f"]):
                 base += f" TEMP:{t['hot_aisle_f']:.1f}"
@@ -435,25 +403,8 @@ class WinterRiverEngine:
             for nid in order:
                 node = nodes[nid]
                 v_out, status = self._compute_node(node, nodes)
-                # Rectifier is the 2N convergence point — record both UPS
-                # feeds so its control cmd (and the downstream server_rack)
-                # can report PATH_A / PATH_B health.
-                if node["node_type"] == "RECTIFIER":
-                    parent = nodes.get(node.get("parent_id"))
-                    sec    = nodes.get(node.get("secondary_parent_id"))
-                    node["parent_v_a"] = parent["v_out"] if parent else 0.0
-                    node["parent_v_b"] = sec["v_out"]    if sec    else 0.0
                 node["v_out"]      = v_out
                 node["status_msg"] = status
-
-            # Mirror the rectifier's PATH_A / PATH_B onto the server_rack so
-            # its control cmd reflects the upstream 2N state.
-            rectifier = nodes.get("rectifier")
-            if rectifier is not None:
-                for n in nodes.values():
-                    if n["node_type"] == "SERVER_RACK":
-                        n["parent_v_a"] = rectifier.get("parent_v_a", 0.0)
-                        n["parent_v_b"] = rectifier.get("parent_v_b", 0.0)
 
             # Compute thermal from updated node state — needed before publishing
             # cooling/server_rack control commands so they can carry TEMP/SPEED.
@@ -466,9 +417,10 @@ class WinterRiverEngine:
                 self.mqtt_client.publish(f"winter-river/{nid}/control", cmd, qos=1)
                 log.debug("→ %s/control: %s", nid, cmd)
 
-            # Publish derived facility + weather state for Telegraf / Grafana.
+            # Publish derived facility + weather + bms state for Telegraf / Grafana.
             self._publish_facility_status(self._latest_thermal)
             self._publish_weather_status()
+            self._publish_bms_status(nodes, self._latest_thermal)
 
             with self.db.cursor() as cur:
                 for nid, node in nodes.items():
@@ -545,6 +497,7 @@ class WinterRiverEngine:
             "q_cfm":           int(t["q_cfm"]),
             "fan_pct_max":     round(t["fan_pct_max"], 1),
             "flow_pct_max":    round(t["flow_pct_max"], 1),
+            "boost_applied":   bool(t.get("boost_applied", False)),
             "fan_count":       t["fan_count"],
             "fans_running_a":  self._cooling_fans.get("cooling_a", 0),
             "fans_running_b":  self._cooling_fans.get("cooling_b", 0),
@@ -570,6 +523,164 @@ class WinterRiverEngine:
         }
         self.mqtt_client.publish(
             "winter-river/weather/status",
+            json.dumps(payload), qos=1, retain=True,
+        )
+
+    # ── BMS aggregator ────────────────────────────────────────────────────────
+    # bms is a broker-published synthetic node (like facility/weather). It is
+    # NOT in the nodes table — it has no live_status row, no firmware-published
+    # telemetry, and no control logic. The ESP32 firmware for `bms` subscribes
+    # to winter-river/bms/status (this topic) and renders the rolled-up state.
+
+    # Statuses we treat as "warning level" — node is up but not happy.
+    _DEGRADED_STATES = {
+        "WARNING", "DEGRADED", "ON_BATTERY", "CHARGING", "STARTING",
+        "DIMMED", "OPEN", "SAG", "SWELL",
+    }
+    _FAULT_STATES = {
+        "FAULT", "OFFLINE", "OUTAGE", "TRIPPED", "OFF", "NO_INPUT", "DOWN",
+    }
+
+    def _side_health(self, nodes, side):
+        """OK | DEGRADED | DOWN for one side's chain. side is 'A' or 'B'."""
+        worst = "OK"
+        for n in nodes.values():
+            if (n.get("side") or "").upper() != side:
+                continue
+            # Server racks are dual-fed; their state reflects rectifier
+            # health, not the side's chain. Exclude from per-side rollup.
+            if n["node_type"] == "SERVER_RACK":
+                continue
+            status = (n.get("status_msg") or "").upper()
+            if status in self._FAULT_STATES or not n.get("is_present", False):
+                return "DOWN"
+            if status in self._DEGRADED_STATES:
+                worst = "DEGRADED"
+        return worst
+
+    def _power_state(self, nodes):
+        """2N_HEALTHY | A_ONLY | B_ONLY | DOWN from per-side UPS health.
+        Each side is fully independent (no shared rectifier); the side
+        is "up" iff its UPS is present and producing voltage."""
+        def side_up(side):
+            ups = nodes.get(f"ups_{side}")
+            return bool(
+                ups
+                and ups.get("is_present")
+                and (ups.get("v_out", 0.0) or 0.0) > 0
+            )
+        a, b = side_up("a"), side_up("b")
+        if a and b: return "2N_HEALTHY"
+        if a:       return "A_ONLY"
+        if b:       return "B_ONLY"
+        return "DOWN"
+
+    _RACK_STATE_RANK = {
+        "NORMAL":   0,
+        "DEGRADED": 1,
+        "FAULT":    2,
+        "OFFLINE":  2,
+    }
+
+    def _aggregate_rack_state(self, nodes, side):
+        """Worst-of state across all SERVER_RACK nodes on the given side
+        ('A' or 'B'). Returns 'OFFLINE' if no racks are found."""
+        worst = None
+        worst_rank = -1
+        for n in nodes.values():
+            if n["node_type"] != "SERVER_RACK":
+                continue
+            if (n.get("side") or "").upper() != side:
+                continue
+            state = (n.get("status_msg") or "OFFLINE").upper()
+            rank = self._RACK_STATE_RANK.get(state, 1)
+            if rank > worst_rank:
+                worst_rank = rank
+                worst = state
+        return worst or "OFFLINE"
+
+    def _compute_bms(self, nodes, thermal):
+        """Build the rolled-up BMS aggregate from live node state."""
+        side_a = self._side_health(nodes, "A")
+        side_b = self._side_health(nodes, "B")
+
+        power_state = self._power_state(nodes)
+
+        rack_a_state = self._aggregate_rack_state(nodes, "A")
+        rack_b_state = self._aggregate_rack_state(nodes, "B")
+
+        # Count nodes whose chain (or themselves) is degraded.
+        degraded_paths = (1 if side_a != "OK" else 0) + (1 if side_b != "OK" else 0)
+
+        # Active alarms = nodes in fault state + racks in non-normal state.
+        active_alarms = 0
+        for n in nodes.values():
+            status = (n.get("status_msg") or "").upper()
+            if status in self._FAULT_STATES and n["node_type"] != "GENERATOR":
+                # Generators are normally OFFLINE-style ("STANDBY" passes; only real
+                # FAULT counts) — STANDBY is excluded above by not being in the set.
+                active_alarms += 1
+        # Cooling thermal mode signals a non-power alarm.
+        cooling_state = "NORMAL"
+        if thermal:
+            tmode = thermal.get("mode", "NORMAL")
+            if tmode in ("FAULT",):
+                cooling_state = "FAULT"
+                active_alarms += 1
+            elif tmode in ("OVERHEATING", "UNDERPRESSURED", "IDLE"):
+                cooling_state = "DEGRADED"
+                active_alarms += 1
+
+        online_nodes  = sum(1 for n in nodes.values() if n.get("is_present"))
+        offline_nodes = sum(1 for n in nodes.values() if not n.get("is_present"))
+
+        # Overall mode: worst of power, cooling, racks.
+        rack_states = {rack_a_state, rack_b_state}
+        if (power_state == "DOWN"
+                or rack_states & self._FAULT_STATES == rack_states  # both fault
+                or cooling_state == "FAULT"):
+            mode = "FAULT"
+        elif (power_state in ("A_ONLY", "B_ONLY")
+              or "DEGRADED" in rack_states
+              or "FAULT" in rack_states  # one rack down = ALARM
+              or cooling_state == "DEGRADED"
+              or active_alarms > 0):
+            mode = "DEGRADED" if active_alarms <= 1 else "ALARM"
+        else:
+            mode = "NORMAL"
+
+        fans_total   = (self._thermal_cfg.fans_per_module * 2)
+        fans_running = (self._cooling_fans.get("cooling_a", 0)
+                        + self._cooling_fans.get("cooling_b", 0))
+
+        return {
+            "ts":             time.strftime("%H:%M:%S"),
+            "node":           "bms",
+            "mode":           mode,
+            "power_state":    power_state,
+            "cooling_state":  cooling_state,
+            "redundancy_lost": 1 if power_state != "2N_HEALTHY" else 0,
+            "degraded_paths": degraded_paths,
+            "active_alarms":  active_alarms,
+            "side_a_health":  side_a,
+            "side_b_health":  side_b,
+            "rack_a_state":   rack_a_state,
+            "rack_b_state":   rack_b_state,
+            "fans_total":     fans_total,
+            "fans_running":   fans_running,
+            "pue":            round(thermal["pue"], 3) if thermal else None,
+            "online_nodes":   online_nodes,
+            "offline_nodes":  offline_nodes,
+        }
+
+    def _publish_bms_status(self, nodes, thermal):
+        try:
+            payload = self._compute_bms(nodes, thermal)
+        except Exception as exc:
+            log.warning("BMS aggregate failed: %s", exc)
+            return
+        self.mqtt_client.publish(
+            "winter-river/bms/status",
             json.dumps(payload), qos=1, retain=True,
         )
 
@@ -661,6 +772,7 @@ class WinterRiverEngine:
             .field("outdoor_f",       float(t["outdoor_f"]))
             .field("rh_pct",          float(t["rh_pct"]))
             .field("fan_count",       int(t["fan_count"]))
+            .field("boost_applied",   1 if t.get("boost_applied") else 0)
         )
         if math.isfinite(t["hot_aisle_f"]):
             p = p.field("hot_aisle_f", float(t["hot_aisle_f"]))
