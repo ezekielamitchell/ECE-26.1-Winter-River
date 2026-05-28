@@ -34,8 +34,8 @@ preset = 1
 # outdoor_f = 95.0
 # rh_pct    = 50.0
 
-# Thermal model parameters. Defaults match the simulator's industrial-scale
-# baseline (8.8 MW fan capacity, 4000 servers/module). See broker/thermal.py
+# Thermal model parameters. Defaults match the Capstone reference (8.8 MW
+# fan capacity, 8000 servers/module → 200 racks/module). See broker/thermal.py
 # for the full ThermalConfig schema.
 [thermal]
 fan_modules        = 2
@@ -48,7 +48,7 @@ ai_modules         = 0
 # facility_w                   = 500000.0
 # p_max_per_fan_w              = 80000.0
 # fans_per_module              = 55
-# servers_per_module           = 4000
+# servers_per_module           = 8000
 # servers_per_rack             = 40
 # p_per_standard_w             = 500.0
 # p_per_storage_w              = 800.0

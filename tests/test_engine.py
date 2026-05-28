@@ -126,6 +126,26 @@ class TestComputeNode:
         v, s = engine._compute_node(n, {n["node_id"]: n})
         assert v == 0.0 and s == "OFFLINE"
 
+    # HV_SWITCHGEAR — main 230 kV breaker between utility and HV/MV xfmr
+    def test_hv_switchgear_closes_when_fed(self, engine):
+        parent = _node("u", "UTILITY", v_out=230000.0)
+        n = _node("sw", "HV_SWITCHGEAR", parent_id="u")
+        v, s = engine._compute_node(n, {"u": parent, "sw": n})
+        assert v == 230000.0 and s == "CLOSED"
+
+    @pytest.mark.parametrize("sticky", ["TRIPPED", "FAULT"])
+    def test_hv_switchgear_sticky_faults_survive_re_energise(self, engine, sticky):
+        parent = _node("u", "UTILITY", v_out=230000.0)
+        n = _node("sw", "HV_SWITCHGEAR", parent_id="u", status_msg=sticky)
+        v, s = engine._compute_node(n, {"u": parent, "sw": n})
+        assert v == 0.0 and s == sticky
+
+    def test_hv_switchgear_opens_when_unfed(self, engine):
+        parent = _node("u", "UTILITY", v_out=0.0, status_msg="OUTAGE")
+        n = _node("sw", "HV_SWITCHGEAR", parent_id="u")
+        v, s = engine._compute_node(n, {"u": parent, "sw": n})
+        assert v == 0.0 and s == "OPEN"
+
     # HV_MV_TRANSFORMER
     def test_hv_mv_transformer_steps_down(self, engine):
         parent = _node("u", "UTILITY", v_out=230000.0)

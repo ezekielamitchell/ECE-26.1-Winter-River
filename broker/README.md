@@ -70,22 +70,26 @@ This means the ATS output drops to 0 V for ~10 seconds before generator power ar
 
 ---
 
-## 2N Rectifier Logic
+## Block-Redundant 2N
 
-The shared `rectifier` is now the 2N convergence point. It has two parents
-(`ups_a` and `ups_b`) and combines their status:
+Side A and Side B are two fully independent power chains. There is no shared
+rectifier — each side feeds its own 4 server racks single-sided. Redundancy
+is at the *block* level: if Side A loses utility AND its generator fails,
+all 4 side-A racks go FAULT; Side B continues unaffected.
 
-| Path A (ups_a) | Path B (ups_b) | rectifier state | v_out |
-|----------------|----------------|-----------------|-------|
-| live           | live           | `NORMAL`        | 48 V  |
-| live           | dead           | `DEGRADED`      | 48 V  |
-| dead           | live           | `DEGRADED`      | 48 V  |
-| dead           | dead           | `OFF`           | 0 V   |
+The BMS aggregator (`_power_state` in `main.py`) derives a `2N_HEALTHY |
+A_ONLY | B_ONLY | DOWN` rollup from per-side UPS health:
 
-`server_rack` is single-fed from the rectifier and inherits its state. The
-broker mirrors the rectifier's `PATH_A` / `PATH_B` indicators into the
-server_rack control payload so the downstream display still reflects upstream
-2N health.
+| `ups_a.v_out > 0` | `ups_b.v_out > 0` | `power_state` |
+|-------------------|-------------------|---------------|
+| true              | true              | `2N_HEALTHY`  |
+| true              | false             | `A_ONLY`      |
+| false             | true              | `B_ONLY`      |
+| false             | false             | `DOWN`        |
+
+`_aggregate_rack_state` rolls up the 4 racks per side into a worst-of
+`NORMAL / DEGRADED / FAULT` for `rack_a_state` / `rack_b_state` in
+`winter-river/bms/status`.
 
 ---
 
@@ -105,10 +109,10 @@ pip install -r requirements.txt
 Copy the template and edit:
 
 ```bash
-cp config.sample.toml ../config.toml
+cp config.sample.toml config.toml
 ```
 
-`config.toml` is git-ignored. Minimum required sections:
+`broker/config.toml` is git-ignored (developer-local). Minimum required sections:
 
 ```toml
 [mqtt]
@@ -172,9 +176,9 @@ Key tables:
 nodes (
     node_id              VARCHAR(50) PRIMARY KEY,
     node_type            VARCHAR(30),     -- UTILITY, MV_SWITCHGEAR, GENERATOR, ATS, etc.
-    side                 CHAR(1),         -- 'A', 'B', or NULL (shared)
+    side                 CHAR(1),         -- 'A' or 'B' (no shared nodes)
     parent_id            VARCHAR(50),     -- primary upstream node
-    secondary_parent_id  VARCHAR(50),     -- ATS generator input / rectifier Side B
+    secondary_parent_id  VARCHAR(50),     -- ATS generator input
     rated_voltage        FLOAT,
     v_ratio              FLOAT
 )

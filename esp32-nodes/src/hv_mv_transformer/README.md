@@ -19,10 +19,10 @@ folding it into `mv_switchgear` as a ratio.
 
 ## Nodes in This Topology
 
-| node_id                  | Side | Input Voltage | Output Voltage | Parent      | Child             |
-|--------------------------|------|---------------|----------------|-------------|-------------------|
-| `hv_mv_transformer_a`    | A    | 230 kV        | 34.5 kV        | `utility_a` | `mv_switchgear_a` |
-| `hv_mv_transformer_b`    | B    | 230 kV        | 34.5 kV        | `utility_b` | `mv_switchgear_b` |
+| node_id                  | Side | Input Voltage | Output Voltage | Parent              | Child             |
+|--------------------------|------|---------------|----------------|---------------------|-------------------|
+| `hv_mv_transformer_a`    | A    | 230 kV        | 34.5 kV        | `hv_switchgear_a`   | `mv_switchgear_a` |
+| `hv_mv_transformer_b`    | B    | 230 kV        | 34.5 kV        | `hv_switchgear_b`   | `mv_switchgear_b` |
 
 ---
 

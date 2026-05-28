@@ -31,10 +31,10 @@ jobs:
       # drift without blocking. Flip to a real failure once `black .` is clean.
       - name: Format check with black
         continue-on-error: true
-        run: black --check --config broker/pyproject.toml broker/ tests/
+        run: black --check --line-length 100 broker/ tests/
 
       - name: Run tests
-        run: pytest tests/ -v
+        run: pytest tests/ -v -o addopts=""
 
   platformio-build:
     runs-on: ubuntu-latest
@@ -66,20 +66,21 @@ jobs:
       # Build one env per node category. Each `_a` env shares its build_src
       # with its `_b` sibling (same source under a different topic prefix),
       # so this catches firmware compile errors across the topology without
-      # rebuilding 25 essentially-identical binaries on every PR.
+      # rebuilding every essentially-identical binary on every PR. All eight
+      # server_rack envs compile the same source via build_flags, so one is
+      # enough to validate.
       - name: Build ESP32 firmware (representative envs)
         working-directory: esp32-nodes
         run: |
           pio run \
             -e utility_a \
+            -e hv_switchgear_a \
+            -e hv_mv_transformer_a \
             -e mv_switchgear_a \
             -e mv_lv_transformer_a \
             -e generator_a \
             -e ats_a \
-            -e lv_dist_a \
             -e ups_a \
-            -e pdu_a \
-            -e rectifier_a \
             -e cooling_a \
-            -e lighting_a \
-            -e server_rack
+            -e server_rack_a1 \
+            -e bms

@@ -1,6 +1,8 @@
 # ESP32 Nodes — Firmware Reference
 
-PlatformIO firmware for the 22 ESP32 nodes in the ECE 26.1 Winter River simulator. Each node simulates one component in a 2N-redundant data centre power chain, publishes JSON telemetry every 5 seconds, subscribes to MQTT control commands, and drives an SSD1306 128×64 OLED display.
+PlatformIO firmware for the 26 ESP32 nodes in the ECE 26.1 Winter River simulator. Each node simulates one component in a block-redundant 2N data-centre power chain, publishes JSON telemetry every 5 seconds, subscribes to MQTT control commands, and drives an SSD1306 128×64 OLED display.
+
+> **Slot budget:** the baseplate has 24 USB-C slots; this firmware tree defines 26 active boards (13 Side A + 13 Side B). Resolve the 2-slot overflow by expanding the baseplate, retiring one rack per side, or carrying two boards on a separate breakout. `bms` is broker-synthesized and the OLED-only `bms` env, if flashed, lives off-baseplate.
 
 ---
 
@@ -18,9 +20,9 @@ All active nodes connect to the Raspberry Pi hotspot through the shared `esp32-n
 
 ## Shared Firmware Helper
 
-Most active node files are now intentionally small because common behavior lives in `lib/winter_river/`. The helper provides:
+Most active node files are intentionally small because common behaviour lives in `lib/winter_river/`. The helper provides:
 
-- OLED initialization and shared display rows
+- OLED initialization and shared display rows (with 0x3C → 0x3D address probe)
 - WiFi reset + reconnect behavior
 - NTP setup and timestamp formatting
 - MQTT reconnect, LWT, and topic helpers
@@ -41,37 +43,47 @@ sudo systemctl start mosquitto
 
 ## Node Inventory
 
-### Side A (10 nodes)
+### Side A (13 nodes)
 
-| #  | `node_id`                | Component type dir                         | Rated voltage              |
-|----|--------------------------|--------------------------------------------|----------------------------|
-| ①  | `utility_a`              | `utility/utility_a/`                       | 230 kV                     |
-| ②  | `hv_mv_transformer_a`    | `hv_mv_transformer/hv_mv_transformer_a/`   | 34.5 kV out                |
-| ③  | `mv_switchgear_a`        | `mv_switchgear/mv_switchgear_a/`           | 34.5 kV                    |
-| ④  | `mv_lv_transformer_a`    | `mv_lv_transformer/mv_lv_transformer_a/`   | 480 V out                  |
-| ⑤  | `generator_a`            | `generator/generator_a/`                   | 480 V                      |
-| ⑥  | `ats_a`                  | `ats/ats_a/`                               | 480 V                      |
-| ⑦  | `lv_dist_a`              | `lv_dist/lv_dist_a/`                       | 480 V                      |
-| ⑧  | `ups_a`                  | `ups/ups_a/`                               | 480 V AC                   |
-| ⑨  | `cooling_a`              | `cooling/cooling_a/`                       | 480 V (fan bank — 55 fans) |
-| ⑩  | `lighting_a`             | `lighting/lighting_a/`                     | 277 V                      |
+| #  | `node_id`              | Component type dir                       | Rated voltage              |
+|----|------------------------|------------------------------------------|----------------------------|
+| ①  | `utility_a`            | `utility/utility_a/`                     | 230 kV                     |
+| ②  | `hv_switchgear_a`      | `hv_switchgear/hv_switchgear_a/`         | 230 kV (main breaker)      |
+| ③  | `hv_mv_transformer_a`  | `hv_mv_transformer/hv_mv_transformer_a/` | 34.5 kV out                |
+| ④  | `mv_switchgear_a`      | `mv_switchgear/mv_switchgear_a/`         | 34.5 kV                    |
+| ⑤  | `mv_lv_transformer_a`  | `mv_lv_transformer/mv_lv_transformer_a/` | 480 V out                  |
+| ⑥  | `generator_a`          | `generator/generator_a/`                 | 480 V                      |
+| ⑦  | `ats_a`                | `ats/ats_a/`                             | 480 V (LV transfer switch) |
+| ⑧  | `ups_a`                | `ups/ups_a/`                             | 480 V AC                   |
+| ⑨  | `cooling_a`            | `cooling/cooling_a/`                     | 480 V (fan bank — 55 fans) |
+| ⑩-⑬ | `server_rack_a{1..4}` | `server_rack/` (single shared source)    | 48 V DC                    |
 
-### Side B (10 nodes — mirror of Side A)
+### Side B (13 nodes — mirror of Side A)
 
 All `_a` suffixes replaced with `_b`. Component type directories are identical.
 
-### Shared (2 nodes — 2N convergence)
+### Broker-synthesized
 
-| `node_id`     | Component type dir          | Rated voltage      | Parents                       |
-|---------------|-----------------------------|--------------------|-------------------------------|
-| `rectifier`   | `rectifier/rectifier/`      | 480 V AC → 48 V DC | `ups_a` + `ups_b`             |
-| `server_rack` | `server_rack/server_rack/`  | 48 V DC            | `rectifier` (single feed)     |
+`bms` is published by `broker/main.py` (no firmware-side telemetry). The `[env:bms]` env compiles an OLED-only mirror that subscribes to `winter-river/bms/status` and renders the rolled-up state — useful if you want a physical BMS panel, but not required for the simulator to function.
+
+---
+
+## Power Chain (per side)
+
+```
+utility → hv_switchgear → hv_mv_transformer → mv_switchgear
+       → mv_lv_transformer → ats → ups → server_rack_{1..4}
+generator ─────────────────────────↗
+                                ats ↘ cooling   (parallel mech load)
+```
+
+Sides are fully independent (block-redundant 2N — no shared rectifier). Side-A failure kills all 4 side-A racks; side-B continues.
 
 ---
 
 ## Topic Structure
 
-Each node uses three topics:
+Each node uses two topics:
 
 ```
 winter-river/<node_id>/status    # Node publishes telemetry (JSON, retained, every 5s)
@@ -104,24 +116,21 @@ All commands run from the `esp32-nodes/` directory:
 
 ```bash
 # Build + flash a single node
-pio run -e utility_a --target upload
-pio run -e hv_mv_transformer_a --target upload
-pio run -e mv_switchgear_a --target upload
-pio run -e mv_lv_transformer_a --target upload
-pio run -e generator_a --target upload
-pio run -e ats_a --target upload
-pio run -e lv_dist_a --target upload
-pio run -e ups_a --target upload
-pio run -e cooling_a --target upload
-pio run -e lighting_a --target upload
+pio run -e utility_a            --target upload
+pio run -e hv_switchgear_a      --target upload
+pio run -e hv_mv_transformer_a  --target upload
+pio run -e mv_switchgear_a      --target upload
+pio run -e mv_lv_transformer_a  --target upload
+pio run -e generator_a          --target upload
+pio run -e ats_a                --target upload
+pio run -e ups_a                --target upload
+pio run -e cooling_a            --target upload
+pio run -e server_rack_a1       --target upload   # all 8 racks compile the same source
+pio run -e server_rack_a2       --target upload   # with WR_NODE_ID / WR_RACK_LABEL set per env
+# ... a3, a4, b1..b4
 
-# Shared 2N nodes
-pio run -e rectifier --target upload
-pio run -e server_rack --target upload
-
-# Flash Side B (same pattern with _b suffix)
-pio run -e utility_b --target upload
-# ... etc.
+# OLED-only BMS mirror (broker-synthesized topic)
+pio run -e bms                  --target upload
 
 # Build all envs without flashing
 pio run
@@ -180,8 +189,6 @@ Declared in the shared `[env]` block in `platformio.ini` — available to all en
 | `adafruit/Adafruit SSD1306@^2.5.7` | 128×64 OLED driver |
 | `adafruit/Adafruit GFX Library@^1.11.5` | OLED graphics primitives |
 
-> `LiquidCrystal_I2C` is **not** included — every active node uses the shared SSD1306 driver.
-
 ---
 
 ## Testing
@@ -203,14 +210,12 @@ mosquitto_pub -h 192.168.4.1 -t "winter-river/utility_a/control" -m "STATUS:OUTA
 For per-node control commands, see the `README.md` inside each component type directory:
 
 - [`src/utility/README.md`](src/utility/README.md)
+- [`src/hv_switchgear/`](src/hv_switchgear/) (no per-component README yet — see `CLAUDE.md` §8 for the control schema)
 - [`src/hv_mv_transformer/README.md`](src/hv_mv_transformer/README.md)
 - [`src/mv_switchgear/README.md`](src/mv_switchgear/README.md)
 - [`src/mv_lv_transformer/README.md`](src/mv_lv_transformer/README.md)
 - [`src/generator/README.md`](src/generator/README.md)
 - [`src/ats/README.md`](src/ats/README.md)
-- [`src/lv_dist/README.md`](src/lv_dist/README.md)
 - [`src/ups/README.md`](src/ups/README.md)
 - [`src/cooling/README.md`](src/cooling/README.md)
-- [`src/lighting/README.md`](src/lighting/README.md)
-- [`src/rectifier/README.md`](src/rectifier/README.md)
 - [`src/server_rack/README.md`](src/server_rack/README.md)

@@ -43,6 +43,6 @@ lib_deps =
     adafruit/Adafruit GFX Library@^1.11.5
 ```
 
-**Historical note:** Older prototype docs may mention `LiquidCrystal_I2C` LCD modules. Those notes do not apply to the active 25-node SSD1306 firmware set.
+**Historical note:** Older prototype docs may mention `LiquidCrystal_I2C` LCD modules. Those notes do not apply to the active 26-node SSD1306 firmware set.
 
 ---

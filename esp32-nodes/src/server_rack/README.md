@@ -1,37 +1,43 @@
-# Server Rack — `server_rack`
+# Server Rack — `server_rack_{a1..a4,b1..b4}`
 
 ## Real-World Role
 
-The server rack is the IT load endpoint — the reason the entire power and cooling infrastructure exists. In Winter River the 2N redundancy lives at the shared `rectifier`: both `ups_a` and `ups_b` feed it, and a single 48V DC bus emerges to the rack. PATH_A / PATH_B on the rack OLED still reflect the two upstream AC feeds, so a DEGRADED state indicates one of those AC paths has been lost. Real hyperscale racks more typically take dual 48 V DC feeds from independent rectifier pairs; the simplified topology here demonstrates the same redundancy semantics with one shared rectifier module.
+Server racks are the IT load — the reason the entire power and cooling infrastructure exists. Winter River models 8 racks total (4 per side). Each rack is **single-fed from its side's UPS** (no shared rectifier, no rack-level 2N): a side failure kills all 4 of that side's racks at once. Redundancy lives at the side (block) level, not per-rack. Hot-aisle temperature is driven by the broker thermal model (`broker/thermal.py`) and pushed to each rack's `TEMP:<f>` control every tick.
 
 ---
 
 ## Nodes in This Topology
 
-| node_id       | Side   | Rated Voltage | Parent      | Notes                                  |
-|---------------|--------|---------------|-------------|----------------------------------------|
-| `server_rack` | shared | 48 V DC       | `rectifier` | Single DC bus; PATH_A/PATH_B come from rectifier's upstream 2N AC feeds |
+| node_id          | Side | Rated Voltage | Parent   | Notes                                |
+|------------------|------|---------------|----------|--------------------------------------|
+| `server_rack_a1` | A    | 48 V DC       | `ups_a`  | One of four side-A racks             |
+| `server_rack_a2` | A    | 48 V DC       | `ups_a`  |                                      |
+| `server_rack_a3` | A    | 48 V DC       | `ups_a`  |                                      |
+| `server_rack_a4` | A    | 48 V DC       | `ups_a`  |                                      |
+| `server_rack_b1` | B    | 48 V DC       | `ups_b`  | One of four side-B racks             |
+| `server_rack_b2` | B    | 48 V DC       | `ups_b`  |                                      |
+| `server_rack_b3` | B    | 48 V DC       | `ups_b`  |                                      |
+| `server_rack_b4` | B    | 48 V DC       | `ups_b`  |                                      |
 
-This is a shared node fed from the unified rectifier. Upstream 2N redundancy
-is enforced at the rectifier (dual AC inputs from `ups_a` and `ups_b`).
+All 8 envs compile **the same source file** (`src/server_rack/server_rack.cpp`). PlatformIO `build_flags` inject `WR_NODE_ID` and `WR_RACK_LABEL` per env, so the firmware identifies itself and labels the OLED correctly.
 
 ---
 
 ## Telemetry (published every 5s)
 
-Topic: `winter-river/server_rack/status`
+Topic: `winter-river/<node_id>/status`
 
-| Field      | Type   | Default  | Description                                  |
-|------------|--------|----------|----------------------------------------------|
-| `ts`       | string | HH:MM:SS | Timestamp from NTP                           |
-| `cpu_pct`  | int    | 42       | Aggregate CPU utilisation (%)                |
-| `inlet_f`  | int    | 75       | Rack inlet temperature (°F)                  |
-| `power_kw` | float  | 3.2      | Total rack power draw (kW)                   |
-| `units`    | int    | 8        | Number of active server units                |
-| `path_a`   | int    | 1        | Upstream `ups_a` feed live (1 = yes, 0 = no) |
-| `path_b`   | int    | 1        | Upstream `ups_b` feed live (1 = yes, 0 = no) |
-| `state`    | string | NORMAL   | Rack health state                            |
-| `voltage`  | int    | 48       | Rated DC voltage (V)                         |
+| Field      | Type   | Default  | Description                                |
+|------------|--------|----------|--------------------------------------------|
+| `ts`       | string | HH:MM:SS | Timestamp from NTP                         |
+| `cpu_pct`  | int    | 42       | CPU utilisation (%)                        |
+| `inlet_f`  | int    | 75       | Rack inlet temperature (°F)                |
+| `power_kw` | float  | 3.2      | Total rack power draw (kW)                 |
+| `units`    | int    | 8        | Number of active server units              |
+| `state`    | string | NORMAL   | Rack health state                          |
+| `voltage`  | int    | 48       | Rated DC voltage (V)                       |
+
+There is no `path_a` / `path_b` field — the shared rectifier (and its dual feeds) was removed when the topology shifted to block-redundant 2N.
 
 ---
 
@@ -39,64 +45,44 @@ Topic: `winter-river/server_rack/status`
 
 | State      | Meaning                                                              |
 |------------|----------------------------------------------------------------------|
-| `NORMAL`   | Both power paths live — full 2N redundancy active                   |
-| `DEGRADED` | One path lost — running on single feed, no redundancy margin        |
-| `FAULT`    | Both paths dead, thermal limit exceeded, or CPU critically overloaded|
+| `NORMAL`   | UPS on grid, inlet temp and CPU within limits                       |
+| `DEGRADED` | UPS on battery/charging, OR inlet > 85 °F, OR CPU > 80 %            |
+| `FAULT`    | UPS dead, OR inlet > 95 °F, OR CPU > 95 %                           |
+
+`DEGRADED` from UPS status is set by `broker/main.py` (the rack inherits it from its parent UPS). Thermal / CPU thresholds are evaluated locally in the firmware.
 
 ---
 
 ## MQTT Control Commands
 
-Topic: `winter-river/server_rack/control`
+Topic: `winter-river/<node_id>/control`
 
-| Command          | Example           | Effect                                                               |
-|------------------|-------------------|----------------------------------------------------------------------|
-| `CPU:<pct>`      | `CPU:90`          | Set CPU utilisation; auto-calculates `power_kw`                      |
-| `TEMP:<f>`       | `TEMP:92`         | Set rack inlet temperature (°F)                                      |
-| `UNITS:<n>`      | `UNITS:12`        | Set number of active server units                                    |
-| `PATH_A:<0\|1>`  | `PATH_A:0`        | Set `ups_a` upstream feed status (1 = live, 0 = dead)                |
-| `PATH_B:<0\|1>`  | `PATH_B:0`        | Set `ups_b` upstream feed status (1 = live, 0 = dead)                |
-| `STATUS:<state>` | `STATUS:DEGRADED` | Force state string                                                   |
+| Command          | Example           | Effect                                                |
+|------------------|-------------------|-------------------------------------------------------|
+| `CPU:<pct>`      | `CPU:90`          | Set CPU utilisation; auto-calculates `power_kw`       |
+| `TEMP:<f>`       | `TEMP:92`         | Set rack inlet temperature (°F)                       |
+| `UNITS:<n>`      | `UNITS:12`        | Set number of active server units                     |
+| `INPUT:<v>`      | `INPUT:480`       | Broker sends 480 when fed, 0 when UPS is dead         |
+| `STATUS:<state>` | `STATUS:DEGRADED` | Force state string (used for manual fault injection)  |
 
-`PATH_A` and `PATH_B` are updated automatically by the simulation engine (`broker/main.py`); it mirrors the rectifier's `parent_v_a` / `parent_v_b` onto the rack so its OLED still reflects the two AC feeds upstream of the rectifier. Manual PATH commands are for fault injection and testing only.
-
----
-
-## Auto-Thresholds
-
-| Condition                                  | Resulting State |
-|--------------------------------------------|-----------------|
-| `path_a == 0 && path_b == 0`               | `FAULT`         |
-| `inlet_f > 95` or `cpu_pct > 95`           | `FAULT`         |
-| `path_a == 0` or `path_b == 0`             | `DEGRADED`      |
-| `inlet_f > 85` or `cpu_pct > 80`           | `DEGRADED`      |
-| Both paths live, temp and CPU within limits | `NORMAL`        |
+`TEMP` is normally driven by `broker/thermal.py`'s hot-aisle output — see `winter-river/facility/status` for the model state.
 
 ---
 
 ## Build & Flash
 
-```bash
-# server_rack is a single shared node (no _a / _b suffix)
-pio run -e server_rack --target upload
+All 8 racks build the same source with per-env build_flags:
 
-# Build only (no flash)
-pio run -e server_rack
+```bash
+# Flash one rack
+pio run -e server_rack_a1 --target upload
+pio run -e server_rack_b4 --target upload
+
+# Build all eight
+for env in server_rack_a1 server_rack_a2 server_rack_a3 server_rack_a4 \
+           server_rack_b1 server_rack_b2 server_rack_b3 server_rack_b4; do
+    pio run -e "$env"
+done
 ```
 
----
-
-## Quick Test
-
-```bash
-# Subscribe to live telemetry
-mosquitto_sub -h 192.168.4.1 -t "winter-river/server_rack/status" -v
-
-# Simulate Side A path failure (rack enters DEGRADED)
-mosquitto_pub -h 192.168.4.1 -t "winter-river/server_rack/control" -m "PATH_A:0"
-
-# Simulate high CPU load and elevated inlet temperature
-mosquitto_pub -h 192.168.4.1 -t "winter-river/server_rack/control" -m "CPU:88 TEMP:87"
-
-# Restore both paths (return to NORMAL)
-mosquitto_pub -h 192.168.4.1 -t "winter-river/server_rack/control" -m "PATH_A:1 PATH_B:1"
+The `[env:server_rack_*]` entries in `platformio.ini` all point at `build_src_filter = +<server_rack/>` and differ only in their `build_flags`.

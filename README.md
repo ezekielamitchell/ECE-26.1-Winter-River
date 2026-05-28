@@ -16,7 +16,7 @@
 
 The project addresses a growing industry need: as of 2025, the U.S. operates over 5,400 active data centers with data center employment growing 60% from 2016 to 2023, yet qualified personnel continue to fall short of demand. More than half of U.S. data center operators report difficulty hiring qualified candidates, particularly for specialized skills in power distribution, thermal management, and infrastructure systems.
 
-Winter River provides a physical, interactive learning environment where students, new engineers, and operations staff can experiment with data center configurations, observe system interdependencies, and practice emergency response scenarios in a safe, controlled setting. Each component module simulates real data center equipment, from utility power and generators through HV/MV and MV/LV transformers, UPS units, and a shared rectifier feeding the server racks, creating an accurate representation of 2N redundancy power distribution architectures based on the Open Compute Project topology.
+Winter River provides a physical, interactive learning environment where students, new engineers, and operations staff can experiment with data center configurations, observe system interdependencies, and practice emergency response scenarios in a safe, controlled setting. Each component module simulates real data center equipment — from utility power and generators through HV switchgear, HV/MV and MV/LV transformers, UPS units, and 8 single-fed server racks — creating an accurate representation of **block-redundant 2N** power distribution where Side A and Side B are two fully independent chains feeding 4 racks each.
 
 The system leverages embedded IoT architecture with ESP32 microcontrollers in each component, MQTT communication protocols, and a Raspberry Pi 5 central controller to enable real-time simulation of power flow, thermal conditions, and system failures. Visual feedback through OLED displays on each component and an optional dashboard interface provides immediate understanding of system states and cascading effects.
 
@@ -27,10 +27,10 @@ By combining physical modularity (plug-and-play components on a custom PCB basep
 ## Key Features
 
 * Modular Plug-and-Play Architecture: Custom PCB baseplate with USB-C connectors at each node location enables quick reconfiguration of data center topologies. Components attach and detach like breadboard circuits, supporting experimentation with different redundancy configurations and power paths.
-* ESP32-Based Smart Components: Each data center component (generators, transformers, UPS, rectifier, server racks) contains an ESP32-WROOM-32 microcontroller with an integrated OLED display showing real-time operational parameters (voltage, current, power consumption, temperature, fault status).
+* ESP32-Based Smart Components: Each data center component (generators, switchgear, transformers, UPS, server racks) contains an ESP32-WROOM-32 microcontroller with an integrated OLED display showing real-time operational parameters (voltage, current, power consumption, temperature, fault status).
 * MQTT Publish-Subscribe Communication: Industry-standard MQTT protocol enables scalable, low-bandwidth communication between all components. ESP32 nodes publish sensor data and receive commands through a central Mosquitto broker, mirroring real industrial IoT architectures.
 * Raspberry Pi 5 Simulation Engine: Central controller calculates and broadcasts system-wide power flow, thermal conditions, and failure propagation in real-time. Implements 2N redundancy logic, cumulative rack loading calculations, and coordinated failure scenarios.
-* Open Compute Project Topology: Implements 2N redundancy power distribution architecture following OCP Open Rack V3 specifications. Dual power paths from utility/generator through transformers, switchgear, and UPS units converge at a shared rectifier feeding the server racks, providing realistic redundancy training.
+* Block-Redundant 2N Topology: Two fully independent power chains (Side A and Side B), each feeding 4 single-sided server racks. Side-A failure kills all 4 side-A racks while side-B continues — modelling the side/block redundancy used in many real hyperscale halls.
 * Scenario-Based Training: Automated failure scenarios including utility power loss with generator startup delays, UPS switchover events, cooling system failures with progressive thermal warnings, overload conditions leading to circuit breaker trips, and component removal/hot-swap detection.
 
 ***
@@ -44,8 +44,8 @@ By combining physical modularity (plug-and-play components on a custom PCB basep
 | Communication Protocol | MQTT Publish-Subscribe                        | Industry-standard, scalable, low-bandwidth IoT communication                                                                  |
 | Display                | OLED per component                            | Real-time operational parameters (voltage, current, power, temperature, status)                                               |
 | PCB Architecture       | Custom modular baseplate                      | USB-C connectors at each node, plug-and-play components                                                                       |
-| Power Topology         | 2N Redundancy                                 | OCP Open Rack V3 specifications, dual power paths                                                                             |
-| Component Types        | 22 modules (10 Side A + 10 Side B + 2 shared) | Utility, HV/MV transformer, MV switchgear, MV/LV transformer, generator, ATS, LV dist, UPS, cooling, lighting, rectifier (shared), server rack (shared) |
+| Power Topology         | Block-redundant 2N                            | Two independent side chains; rack-level redundancy lives at the side (block) level                                            |
+| Component Types        | 26 modules (13 Side A + 13 Side B)            | Utility, HV switchgear, HV/MV transformer, MV switchgear, MV/LV transformer, generator, ATS, UPS, cooling, 4× server_rack per side. BMS aggregator is broker-synthesized (no ESP32 board required). |
 | Simulation Features    | Real-time system states                       | Power flow, thermal modeling, failure propagation, hot-swap detection                                                         |
 | Development Platform   | PlatformIO + Python                           | ESP32 firmware, Raspberry Pi controller scripts, GitHub CI/CD                                                                 |
 | Visualization          | Grafana Dashboard                             | Real-time metrics, system topology view, historical data analysis                                                             |
@@ -64,13 +64,13 @@ By combining physical modularity (plug-and-play components on a custom PCB basep
 | Mosquitto MQTT broker running on Pi  | port 1883, anonymous, persistence     | ✅ Achieved |
 | Node firmware matrix written         | All active envs in `platformio.ini`   | ✅ Achieved |
 | Simulation engine (`broker/main.py`) | Topological sort + cascade logic      | ✅ Achieved |
-| PostgreSQL schema (22 nodes)         | `secondary_parent_id`, 2N support     | ✅ Achieved |
+| PostgreSQL schema (26 nodes)         | `secondary_parent_id`, block-redundant 2N | ✅ Achieved |
 
 ### Spring Quarter 2026
 
 | Metric                          | Target                                      | Status     |
 | ------------------------------- | ------------------------------------------- | ---------- |
-| Full 2N redundancy hardware     | 22 physical ESP32 nodes on PCB baseplate    | 🔲 Planned |
+| Full block-redundant 2N hardware| 26 physical ESP32 nodes (2-slot overflow vs 24-slot baseplate) | 🔲 Planned |
 | 3+ automated failure scenarios  | Utility loss, UPS switchover, cooling fault | 🔲 Planned |
 | Grafana dashboard deployed      | Real-time visualization at :3000            | 🔲 Planned |
 | InfluxDB / Telegraf integration | MQTT → InfluxDB live pipeline               | 🔲 Planned |
@@ -84,42 +84,44 @@ By combining physical modularity (plug-and-play components on a custom PCB basep
 ```
 ECE-26.1-Winter-River/
 ├── README.md
+├── CLAUDE.md                          # Comprehensive developer docs (topology, schemas, pitfalls)
+├── TESTING.md                         # System test checklist + scenario runbook
 ├── CONTRIBUTING.md
 ├── SUMMARY.md                         # GitBook navigation index
 ├── LICENSE
 ├── .gitignore
-├── config.toml                        # Runtime config (tracked repo default settings)
 ├── .gitbook/
 │   └── assets/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml                     # GitHub Actions: python lint + pio build
+│       └── ci.yml                     # GitHub Actions: pytest + pio build matrix
 ├── broker/                            # Python simulation engine + MQTT bridge
 │   ├── main.py                        # WinterRiverEngine: topo sort, cascade logic, InfluxDB writes
-│   ├── config.sample.toml             # Reference template for runtime config format
+│   ├── thermal.py                     # Pure thermal/airflow/PUE model (Capstone-aligned)
+│   ├── config.sample.toml             # Reference template; copy to broker/config.toml
 │   ├── requirements.txt               # Runtime: paho-mqtt, toml, psycopg2-binary, influxdb-client
 │   └── requirements-dev.txt           # Dev: pytest, black, flake8, mypy
 ├── deploy/                            # Raspberry Pi systemd units & setup
 │   ├── mosquitto_setup.sh             # Configures Mosquitto (TCP 1883, anonymous, persistence)
 │   └── winter-river-hotspot.service   # Systemd unit — Pi 2.4 GHz access point
 ├── docs/
+│   └── ECEGR4880 Technical Report.pdf # Capstone formal deliverable
 ├── esp32-nodes/                       # PlatformIO firmware for all ESP32 nodes
 │   ├── platformio.ini                 # Active build environments
 │   ├── lib/
 │   │   └── winter_river/              # Shared WiFi/MQTT/NTP/OLED/topic helper library
 │   └── src/
 │       ├── utility/                   # ①  230 kV grid feed — Side A + B chain roots
-│       ├── hv_mv_transformer/         # ②  230 kV → 34.5 kV step-down (per side)
-│       ├── mv_switchgear/             # ③  34.5 kV main disconnect & protection relay
-│       ├── mv_lv_transformer/         # ④  34.5 kV → 480 V, 1000 kVA
-│       ├── generator/                 # ⑤  Backup diesel gen, 480 V, startup delay
-│       ├── ats/                       # ⑥  Automatic transfer switch (dual-source)
-│       ├── lv_dist/                   # ⑦  480 V distribution board, 384 kW rated
+│       ├── hv_switchgear/             # ②  230 kV main breaker (first on-site protection)
+│       ├── hv_mv_transformer/         # ③  230 kV → 34.5 kV step-down (per side)
+│       ├── mv_switchgear/             # ④  34.5 kV bus disconnect & protection
+│       ├── mv_lv_transformer/         # ⑤  34.5 kV → 480 V
+│       ├── generator/                 # ⑥  Backup diesel gen, 480 V, startup delay
+│       ├── ats/                       # ⑦  LV transfer switch (utility / generator)
 │       ├── ups/                       # ⑧  UPS — battery %, charge state, ON_BATTERY
-│       ├── cooling/                   # ⑨  CRAC/CRAH — coolant temp + fan speed
-│       ├── lighting/                  # ⑩  277 V lighting circuit
-│       ├── rectifier/                 # ⑪  Shared 480 V AC → 48 V DC, dual UPS feed (2N)
-│       └── server_rack/               # ⑫  Shared 48 V DC rack endpoint
+│       ├── cooling/                   # ⑨  CRAC/CRAH — fan bank (55 fans/side, 110 total)
+│       ├── server_rack/               # ⑩-⑬ Four 48 V DC racks per side (single shared source + build_flags)
+│       └── bms/                       # OLED-only mirror of broker-synthesized BMS topic
 ├── grafana/                           # Docker monitoring stack
 │   ├── docker-compose.yml             # InfluxDB 2.7 + Grafana + Telegraf
 │   ├── telegraf.conf                  # MQTT consumer → InfluxDB v2 bridge
@@ -131,8 +133,8 @@ ECE-26.1-Winter-River/
 │   ├── setup_pi.sh                    # Run first — full Pi provisioning
 │   ├── setup_hotspot.sh               # Start/stop/status for NetworkManager AP
 │   ├── status.sh                      # Live node & service health check
-│   └── init_db.sql                    # PostgreSQL schema (22 nodes seeded)
-└── typescript/                        # Reserved — future dashboard/API
+│   └── init_db.sql                    # PostgreSQL schema (26 nodes seeded)
+└── tests/                             # pytest suites: broker engine + thermal model
 ```
 
 ### Firmware Architecture
@@ -141,29 +143,26 @@ The active ESP32 firmware now shares a common local PlatformIO library at `esp32
 
 This keeps the node matrix consistent across both power paths while making schema updates and bug fixes much cheaper to apply repo-wide.
 
-### Power Chain (Side A — 10 nodes)
+### Power Chain (Side A — 13 nodes)
 
-| #  | Node                     | Role                                             | Voltage           |
-| -- | ------------------------ | ------------------------------------------------ | ----------------- |
-| ①  | `utility_a`              | MV utility grid feed (chain root)                | 230 kV            |
-| ②  | `hv_mv_transformer_a`    | HV/MV step-down 230 kV → 34.5 kV                 | 34.5 kV out       |
-| ③  | `mv_switchgear_a`        | Main disconnect & protection relay               | 34.5 kV           |
-| ④  | `mv_lv_transformer_a`    | Step-down transformer 34.5 kV → 480 V            | 480 V out         |
-| ⑤  | `generator_a`            | Backup diesel generator (ATS secondary input)    | 480 V             |
-| ⑥  | `ats_a`                  | Automatic transfer switch — utility or generator | 480 V             |
-| ⑦  | `lv_dist_a`              | LV distribution board — IT + mechanical loads    | 480 V, 384 kW     |
-| ⑧  | `ups_a`                  | Uninterruptible power supply (feeds rectifier)   | 480 V AC          |
-| ⑨  | `cooling_a`              | CRAC/CRAH cooling unit                           | 480 V AC          |
-| ⑩  | `lighting_a`             | 277 V lighting circuit                           | 277 V AC          |
+| #    | Node                     | Role                                             | Voltage                    |
+| ---- | ------------------------ | ------------------------------------------------ | -------------------------- |
+| ①    | `utility_a`              | 230 kV utility grid feed (chain root)            | 230 kV                     |
+| ②    | `hv_switchgear_a`        | 230 kV main breaker (first on-site protection)   | 230 kV                     |
+| ③    | `hv_mv_transformer_a`    | HV/MV step-down 230 kV → 34.5 kV                 | 34.5 kV out                |
+| ④    | `mv_switchgear_a`        | 34.5 kV bus disconnect & protection              | 34.5 kV                    |
+| ⑤    | `mv_lv_transformer_a`    | Step-down transformer 34.5 kV → 480 V            | 480 V out                  |
+| ⑥    | `generator_a`            | Backup diesel generator (ATS secondary input)    | 480 V                      |
+| ⑦    | `ats_a`                  | LV transfer switch — transformer or generator    | 480 V                      |
+| ⑧    | `ups_a`                  | Uninterruptible power supply (feeds 4 racks)     | 480 V AC                   |
+| ⑨    | `cooling_a`              | CRAC/CRAH fan bank (55 fans on this side)        | 480 V AC                   |
+| ⑩-⑬ | `server_rack_a{1..4}`    | 48 V DC IT racks (single-fed from `ups_a`)       | 48 V DC                    |
 
-Side B mirrors Side A exactly with `_b` suffix on all node IDs.
+Side B mirrors Side A exactly with `_b` suffix on all node IDs (13 nodes per side, 26 total). There are no shared nodes — sides are fully independent.
 
-### Shared Nodes (2N convergence)
+### Broker-synthesized
 
-| Node          | Role                                         | Parents                                  |
-| ------------- | -------------------------------------------- | ---------------------------------------- |
-| `rectifier`   | AC→DC rectifier (480 V AC → 48 V DC)         | `ups_a` (primary) + `ups_b` (secondary)  |
-| `server_rack` | 48 V DC server rack endpoint                 | `rectifier`                              |
+The `bms` aggregator topic (`winter-river/bms/status`) is published by `broker/main.py` every tick from live node state — no ESP32 firmware is required. A separate OLED-only `bms` env is available if you want a physical BMS readout panel.
 
 ### Key Configuration Files
 
@@ -171,7 +170,7 @@ Side B mirrors Side A exactly with `_b` suffix on all node IDs.
 | ------------------------------------- | -------------------------------------------------------------------- |
 | `esp32-nodes/platformio.ini`          | PlatformIO build environments                                        |
 | `broker/config.sample.toml`           | Reference template for runtime config structure                      |
-| `scripts/init_db.sql`                 | PostgreSQL schema (22-node seed data, `secondary_parent_id` support) |
+| `scripts/init_db.sql`                 | PostgreSQL schema (26-node seed data, `secondary_parent_id` for ATS) |
 | `deploy/mosquitto_setup.sh`           | Configures Mosquitto (TCP 1883, anonymous, persistence on)           |
 | `deploy/winter-river-hotspot.service` | Systemd unit for the Pi 2.4 GHz AP                                   |
 | `scripts/setup_pi.sh`                 | Run first — provisions the entire Pi stack end-to-end                |

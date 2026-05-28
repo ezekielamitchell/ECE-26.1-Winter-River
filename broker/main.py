@@ -4,8 +4,9 @@ Reads ESP32 MQTT telemetry → propagates power hierarchy → publishes control 
 Topology: Side A + Side B are two fully independent block-redundant chains.
 Each side feeds 4 server_racks single-sided (no shared rectifier, no rack-level
 2N). Side-A failure kills all 4 of side-A's racks; side-B continues.
-Chain per side: utility → hv_mv_xfmr → mv_switchgear → mv_lv_xfmr; generator
-↗ ats (LV transfer switch) → ups → server_rack_{1..4}; ats ↘ cooling.
+Chain per side: utility → hv_switchgear → hv_mv_xfmr → mv_switchgear
+→ mv_lv_xfmr; generator ↗ ats (LV transfer switch) → ups
+→ server_rack_{1..4}; ats ↘ cooling.
 Also publishes a rolled-up `winter-river/bms/status` aggregate every tick.
 Tick rate: 1 Hz (configurable in config.toml).
 """
@@ -54,14 +55,32 @@ log = logging.getLogger("winter-river")
 
 class WinterRiverEngine:
     def __init__(self):
-        self.db = psycopg2.connect(DB_CONFIG, cursor_factory=RealDictCursor)
+        # DB is optional. Without it the broker still boots and runs the MQTT
+        # client, but on_message drops every telemetry message (no node_id
+        # validation possible) and run_simulation_tick early-returns. Useful
+        # for previewing on a dev machine that doesn't have Postgres running.
+        try:
+            self.db = psycopg2.connect(DB_CONFIG, cursor_factory=RealDictCursor)
+            log.info("PostgreSQL connected")
+        except psycopg2.OperationalError as exc:
+            log.warning(
+                "PostgreSQL unavailable (%s) — broker running in no-DB mode; "
+                "telemetry will be ignored and simulation ticks will no-op",
+                exc,
+            )
+            self.db = None
 
         self.mqtt_client = mqtt.Client()
         self.mqtt_client.on_message = self.on_message
-        self.mqtt_client.connect(MQTT_BROKER, MQTT_PORT)
-        self.mqtt_client.subscribe("winter-river/+/status", qos=1)
-        self.mqtt_client.loop_start()
-        log.info("MQTT connected to %s:%d", MQTT_BROKER, MQTT_PORT)
+        self.mqtt_client.on_connect = self._on_mqtt_connect
+        # connect_async + loop_start lets the broker boot even if Mosquitto is
+        # not reachable yet; paho's background thread will keep retrying.
+        try:
+            self.mqtt_client.connect_async(MQTT_BROKER, MQTT_PORT, keepalive=60)
+            self.mqtt_client.loop_start()
+            log.info("MQTT connecting to %s:%d (async)", MQTT_BROKER, MQTT_PORT)
+        except Exception as exc:
+            log.warning("MQTT setup failed (%s) — will retry in background", exc)
 
         self._thermal_cfg = ThermalConfig.from_mapping(_cfg.get("thermal"))
         self._weather     = resolve_weather(_cfg.get("weather", {}))
@@ -102,10 +121,22 @@ class WinterRiverEngine:
 
         log.info("Winter River Engine initialised")
 
+    # ── MQTT lifecycle ────────────────────────────────────────────────────────
+
+    def _on_mqtt_connect(self, client, userdata, flags, rc):
+        if rc == 0:
+            log.info("MQTT connected to %s:%d", MQTT_BROKER, MQTT_PORT)
+            client.subscribe("winter-river/+/status", qos=1)
+        else:
+            log.warning("MQTT connect failed (rc=%d) — will retry", rc)
+
     # ── MQTT ingestion ────────────────────────────────────────────────────────
 
     def on_message(self, client, userdata, msg):
         """Update live_status and historical_data from ESP32 MQTT telemetry."""
+        # No DB → no node_id validation possible → drop the message.
+        if self.db is None:
+            return
         try:
             node_id = msg.topic.split("/")[1]
 
@@ -237,8 +268,17 @@ class WinterRiverEngine:
             v_out  = 0.0 if status in ("OUTAGE", "FAULT", "OFFLINE") else 230000.0
             return v_out, status
 
+        # ── HV_SWITCHGEAR ─────────────────────────────────────────────────────
+        # 230 kV main breaker. First on-site protection between utility and
+        # the HV/MV step-down transformer.
+        elif ntype == "HV_SWITCHGEAR":
+            status = node["status_msg"]
+            if parent_v > 0 and status not in ("OPEN", "TRIPPED", "FAULT"):
+                return 230000.0, "CLOSED"
+            return 0.0, status if status in ("TRIPPED", "FAULT") else "OPEN"
+
         # ── HV_MV_TRANSFORMER ─────────────────────────────────────────────────
-        # 230 kV → 34.5 kV step-down between the utility and MV switchgear.
+        # 230 kV → 34.5 kV step-down between the HV switchgear and MV switchgear.
         elif ntype == "HV_MV_TRANSFORMER":
             if parent_v > 0:
                 status = node["status_msg"]
@@ -334,6 +374,9 @@ class WinterRiverEngine:
         if ntype == "UTILITY":
             return f"VOLT:{v_out} STATUS:{status}"
 
+        elif ntype == "HV_SWITCHGEAR":
+            return f"CLOSE STATUS:{status}" if v_out > 0 else f"OPEN STATUS:{status}"
+
         elif ntype == "HV_MV_TRANSFORMER":
             return f"STATUS:{status}"
 
@@ -383,6 +426,8 @@ class WinterRiverEngine:
 
     def run_simulation_tick(self):
         """Fetch all node states, propagate voltages, run thermal, push commands."""
+        if self.db is None:
+            return   # no-DB mode: skip the tick entirely
         try:
             with self.db.cursor() as cur:
                 cur.execute(
