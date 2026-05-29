@@ -90,6 +90,6 @@ Creates four tables and seeds all 26 active nodes:
 - **`historical_data`** — JSONB log of every incoming MQTT telemetry message.
 - **`facility_metrics`** — per-tick output of `broker/thermal.py` (PUE, hot aisle, airflow, pressures).
 
-Seeded chain per side: `utility → hv_switchgear → hv_mv_transformer → mv_switchgear → mv_lv_transformer → ats → ups → server_rack_{1..4}`, with `generator` as ats's secondary parent and `cooling` branching off ats in parallel with ups.
+Seeded chain per side: `utility → hv_mv_transformer → mv_switchgear → mv_lv_transformer → lv_switchgear → ats → ups → server_rack_{1..4}`, with `generator` as ats's secondary parent and `cooling` branching off ats in parallel with ups.
 
-Seeds initial data for `util_a` (utility node) and `trans_a` (transformer node).
+Seeds the static `nodes` topology for all 26 boards (13 per side) and an initial `live_status` row for each.

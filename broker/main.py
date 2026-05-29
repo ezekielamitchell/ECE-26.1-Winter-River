@@ -4,8 +4,8 @@ Reads ESP32 MQTT telemetry → propagates power hierarchy → publishes control 
 Topology: Side A + Side B are two fully independent block-redundant chains.
 Each side feeds 4 server_racks single-sided (no shared rectifier, no rack-level
 2N). Side-A failure kills all 4 of side-A's racks; side-B continues.
-Chain per side: utility → hv_switchgear → hv_mv_xfmr → mv_switchgear
-→ mv_lv_xfmr; generator ↗ ats (LV transfer switch) → ups
+Chain per side: utility → hv_mv_xfmr → mv_switchgear (34.5 kV) → mv_lv_xfmr
+→ lv_switchgear (480 V); generator ↗ ats (LV transfer switch) → ups
 → server_rack_{1..4}; ats ↘ cooling.
 Also publishes a rolled-up `winter-river/bms/status` aggregate every tick.
 Tick rate: 1 Hz (configurable in config.toml).
@@ -17,6 +17,7 @@ import math
 import os
 import time
 from collections import defaultdict
+from datetime import timedelta
 
 import paho.mqtt.client as mqtt
 import psycopg2
@@ -44,6 +45,11 @@ TICK_RATE   = _cfg.get("simulation", {}).get("tick_rate", 1.0)
 
 # Generator startup delay in simulation ticks (1 tick = 1 s at default tick rate)
 GEN_STARTUP_TICKS = 10
+
+# Mark a node OFFLINE if no telemetry arrives in this window. Covers silent
+# ESP32 hangs that don't fire the MQTT LWT — telemetry interval is 5 s, so
+# 3 missed cycles + slack catches a hung node without flapping under jitter.
+STALE_NODE_THRESHOLD_SEC = 20
 
 logging.basicConfig(
     level=logging.INFO,
@@ -86,6 +92,12 @@ class WinterRiverEngine:
         self._weather     = resolve_weather(_cfg.get("weather", {}))
         self._latest_thermal = None
         self._facility_metrics_disabled = False
+
+        # Static topology cache — populated from `nodes` at startup. The set is
+        # rebuilt on a cache miss in on_message so re-running init_db.sql
+        # mid-session takes effect without a broker restart. Avoids one SELECT
+        # per inbound telemetry packet.
+        self._known_nodes = self._load_known_nodes()
 
         # Live fan-bank counts reported by cooling_a / cooling_b telemetry.
         # Default = nominal so the first tick (before any telemetry arrives)
@@ -132,6 +144,22 @@ class WinterRiverEngine:
 
     # ── MQTT ingestion ────────────────────────────────────────────────────────
 
+    def _load_known_nodes(self):
+        """Return the set of seeded node_ids. Empty set in no-DB mode."""
+        if self.db is None:
+            return set()
+        try:
+            with self.db.cursor() as cur:
+                cur.execute("SELECT node_id FROM nodes")
+                ids = {row["node_id"] for row in cur.fetchall()}
+            log.info("Topology cache loaded: %d nodes", len(ids))
+            return ids
+        except Exception as exc:
+            log.warning("Failed to load topology cache: %s", exc)
+            try: self.db.rollback()
+            except Exception: pass
+            return set()
+
     def on_message(self, client, userdata, msg):
         """Update live_status and historical_data from ESP32 MQTT telemetry."""
         # No DB → no node_id validation possible → drop the message.
@@ -140,11 +168,12 @@ class WinterRiverEngine:
         try:
             node_id = msg.topic.split("/")[1]
 
-            # Reject messages from node_ids not in the DB — avoids FK violations
-            # and catches accidentally-flashed legacy firmware (util_a, gen_a, etc.)
-            with self.db.cursor() as cur:
-                cur.execute("SELECT 1 FROM nodes WHERE node_id=%s", (node_id,))
-                if cur.fetchone() is None:
+            # Reject messages from node_ids not in the topology cache. On miss,
+            # refresh the cache once (covers re-seeding mid-session) before
+            # rejecting — avoids needing a broker restart when init_db.sql runs.
+            if node_id not in self._known_nodes:
+                self._known_nodes = self._load_known_nodes()
+                if node_id not in self._known_nodes:
                     log.warning(
                         "Ignoring MQTT message from unknown node_id %r (topic: %s). "
                         "Is legacy firmware flashed? Run init_db.sql to add new nodes.",
@@ -268,17 +297,8 @@ class WinterRiverEngine:
             v_out  = 0.0 if status in ("OUTAGE", "FAULT", "OFFLINE") else 230000.0
             return v_out, status
 
-        # ── HV_SWITCHGEAR ─────────────────────────────────────────────────────
-        # 230 kV main breaker. First on-site protection between utility and
-        # the HV/MV step-down transformer.
-        elif ntype == "HV_SWITCHGEAR":
-            status = node["status_msg"]
-            if parent_v > 0 and status not in ("OPEN", "TRIPPED", "FAULT"):
-                return 230000.0, "CLOSED"
-            return 0.0, status if status in ("TRIPPED", "FAULT") else "OPEN"
-
         # ── HV_MV_TRANSFORMER ─────────────────────────────────────────────────
-        # 230 kV → 34.5 kV step-down between the HV switchgear and MV switchgear.
+        # 230 kV → 34.5 kV step-down, fed directly from utility.
         elif ntype == "HV_MV_TRANSFORMER":
             if parent_v > 0:
                 status = node["status_msg"]
@@ -286,6 +306,8 @@ class WinterRiverEngine:
             return 0.0, "FAULT" if node["status_msg"] == "FAULT" else "NO_INPUT"
 
         # ── MV_SWITCHGEAR ─────────────────────────────────────────────────────
+        # MV switchgear on the 34.5 kV bus, downstream of the HV/MV transformer.
+        # Its output feeds the MV/LV transformer.
         elif ntype == "MV_SWITCHGEAR":
             status = node["status_msg"]
             if parent_v > 0 and status not in ("OPEN", "TRIPPED", "FAULT"):
@@ -293,11 +315,21 @@ class WinterRiverEngine:
             return 0.0, status if status in ("TRIPPED", "FAULT") else "OPEN"
 
         # ── MV_LV_TRANSFORMER ─────────────────────────────────────────────────
+        # 34.5 kV → 480 V step-down, fed from mv_switchgear (MV bus).
         elif ntype == "MV_LV_TRANSFORMER":
             if parent_v > 0:
                 status = node["status_msg"]
                 return 480.0, "NORMAL" if status not in ("WARNING", "FAULT") else status
             return 0.0, "FAULT" if node["status_msg"] == "FAULT" else "NO_INPUT"
+
+        # ── LV_SWITCHGEAR ─────────────────────────────────────────────────────
+        # Switchgear downstream of the MV/LV transformer, operating on the
+        # 480 V LV bus. Feeds the ATS primary input.
+        elif ntype == "LV_SWITCHGEAR":
+            status = node["status_msg"]
+            if parent_v > 0 and status not in ("OPEN", "TRIPPED", "FAULT"):
+                return 480.0, "CLOSED"
+            return 0.0, status if status in ("TRIPPED", "FAULT") else "OPEN"
 
         # ── GENERATOR ─────────────────────────────────────────────────────────
         elif ntype == "GENERATOR":
@@ -374,13 +406,13 @@ class WinterRiverEngine:
         if ntype == "UTILITY":
             return f"VOLT:{v_out} STATUS:{status}"
 
-        elif ntype == "HV_SWITCHGEAR":
+        elif ntype == "MV_SWITCHGEAR":
             return f"CLOSE STATUS:{status}" if v_out > 0 else f"OPEN STATUS:{status}"
 
         elif ntype == "HV_MV_TRANSFORMER":
             return f"STATUS:{status}"
 
-        elif ntype == "MV_SWITCHGEAR":
+        elif ntype == "LV_SWITCHGEAR":
             return f"CLOSE STATUS:{status}" if v_out > 0 else f"OPEN STATUS:{status}"
 
         elif ntype == "MV_LV_TRANSFORMER":
@@ -424,11 +456,33 @@ class WinterRiverEngine:
 
     # ── Main simulation tick ──────────────────────────────────────────────────
 
+    def _mark_stale_nodes(self):
+        """Flip is_present=False for nodes whose last_update is older than
+        STALE_NODE_THRESHOLD_SEC. LWT handles clean disconnects; this catches
+        silent hangs (TCP keepalive elapses much slower than the 5 s telemetry
+        interval). Returning telemetry re-flips is_present via on_message."""
+        try:
+            with self.db.cursor() as cur:
+                cur.execute(
+                    "UPDATE live_status SET is_present=FALSE, status_msg='OFFLINE' "
+                    "WHERE is_present=TRUE AND last_update < NOW() - %s",
+                    (timedelta(seconds=STALE_NODE_THRESHOLD_SEC),),
+                )
+                stale = cur.rowcount
+                self.db.commit()
+                if stale:
+                    log.info("Watchdog: marked %d node(s) stale", stale)
+        except Exception as exc:
+            log.warning("Stale-node sweep failed: %s", exc)
+            try: self.db.rollback()
+            except Exception: pass
+
     def run_simulation_tick(self):
         """Fetch all node states, propagate voltages, run thermal, push commands."""
         if self.db is None:
             return   # no-DB mode: skip the tick entirely
         try:
+            self._mark_stale_nodes()
             with self.db.cursor() as cur:
                 cur.execute(
                     """

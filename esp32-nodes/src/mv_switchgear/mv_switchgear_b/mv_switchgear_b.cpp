@@ -1,23 +1,24 @@
-// mv_switchgear_b.cpp — MV switchgear, Side B (34.5 kV).
-// States: CLOSED, OPEN, TRIPPED, FAULT
+// mv_switchgear_b.cpp — MV switchgear, Side B.
+// Operates on the 34.5 kV MV bus, downstream of hv_mv_transformer_b.
+// Mirror of mv_switchgear_a. States: CLOSED, OPEN, TRIPPED, FAULT
 #include <winter_river.h>
 
 static const char *NODE_ID = "mv_switchgear_b";
 static const char *LABEL   = "mv_sw_b";
 
-static constexpr int VOLTAGE_RATING = 34500;
+static constexpr int VOLTAGE_RATING = 34500;    // 34.5 kV MV bus
 
 static bool   breaker_closed = true;
-static float  current_a      = 15.2f;
-static float  load_kw        = 420.0f;
-static int    load_pct       = 30;
+static float  current_a      = 116.0f;
+static float  load_kw        = 4000.0f;
+static int    load_pct       = 25;
 static String state          = "CLOSED";
 
 static void applyGuard() {
-  if (current_a > 40.0f || load_pct > 95) {
+  if (current_a > 1400.0f || load_pct > 95) {
     state = "TRIPPED";
     breaker_closed = false;
-  } else if (current_a > 32.0f || load_pct > 80) {
+  } else if (current_a > 1150.0f || load_pct > 80) {
     state = "FAULT";
   }
 }
@@ -29,7 +30,7 @@ static void handleToken(const String &tok) {
     breaker_closed = false; state = "OPEN";
   } else if (tok.startsWith("LOAD:")) {
     load_pct  = tok.substring(5).toInt();
-    load_kw   = load_pct * 14.0f;
+    load_kw   = load_pct * 160.0f;
     current_a = (load_kw * 1000.0f) / VOLTAGE_RATING;
   } else if (tok.startsWith("STATUS:")) {
     state = tok.substring(7);

@@ -1,6 +1,6 @@
 // hv_mv_transformer_a.cpp — 230 kV → 34.5 kV step-down transformer, Side A.
-// First transformer in the Side A power chain. Sits between utility_a and
-// mv_switchgear_a. States: NORMAL, WARNING, FAULT.
+// First on-site equipment in the Side A power chain. Fed directly from
+// utility_a; its 34.5 kV output feeds mv_switchgear_a. States: NORMAL, WARNING, FAULT.
 #include <winter_river.h>
 
 static const char *NODE_ID = "hv_mv_transformer_a";

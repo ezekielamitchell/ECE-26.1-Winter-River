@@ -74,9 +74,9 @@ jobs:
         run: |
           pio run \
             -e utility_a \
-            -e hv_switchgear_a \
-            -e hv_mv_transformer_a \
             -e mv_switchgear_a \
+            -e hv_mv_transformer_a \
+            -e lv_switchgear_a \
             -e mv_lv_transformer_a \
             -e generator_a \
             -e ats_a \

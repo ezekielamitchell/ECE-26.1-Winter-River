@@ -19,10 +19,10 @@ folding it into `mv_switchgear` as a ratio.
 
 ## Nodes in This Topology
 
-| node_id                  | Side | Input Voltage | Output Voltage | Parent              | Child             |
-|--------------------------|------|---------------|----------------|---------------------|-------------------|
-| `hv_mv_transformer_a`    | A    | 230 kV        | 34.5 kV        | `hv_switchgear_a`   | `mv_switchgear_a` |
-| `hv_mv_transformer_b`    | B    | 230 kV        | 34.5 kV        | `hv_switchgear_b`   | `mv_switchgear_b` |
+| node_id                  | Side | Input Voltage | Output Voltage | Parent      | Child             |
+|--------------------------|------|---------------|----------------|-------------|-------------------|
+| `hv_mv_transformer_a`    | A    | 230 kV        | 34.5 kV        | `utility_a` | `mv_switchgear_a` |
+| `hv_mv_transformer_b`    | B    | 230 kV        | 34.5 kV        | `utility_b` | `mv_switchgear_b` |
 
 ---
 
@@ -43,8 +43,8 @@ The broker (`broker/main.py`) treats this node like the existing
 
 ## Status
 
-> **Firmware pending.** This folder is a placeholder for the eventual ESP32
-> firmware. The simulation engine, PostgreSQL seed, and `scripts/status.sh`
-> already include `hv_mv_transformer_{a,b}`, so any new firmware should adopt
-> the shared `wr::begin()` pattern (see `esp32-nodes/lib/winter_river/`) and
-> publish a `NORMAL` / `WARNING` / `FAULT` status field.
+> **Firmware implemented.** `hv_mv_transformer_a.cpp` / `_b.cpp` exist under
+> this folder and build via `pio run -e hv_mv_transformer_a` (and `_b`). They
+> use the shared `wr::begin()` pattern (see `esp32-nodes/lib/winter_river/`) and
+> publish a `NORMAL` / `WARNING` / `FAULT` status field. The simulation engine,
+> PostgreSQL seed, and `scripts/status.sh` all include `hv_mv_transformer_{a,b}`.

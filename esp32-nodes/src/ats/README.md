@@ -8,12 +8,13 @@ The Automatic Transfer Switch is the critical decision point where utility and g
 
 ## Nodes in This Topology
 
-| node_id  | Side | Rated Voltage | Primary Parent        | Secondary Parent | Children            |
-|----------|------|---------------|-----------------------|------------------|---------------------|
-| `ats_a`  | A    | 480 V         | `mv_lv_transformer_a` | `generator_a`    | `ups_a`, `cooling_a` |
-| `ats_b`  | B    | 480 V         | `mv_lv_transformer_b` | `generator_b`    | `ups_b`, `cooling_b` |
+| node_id  | Side | Rated Voltage | Primary Parent      | Secondary Parent | Children             |
+|----------|------|---------------|---------------------|------------------|----------------------|
+| `ats_a`  | A    | 480 V         | `lv_switchgear_a`   | `generator_a`    | `ups_a`, `cooling_a` |
+| `ats_b`  | B    | 480 V         | `lv_switchgear_b`   | `generator_b`    | `ups_b`, `cooling_b` |
 
-ATS is the LV transfer switch (formerly "lv switch" in the spec). Its output
+ATS is the LV transfer switch. Its primary input is the 480 V LV switchgear
+(utility-derived path); its secondary is the standby generator. Its output
 feeds the side's UPS (IT path) AND cooling (mech path) in parallel.
 
 ---
@@ -38,7 +39,7 @@ Topic: `winter-river/<node_id>/status`
 
 | State       | Meaning                                                             |
 |-------------|---------------------------------------------------------------------|
-| `UTILITY`   | Transformer (utility) path active — normal operation               |
+| `UTILITY`   | LV switchgear (utility) path active — normal operation              |
 | `GENERATOR` | Generator path active — utility has failed or been shed            |
 | `OPEN`      | Neither source present — no output voltage                         |
 | `FAULT`     | Internal ATS failure — contacts welded, sensor fault, etc.         |

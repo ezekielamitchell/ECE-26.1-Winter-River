@@ -1,16 +1,15 @@
-# MV Switchgear — `mv_switchgear_a` / `mv_switchgear_b`
+# LV Switchgear — `lv_switchgear_a` / `lv_switchgear_b`
 
 ## Real-World Role
 
-The MV switchgear is the medium-voltage protection and isolation stage that sits
-on the **34.5 kV bus**, immediately downstream of the HV/MV step-down
-transformer. It houses the main MV breaker, metering CTs/PTs, and protective
-relays (overcurrent, ground fault, differential). In commercial data centers,
-MV switchgear is typically rated 5 kV–38 kV and provides the first switchable
-point of isolation on-site: operators can open it to drop the entire downstream
-chain for maintenance or in response to a fault, without touching the utility
-service entrance. Tripping it de-energises everything from the MV/LV transformer
-down on that side.
+The LV switchgear is the low-voltage protection and isolation stage on the
+**480 V bus**, immediately downstream of the MV/LV step-down transformer. It is
+the last switchable point before the automatic transfer switch (ATS): its output
+is the ATS *primary* (utility-derived) input, with the standby generator feeding
+the ATS secondary. Opening or tripping the LV switchgear forces the ATS to fall
+back to the generator (if running) or to drop the side. In real installations
+this is a low-voltage switchboard with a main breaker, branch breakers, and
+metering feeding the UPS and mechanical loads.
 
 > **Naming:** switchgear is named for the bus voltage it sits on. `mv_switchgear`
 > is on the 34.5 kV **MV** bus (downstream of the HV/MV transformer);
@@ -21,13 +20,17 @@ down on that side.
 
 ## Nodes in This Topology
 
-| node_id           | Side | Rated Voltage | Parent                  | Child                 |
-|-------------------|------|---------------|-------------------------|-----------------------|
-| `mv_switchgear_a` | A    | 34.5 kV       | `hv_mv_transformer_a`   | `mv_lv_transformer_a` |
-| `mv_switchgear_b` | B    | 34.5 kV       | `hv_mv_transformer_b`   | `mv_lv_transformer_b` |
+| node_id           | Side | Rated Voltage | Parent                  | Child   |
+|-------------------|------|---------------|-------------------------|---------|
+| `lv_switchgear_a` | A    | 480 V         | `mv_lv_transformer_a`   | `ats_a` |
+| `lv_switchgear_b` | B    | 480 V         | `mv_lv_transformer_b`   | `ats_b` |
 
 Chain context (per side):
-`utility → hv_mv_transformer → `**`mv_switchgear`**` → mv_lv_transformer → lv_switchgear → ats`
+`utility → hv_mv_transformer → mv_switchgear → mv_lv_transformer → `**`lv_switchgear`**` → ats`
+
+The LV switchgear output is the **ATS primary input**. The generator feeds the
+ATS secondary; `ats_*` prefers the LV switchgear path and falls back to the
+generator when the LV bus is dead.
 
 ---
 
@@ -39,11 +42,11 @@ Topic: `winter-river/<node_id>/status`
 |-------------|--------|----------|------------------------------------------|
 | `ts`        | string | HH:MM:SS | Local timestamp from NTP                 |
 | `breaker`   | bool   | true     | Main breaker state (true = closed)       |
-| `current_a` | float  | 116.0    | Line current at 34.5 kV (A)              |
-| `load_kw`   | float  | 4000.0   | Active power (kW)                        |
-| `load_pct`  | int    | 25       | Load as % of rated capacity              |
+| `current_a` | float  | 625.0    | Line current at 480 V (A)                |
+| `load_kw`   | float  | 300.0    | Active power (kW)                        |
+| `load_pct`  | int    | 30       | Load as % of rated capacity              |
 | `state`     | string | CLOSED   | Switchgear state (see States below)      |
-| `voltage`   | int    | 34500    | Rated voltage (V)                        |
+| `voltage`   | int    | 480      | Rated voltage (V)                        |
 
 ---
 
@@ -51,8 +54,8 @@ Topic: `winter-river/<node_id>/status`
 
 | State     | Meaning                                                        |
 |-----------|----------------------------------------------------------------|
-| `CLOSED`  | Normal — main breaker closed, MV bus energised from the HV/MV transformer |
-| `OPEN`    | Main breaker manually or automatically opened, or no upstream feed |
+| `CLOSED`  | Normal — main breaker closed, 480 V LV bus energised, feeding the ATS primary |
+| `OPEN`    | Main breaker opened, or no upstream feed (forces ATS to generator) |
 | `TRIPPED` | Protective relay triggered a fault trip — sticky               |
 | `FAULT`   | Overcurrent / overload detected — sticky                       |
 
@@ -72,7 +75,7 @@ Topic: `winter-river/<node_id>/control`
 | `LOAD:<pct>`     | `LOAD:60`         | Sets load %; recalculates `load_kw` and `current_a` proportionally |
 | `STATUS:<state>` | `STATUS:TRIPPED`  | Forces state string                                                 |
 
-The broker (`broker/main.py::_control_cmd` MV_SWITCHGEAR case) sends
+The broker (`broker/main.py::_control_cmd` LV_SWITCHGEAR case) sends
 `CLOSE STATUS:<state>` when its parent transformer is energised and not flagged
 faulted, and `OPEN STATUS:<state>` otherwise.
 
@@ -90,10 +93,13 @@ faulted, and `OPEN STATUS:<state>` otherwise.
 
 ## Broker Behavior
 
-`broker/main.py::_compute_node` MV_SWITCHGEAR case:
+`broker/main.py::_compute_node` LV_SWITCHGEAR case:
 
-- If `parent.v_out > 0` and `status_msg` is not in `{OPEN, TRIPPED, FAULT}` → output 34.5 kV, state `CLOSED`
+- If `parent.v_out > 0` and `status_msg` is not in `{OPEN, TRIPPED, FAULT}` → output 480 V, state `CLOSED`
 - Otherwise → output 0 V, state stays sticky (`TRIPPED` / `FAULT`) or falls to `OPEN`
+
+Because this node feeds the ATS primary, opening it is the clean way to demo an
+ATS transfer to generator without faulting the upstream chain.
 
 ---
 
@@ -101,14 +107,14 @@ faulted, and `OPEN STATUS:<state>` otherwise.
 
 ```bash
 # Side A
-pio run -e mv_switchgear_a --target upload
+pio run -e lv_switchgear_a --target upload
 
 # Side B
-pio run -e mv_switchgear_b --target upload
+pio run -e lv_switchgear_b --target upload
 
 # Build only (no flash)
-pio run -e mv_switchgear_a
-pio run -e mv_switchgear_b
+pio run -e lv_switchgear_a
+pio run -e lv_switchgear_b
 ```
 
 ---
@@ -117,14 +123,14 @@ pio run -e mv_switchgear_b
 
 ```bash
 # Subscribe to live telemetry
-mosquitto_sub -h 192.168.4.1 -t "winter-river/mv_switchgear_a/status" -v
+mosquitto_sub -h 192.168.4.1 -t "winter-river/lv_switchgear_a/status" -v
 
-# Open the MV breaker (isolate the downstream chain on Side A)
-mosquitto_pub -h 192.168.4.1 -t "winter-river/mv_switchgear_a/control" -m "OPEN"
+# Open the LV breaker (forces ats_a to transfer to the generator)
+mosquitto_pub -h 192.168.4.1 -t "winter-river/lv_switchgear_a/control" -m "OPEN"
 
 # Simulate a fault trip
-mosquitto_pub -h 192.168.4.1 -t "winter-river/mv_switchgear_a/control" -m "STATUS:TRIPPED"
+mosquitto_pub -h 192.168.4.1 -t "winter-river/lv_switchgear_a/control" -m "STATUS:TRIPPED"
 
 # Restore and re-close breaker
-mosquitto_pub -h 192.168.4.1 -t "winter-river/mv_switchgear_a/control" -m "CLOSE"
+mosquitto_pub -h 192.168.4.1 -t "winter-river/lv_switchgear_a/control" -m "CLOSE"
 ```

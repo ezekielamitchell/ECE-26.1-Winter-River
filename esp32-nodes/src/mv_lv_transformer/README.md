@@ -10,8 +10,8 @@ The MV/LV transformer steps down medium-voltage grid power to the 480 V building
 
 | node_id                | Side | Input Voltage | Output Voltage | Rating    | Parent            | Child     |
 |------------------------|------|---------------|----------------|-----------|-------------------|-----------|
-| `mv_lv_transformer_a`  | A    | 34.5 kV       | 480 V          | 1000 kVA  | `mv_switchgear_a` | `ats_a`   |
-| `mv_lv_transformer_b`  | B    | 34.5 kV       | 480 V          | 1000 kVA  | `mv_switchgear_b` | `ats_b`   |
+| `mv_lv_transformer_a`  | A    | 34.5 kV       | 480 V          | 1000 kVA  | `mv_switchgear_a` | `lv_switchgear_a` |
+| `mv_lv_transformer_b`  | B    | 34.5 kV       | 480 V          | 1000 kVA  | `mv_switchgear_b` | `lv_switchgear_b` |
 
 ---
 

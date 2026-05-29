@@ -145,9 +145,9 @@ else
 
     echo "  Side A:"
     node_status "utility_a          " utility_a
-    node_status "hv_switchgear_a    " hv_switchgear_a
-    node_status "hv_mv_transformer_a" hv_mv_transformer_a
     node_status "mv_switchgear_a    " mv_switchgear_a
+    node_status "hv_mv_transformer_a" hv_mv_transformer_a
+    node_status "lv_switchgear_a    " lv_switchgear_a
     node_status "mv_lv_transformer_a" mv_lv_transformer_a
     node_status "generator_a        " generator_a
     node_status "ats_a              " ats_a
@@ -160,9 +160,9 @@ else
 
     echo "  Side B:"
     node_status "utility_b          " utility_b
-    node_status "hv_switchgear_b    " hv_switchgear_b
-    node_status "hv_mv_transformer_b" hv_mv_transformer_b
     node_status "mv_switchgear_b    " mv_switchgear_b
+    node_status "hv_mv_transformer_b" hv_mv_transformer_b
+    node_status "lv_switchgear_b    " lv_switchgear_b
     node_status "mv_lv_transformer_b" mv_lv_transformer_b
     node_status "generator_b        " generator_b
     node_status "ats_b              " ats_b

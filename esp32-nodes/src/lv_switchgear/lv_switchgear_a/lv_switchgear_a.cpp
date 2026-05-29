@@ -1,23 +1,24 @@
-// hv_switchgear_b.cpp — HV switchgear, Side B (230 kV main breaker).
-// Mirror of hv_switchgear_a. States: CLOSED, OPEN, TRIPPED, FAULT
+// lv_switchgear_a.cpp — LV switchgear, Side A.
+// Operates on the 480 V LV bus, downstream of mv_lv_transformer_a; its output
+// feeds the ATS primary input. States: CLOSED, OPEN, TRIPPED, FAULT
 #include <winter_river.h>
 
-static const char *NODE_ID = "hv_switchgear_b";
-static const char *LABEL   = "hv_sw_b";
+static const char *NODE_ID = "lv_switchgear_a";
+static const char *LABEL   = "lv_sw_a";
 
-static constexpr int VOLTAGE_RATING = 230000;
+static constexpr int VOLTAGE_RATING = 480;      // 480 V LV bus
 
 static bool   breaker_closed = true;
-static float  current_a      = 18.0f;
-static float  load_kw        = 4140.0f;
-static int    load_pct       = 25;
+static float  current_a      = 625.0f;    // ~300 kW / 480 V (illustrative)
+static float  load_kw        = 300.0f;
+static int    load_pct       = 30;
 static String state          = "CLOSED";
 
 static void applyGuard() {
-  if (current_a > 220.0f || load_pct > 95) {
+  if (current_a > 2000.0f || load_pct > 95) {
     state = "TRIPPED";
     breaker_closed = false;
-  } else if (current_a > 180.0f || load_pct > 80) {
+  } else if (current_a > 1670.0f || load_pct > 80) {
     state = "FAULT";
   }
 }
@@ -29,7 +30,8 @@ static void handleToken(const String &tok) {
     breaker_closed = false; state = "OPEN";
   } else if (tok.startsWith("LOAD:")) {
     load_pct  = tok.substring(5).toInt();
-    load_kw   = load_pct * 460.0f;
+    // 100% ≈ 1000 kW at 480 V (1000 kVA transformer envelope)
+    load_kw   = load_pct * 10.0f;
     current_a = (load_kw * 1000.0f) / VOLTAGE_RATING;
   } else if (tok.startsWith("STATUS:")) {
     state = tok.substring(7);

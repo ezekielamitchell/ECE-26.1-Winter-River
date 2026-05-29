@@ -48,9 +48,9 @@ sudo systemctl start mosquitto
 | #  | `node_id`              | Component type dir                       | Rated voltage              |
 |----|------------------------|------------------------------------------|----------------------------|
 | ①  | `utility_a`            | `utility/utility_a/`                     | 230 kV                     |
-| ②  | `hv_switchgear_a`      | `hv_switchgear/hv_switchgear_a/`         | 230 kV (main breaker)      |
+| ②  | `mv_switchgear_a`      | `mv_switchgear/mv_switchgear_a/`         | 230 kV (main breaker)      |
 | ③  | `hv_mv_transformer_a`  | `hv_mv_transformer/hv_mv_transformer_a/` | 34.5 kV out                |
-| ④  | `mv_switchgear_a`      | `mv_switchgear/mv_switchgear_a/`         | 34.5 kV                    |
+| ④  | `lv_switchgear_a`      | `lv_switchgear/lv_switchgear_a/`         | 34.5 kV                    |
 | ⑤  | `mv_lv_transformer_a`  | `mv_lv_transformer/mv_lv_transformer_a/` | 480 V out                  |
 | ⑥  | `generator_a`          | `generator/generator_a/`                 | 480 V                      |
 | ⑦  | `ats_a`                | `ats/ats_a/`                             | 480 V (LV transfer switch) |
@@ -71,8 +71,8 @@ All `_a` suffixes replaced with `_b`. Component type directories are identical.
 ## Power Chain (per side)
 
 ```
-utility → hv_switchgear → hv_mv_transformer → mv_switchgear
-       → mv_lv_transformer → ats → ups → server_rack_{1..4}
+utility → hv_mv_transformer → mv_switchgear → mv_lv_transformer
+       → lv_switchgear → ats → ups → server_rack_{1..4}
 generator ─────────────────────────↗
                                 ats ↘ cooling   (parallel mech load)
 ```
@@ -117,9 +117,9 @@ All commands run from the `esp32-nodes/` directory:
 ```bash
 # Build + flash a single node
 pio run -e utility_a            --target upload
-pio run -e hv_switchgear_a      --target upload
-pio run -e hv_mv_transformer_a  --target upload
 pio run -e mv_switchgear_a      --target upload
+pio run -e hv_mv_transformer_a  --target upload
+pio run -e lv_switchgear_a      --target upload
 pio run -e mv_lv_transformer_a  --target upload
 pio run -e generator_a          --target upload
 pio run -e ats_a                --target upload
@@ -210,9 +210,9 @@ mosquitto_pub -h 192.168.4.1 -t "winter-river/utility_a/control" -m "STATUS:OUTA
 For per-node control commands, see the `README.md` inside each component type directory:
 
 - [`src/utility/README.md`](src/utility/README.md)
-- [`src/hv_switchgear/`](src/hv_switchgear/) (no per-component README yet — see `CLAUDE.md` §8 for the control schema)
+- [`src/mv_switchgear/`](src/mv_switchgear/) (no per-component README yet — see `CLAUDE.md` §8 for the control schema)
 - [`src/hv_mv_transformer/README.md`](src/hv_mv_transformer/README.md)
-- [`src/mv_switchgear/README.md`](src/mv_switchgear/README.md)
+- [`src/lv_switchgear/README.md`](src/lv_switchgear/README.md)
 - [`src/mv_lv_transformer/README.md`](src/mv_lv_transformer/README.md)
 - [`src/generator/README.md`](src/generator/README.md)
 - [`src/ats/README.md`](src/ats/README.md)

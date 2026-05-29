@@ -33,7 +33,7 @@ WinterRiverEngine (broker/main.py)
 |------|----------|-----------|
 | `UTILITY` | `utility_a`, `utility_b` | Root nodes; `v_out` = 230 kV when `GRID_OK/SAG/SWELL`, 0 on `OUTAGE/FAULT/OFFLINE` |
 | `HV_MV_TRANSFORMER` | `hv_mv_transformer_a/b` | 230 kV → 34.5 kV step-down; passes when `NORMAL/WARNING`, 0 on `FAULT` |
-| `MV_SWITCHGEAR` | `mv_switchgear_a/b` | Passes parent voltage when `CLOSED`; 0 when `OPEN/TRIPPED/FAULT` |
+| `LV_SWITCHGEAR` | `lv_switchgear_a/b` | Passes parent voltage when `CLOSED`; 0 when `OPEN/TRIPPED/FAULT` |
 | `MV_LV_TRANSFORMER` | `mv_lv_transformer_a/b` | 34.5 kV → 480 V; passes when `NORMAL/WARNING`, 0 on `FAULT` |
 | `GENERATOR` | `generator_a`, `generator_b` | Standby while utility is live; 10-tick startup delay on utility loss; 480 V when `RUNNING` |
 | `ATS` | `ats_a`, `ats_b` | LV transfer switch. Prefers transformer (utility) path; falls back to generator; `OPEN` if both down. Output feeds UPS and cooling in parallel. |
@@ -175,7 +175,7 @@ Key tables:
 ```sql
 nodes (
     node_id              VARCHAR(50) PRIMARY KEY,
-    node_type            VARCHAR(30),     -- UTILITY, MV_SWITCHGEAR, GENERATOR, ATS, etc.
+    node_type            VARCHAR(30),     -- UTILITY, LV_SWITCHGEAR, GENERATOR, ATS, etc.
     side                 CHAR(1),         -- 'A' or 'B' (no shared nodes)
     parent_id            VARCHAR(50),     -- primary upstream node
     secondary_parent_id  VARCHAR(50),     -- ATS generator input

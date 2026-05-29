@@ -75,14 +75,14 @@ There is no shared rectifier and no rack-level 2N: side-A failure kills all
 
 ```text
 Side A:
-utility_a -> hv_switchgear_a -> hv_mv_transformer_a -> mv_switchgear_a
+utility_a -> mv_switchgear_a -> hv_mv_transformer_a -> lv_switchgear_a
           -> mv_lv_transformer_a
 generator_a ----------------------------------------------------^
 ats_a -> ups_a -> server_rack_a1, _a2, _a3, _a4
 ats_a -> cooling_a   (mech load, parallel to ups_a)
 
 Side B (mirror):
-utility_b -> hv_switchgear_b -> hv_mv_transformer_b -> mv_switchgear_b
+utility_b -> mv_switchgear_b -> hv_mv_transformer_b -> lv_switchgear_b
           -> mv_lv_transformer_b
 generator_b ----------------------------------------------------^
 ats_b -> ups_b -> server_rack_b1, _b2, _b3, _b4
@@ -101,8 +101,8 @@ Active node IDs (26 broker/DB nodes + 1 broker-synthesized BMS topic):
 
 | Group | Node IDs |
 |---|---|
-| Side A (13) | `utility_a`, `hv_switchgear_a`, `hv_mv_transformer_a`, `mv_switchgear_a`, `mv_lv_transformer_a`, `generator_a`, `ats_a`, `ups_a`, `cooling_a`, `server_rack_a1`, `server_rack_a2`, `server_rack_a3`, `server_rack_a4` |
-| Side B (13) | `utility_b`, `hv_switchgear_b`, `hv_mv_transformer_b`, `mv_switchgear_b`, `mv_lv_transformer_b`, `generator_b`, `ats_b`, `ups_b`, `cooling_b`, `server_rack_b1`, `server_rack_b2`, `server_rack_b3`, `server_rack_b4` |
+| Side A (13) | `utility_a`, `mv_switchgear_a`, `hv_mv_transformer_a`, `lv_switchgear_a`, `mv_lv_transformer_a`, `generator_a`, `ats_a`, `ups_a`, `cooling_a`, `server_rack_a1`, `server_rack_a2`, `server_rack_a3`, `server_rack_a4` |
+| Side B (13) | `utility_b`, `mv_switchgear_b`, `hv_mv_transformer_b`, `lv_switchgear_b`, `mv_lv_transformer_b`, `generator_b`, `ats_b`, `ups_b`, `cooling_b`, `server_rack_b1`, `server_rack_b2`, `server_rack_b3`, `server_rack_b4` |
 | Broker-synthesized (no ESP32 row) | `bms`, `facility`, `weather` — broker publishes each retained from live state every tick |
 
 ⚠ **Slot budget overflow:** 26 active boards vs 24 baseplate slots = 2-slot
@@ -166,9 +166,9 @@ Physical board inventory (26 boards):
 | #  | node_id                | Powered | OLED | WiFi | MQTT | Notes |
 |----|------------------------|---------|------|------|------|-------|
 |  1 | `utility_a`            | [ ]     | [ ]  | [ ]  | [ ]  | |
-|  2 | `hv_switchgear_a`      | [ ]     | [ ]  | [ ]  | [ ]  | 230 kV main breaker |
+|  2 | `mv_switchgear_a`      | [ ]     | [ ]  | [ ]  | [ ]  | 230 kV main breaker |
 |  3 | `hv_mv_transformer_a`  | [ ]     | [ ]  | [ ]  | [ ]  | |
-|  4 | `mv_switchgear_a`      | [ ]     | [ ]  | [ ]  | [ ]  | |
+|  4 | `lv_switchgear_a`      | [ ]     | [ ]  | [ ]  | [ ]  | |
 |  5 | `mv_lv_transformer_a`  | [ ]     | [ ]  | [ ]  | [ ]  | |
 |  6 | `generator_a`          | [ ]     | [ ]  | [ ]  | [ ]  | |
 |  7 | `ats_a`                | [ ]     | [ ]  | [ ]  | [ ]  | LV transfer switch |
@@ -179,9 +179,9 @@ Physical board inventory (26 boards):
 | 12 | `server_rack_a3`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_a |
 | 13 | `server_rack_a4`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_a |
 | 14 | `utility_b`            | [ ]     | [ ]  | [ ]  | [ ]  | |
-| 15 | `hv_switchgear_b`      | [ ]     | [ ]  | [ ]  | [ ]  | 230 kV main breaker |
+| 15 | `mv_switchgear_b`      | [ ]     | [ ]  | [ ]  | [ ]  | 230 kV main breaker |
 | 16 | `hv_mv_transformer_b`  | [ ]     | [ ]  | [ ]  | [ ]  | |
-| 17 | `mv_switchgear_b`      | [ ]     | [ ]  | [ ]  | [ ]  | |
+| 17 | `lv_switchgear_b`      | [ ]     | [ ]  | [ ]  | [ ]  | |
 | 18 | `mv_lv_transformer_b`  | [ ]     | [ ]  | [ ]  | [ ]  | |
 | 19 | `generator_b`          | [ ]     | [ ]  | [ ]  | [ ]  | |
 | 20 | `ats_b`                | [ ]     | [ ]  | [ ]  | [ ]  | LV transfer switch |
@@ -306,7 +306,7 @@ Build checks from a development machine:
 ```bash
 cd esp32-nodes
 pio run -e utility_a
-pio run -e hv_switchgear_a
+pio run -e mv_switchgear_a
 pio run -e generator_a
 pio run -e ats_a
 pio run -e ups_a
@@ -383,9 +383,9 @@ influx query '
 Complete this before running failure scenarios.
 
 - [ ] Both utilities show `GRID_OK`.
-- [ ] Both HV switchgear nodes show `CLOSED`.
+- [ ] Both MV switchgear nodes show `CLOSED`.
 - [ ] Both HV/MV transformers show normal pass-through.
-- [ ] Both MV switchgear nodes show closed/normal.
+- [ ] Both LV switchgear nodes show closed/normal.
 - [ ] Both MV/LV transformers show normal temperature and 480 V output.
 - [ ] Both generators show `STANDBY`, not `RUNNING`.
 - [ ] Both ATS nodes use `UTILITY`.
@@ -404,10 +404,10 @@ Suggested baseline commands:
 ```bash
 mosquitto_pub -h 192.168.4.1 -t "winter-river/utility_a/control" -m "STATUS:GRID_OK VOLT:230.0 FREQ:60.0"
 mosquitto_pub -h 192.168.4.1 -t "winter-river/utility_b/control" -m "STATUS:GRID_OK VOLT:230.0 FREQ:60.0"
-mosquitto_pub -h 192.168.4.1 -t "winter-river/hv_switchgear_a/control" -m "CLOSE STATUS:CLOSED"
-mosquitto_pub -h 192.168.4.1 -t "winter-river/hv_switchgear_b/control" -m "CLOSE STATUS:CLOSED"
 mosquitto_pub -h 192.168.4.1 -t "winter-river/mv_switchgear_a/control" -m "CLOSE STATUS:CLOSED"
 mosquitto_pub -h 192.168.4.1 -t "winter-river/mv_switchgear_b/control" -m "CLOSE STATUS:CLOSED"
+mosquitto_pub -h 192.168.4.1 -t "winter-river/lv_switchgear_a/control" -m "CLOSE STATUS:CLOSED"
+mosquitto_pub -h 192.168.4.1 -t "winter-river/lv_switchgear_b/control" -m "CLOSE STATUS:CLOSED"
 mosquitto_pub -h 192.168.4.1 -t "winter-river/mv_lv_transformer_a/control" -m "STATUS:NORMAL TEMP:108 LOAD:45"
 mosquitto_pub -h 192.168.4.1 -t "winter-river/mv_lv_transformer_b/control" -m "STATUS:NORMAL TEMP:108 LOAD:45"
 mosquitto_pub -h 192.168.4.1 -t "winter-river/generator_a/control" -m "STATUS:STANDBY RPM:0 LOAD:0 FUEL:85"
@@ -588,13 +588,13 @@ Setup:
 
 Steps:
 
-- [ ] Trainee traces Side A from `utility_a` → `hv_switchgear_a` →
-      `hv_mv_transformer_a` → `mv_switchgear_a` → `mv_lv_transformer_a` →
+- [ ] Trainee traces Side A from `utility_a` → `mv_switchgear_a` →
+      `hv_mv_transformer_a` → `lv_switchgear_a` → `mv_lv_transformer_a` →
       `ats_a` → `ups_a` → `server_rack_a{1..4}`, and notes the parallel
       mech branch `ats_a → cooling_a`.
 - [ ] Trainee traces Side B end-to-end and confirms it's a complete mirror
       of Side A — no shared nodes anywhere.
-- [ ] Trainee identifies utilities, HV switchgear, generators, ATS units,
+- [ ] Trainee identifies utilities, MV switchgear, generators, ATS units,
       UPS units, cooling (both sides), all 8 server racks, and the `bms`
       aggregator (broker-published, no ESP32 row in `nodes`).
 - [ ] Trainee reads `winter-river/bms/status` and confirms
@@ -605,7 +605,7 @@ Steps:
 Expected:
 
 - [ ] Both utility paths are available.
-- [ ] Both HV switchgear nodes report `CLOSED`.
+- [ ] Both MV switchgear nodes report `CLOSED`.
 - [ ] Generators are in `STANDBY`.
 - [ ] Both UPS nodes report `NORMAL`, 480 V in/out.
 - [ ] All 8 server racks report `NORMAL`.
@@ -850,13 +850,13 @@ troubleshooting.
 Trigger:
 
 ```bash
-mosquitto_pub -h 192.168.4.1 -t "winter-river/mv_switchgear_a/control" -m "OPEN STATUS:OPEN"
+mosquitto_pub -h 192.168.4.1 -t "winter-river/lv_switchgear_a/control" -m "OPEN STATUS:OPEN"
 ```
 
 Optional protective trip:
 
 ```bash
-mosquitto_pub -h 192.168.4.1 -t "winter-river/mv_switchgear_a/control" -m "STATUS:TRIPPED"
+mosquitto_pub -h 192.168.4.1 -t "winter-river/lv_switchgear_a/control" -m "STATUS:TRIPPED"
 ```
 
 Expected:
@@ -870,7 +870,7 @@ Expected:
 Recovery:
 
 ```bash
-mosquitto_pub -h 192.168.4.1 -t "winter-river/mv_switchgear_a/control" -m "CLOSE STATUS:CLOSED"
+mosquitto_pub -h 192.168.4.1 -t "winter-river/lv_switchgear_a/control" -m "CLOSE STATUS:CLOSED"
 ```
 
 Questions:
@@ -958,14 +958,14 @@ fastest way to drop an entire side without touching the utility or generator.
 Trigger:
 
 ```bash
-mosquitto_pub -h 192.168.4.1 -t "winter-river/hv_switchgear_a/control" -m "STATUS:TRIPPED"
+mosquitto_pub -h 192.168.4.1 -t "winter-river/mv_switchgear_a/control" -m "STATUS:TRIPPED"
 ```
 
 Expected:
 
-- [ ] `hv_switchgear_a` reports `TRIPPED` (sticky — survives re-energisation).
+- [ ] `mv_switchgear_a` reports `TRIPPED` (sticky — survives re-energisation).
 - [ ] `hv_mv_transformer_a` drops to `NO_INPUT` (no upstream feed).
-- [ ] Cascade propagates down the side: `mv_switchgear_a`, `mv_lv_transformer_a`
+- [ ] Cascade propagates down the side: `lv_switchgear_a`, `mv_lv_transformer_a`
       lose voltage; `ats_a` falls back to `generator_a` (which spins up).
 - [ ] Once the generator is `RUNNING`, side-A racks recover via the ATS
       secondary path. If the generator is forced FAULT first, the cascade
@@ -973,21 +973,21 @@ Expected:
 - [ ] `bms/status` shows `power_state:A_ONLY` initially (utility path lost),
       then `2N_HEALTHY` once the generator picks up.
 - [ ] Trainee distinguishes "utility lost" (utility OUTAGE) from "we cut the
-      utility off" (HV switchgear TRIPPED) — both look similar downstream but
+      utility off" (MV switchgear TRIPPED) — both look similar downstream but
       the diagnosis and recovery differ.
 
 Recovery (explicitly reclose the breaker):
 
 ```bash
-mosquitto_pub -h 192.168.4.1 -t "winter-river/hv_switchgear_a/control" -m "CLOSE STATUS:CLOSED"
+mosquitto_pub -h 192.168.4.1 -t "winter-river/mv_switchgear_a/control" -m "CLOSE STATUS:CLOSED"
 ```
 
 Questions:
 
 - Why does `TRIPPED` survive re-energisation in the broker model? (Hint:
   real breakers require an explicit reset; sticky-fault semantics mirror that.)
-- How does an HV trip differ from an MV switchgear trip in terms of scope?
-- What protection coordinates between the utility and the HV switchgear?
+- How does an HV trip differ from an LV switchgear trip in terms of scope?
+- What protection coordinates between the utility and the MV switchgear?
 
 ### Scenario 10 - Cooling Loss And Hot-Aisle Climb
 
@@ -1282,9 +1282,9 @@ Objective: confirm clean recovery and remove stale state.
 Steps:
 
 - [ ] Restore utilities to `GRID_OK`.
-- [ ] Reclose both HV switchgear nodes (`CLOSE STATUS:CLOSED`).
+- [ ] Reclose both MV switchgear nodes (`CLOSE STATUS:CLOSED`).
 - [ ] Restore generators to `STANDBY`.
-- [ ] Reclose MV switchgear.
+- [ ] Reclose LV switchgear.
 - [ ] Restore transformer status and temperature.
 - [ ] Restore ATS source to `UTILITY`.
 - [ ] Restore UPS input and battery level.
@@ -1318,8 +1318,8 @@ Use these for oral checks, worksheet prompts, and demo discussion.
 
 ### 4.1 Topology And Identification
 
-1. Trace power from `utility_a` down through `hv_switchgear_a` →
-   `hv_mv_transformer_a` → `mv_switchgear_a` → `mv_lv_transformer_a` →
+1. Trace power from `utility_a` down through `mv_switchgear_a` →
+   `hv_mv_transformer_a` → `lv_switchgear_a` → `mv_lv_transformer_a` →
    `ats_a` → `ups_a` → `server_rack_a{1..4}`. Where does cooling branch off?
 2. What is the output voltage at each stage?
 3. Which nodes are duplicated on Side A and Side B (there should be 13 each)?
@@ -1405,7 +1405,7 @@ Use these for oral checks, worksheet prompts, and demo discussion.
    temp, or status_msg.)
 8. All 4 `server_rack_a*` are `FAULT` but all 4 `server_rack_b*` are
    `NORMAL`. What's the inspection order? (Hint: side-A's `ups_a` /
-   `ats_a` / generator / utility / HV switchgear are the failure domain.)
+   `ats_a` / generator / utility / MV switchgear are the failure domain.)
 9. All 8 racks are `FAULT`. What's the inspection order? (Hint: this
    requires faults on both sides — start with the broker and MQTT first
    to rule out a management-plane mirage, then sweep both sides upstream.)
@@ -1440,7 +1440,7 @@ A full system run passes when all of these are true:
       `FAULT` while the other 7 stay `NORMAL` — proves workload-level
       redundancy is independent of power-level redundancy.
 - [ ] All 8 racks fail or report no power during dual-side loss.
-- [ ] HV switchgear `TRIPPED` on one side cascades the same way as utility
+- [ ] MV switchgear `TRIPPED` on one side cascades the same way as utility
       OUTAGE on that side (after generator picks up, side recovers).
 - [ ] `bms/status` reflects every scenario within ~2 ticks: `mode`,
       `power_state`, `redundancy_lost`, `rack_a_state`, `rack_b_state`,
@@ -1489,7 +1489,7 @@ Before handing the rig to a non-developer:
 - [ ] Part 1 pre-flight completed.
 - [ ] Part 2 smoke tests completed (including 2.9 BMS aggregator test).
 - [ ] At least Scenarios 0, 1, 4 (full side failure), 4b (single-rack
-      failure), 9 (HV switchgear trip), 10 (cooling loss), 14 (broker loss),
+      failure), 9 (MV switchgear trip), 10 (cooling loss), 14 (broker loss),
       and 18 (recovery) rehearsed today.
 - [ ] Recovery commands for rehearsed scenarios are queued or printed.
 - [ ] Grafana dashboard is open and showing live data.

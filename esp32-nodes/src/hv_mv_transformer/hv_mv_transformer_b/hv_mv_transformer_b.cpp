@@ -1,6 +1,7 @@
 // hv_mv_transformer_b.cpp — 230 kV → 34.5 kV step-down transformer, Side B.
-// First transformer in the Side B power chain. Sits between utility_b and
-// mv_switchgear_b. Mirror of hv_mv_transformer_a. States: NORMAL, WARNING, FAULT.
+// First on-site equipment in the Side B power chain. Fed directly from
+// utility_b; its 34.5 kV output feeds mv_switchgear_b. Mirror of
+// hv_mv_transformer_a. States: NORMAL, WARNING, FAULT.
 #include <winter_river.h>
 
 static const char *NODE_ID = "hv_mv_transformer_b";
