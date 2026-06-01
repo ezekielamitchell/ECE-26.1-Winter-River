@@ -45,18 +45,18 @@ sudo systemctl start mosquitto
 
 ### Side A (13 nodes)
 
-| #  | `node_id`              | Component type dir                       | Rated voltage              |
-|----|------------------------|------------------------------------------|----------------------------|
-| ①  | `utility_a`            | `utility/utility_a/`                     | 230 kV                     |
-| ②  | `mv_switchgear_a`      | `mv_switchgear/mv_switchgear_a/`         | 230 kV (main breaker)      |
-| ③  | `hv_mv_transformer_a`  | `hv_mv_transformer/hv_mv_transformer_a/` | 34.5 kV out                |
-| ④  | `lv_switchgear_a`      | `lv_switchgear/lv_switchgear_a/`         | 34.5 kV                    |
-| ⑤  | `mv_lv_transformer_a`  | `mv_lv_transformer/mv_lv_transformer_a/` | 480 V out                  |
-| ⑥  | `generator_a`          | `generator/generator_a/`                 | 480 V                      |
-| ⑦  | `ats_a`                | `ats/ats_a/`                             | 480 V (LV transfer switch) |
-| ⑧  | `ups_a`                | `ups/ups_a/`                             | 480 V AC                   |
-| ⑨  | `cooling_a`            | `cooling/cooling_a/`                     | 480 V (fan bank — 55 fans) |
-| ⑩-⑬ | `server_rack_a{1..4}` | `server_rack/` (single shared source)    | 48 V DC                    |
+| #  | `node_id`              | Component type dir                       | Rated voltage                |
+|----|------------------------|------------------------------------------|------------------------------|
+| ①  | `utility_a`            | `utility/utility_a/`                     | 230 kV                       |
+| ②  | `hv_mv_transformer_a`  | `hv_mv_transformer/hv_mv_transformer_a/` | 34.5 kV out (230 kV → 34.5)  |
+| ③  | `mv_switchgear_a`      | `mv_switchgear/mv_switchgear_a/`         | 34.5 kV (MV-bus breaker)     |
+| ④  | `mv_lv_transformer_a`  | `mv_lv_transformer/mv_lv_transformer_a/` | 480 V out (34.5 kV → 480)    |
+| ⑤  | `lv_switchgear_a`      | `lv_switchgear/lv_switchgear_a/`         | 480 V (LV-bus breaker)       |
+| ⑥  | `generator_a`          | `generator/generator_a/`                 | 480 V                        |
+| ⑦  | `ats_a`                | `ats/ats_a/`                             | 480 V (LV transfer switch)   |
+| ⑧  | `ups_a`                | `ups/ups_a/`                             | 480 V AC                     |
+| ⑨  | `cooling_a`            | `cooling/cooling_a/`                     | 480 V (fan bank — 55 fans)   |
+| ⑩-⑬ | `server_rack_a{1..4}` | `server_rack/` (single shared source)    | 48 V DC                      |
 
 ### Side B (13 nodes — mirror of Side A)
 
@@ -117,10 +117,10 @@ All commands run from the `esp32-nodes/` directory:
 ```bash
 # Build + flash a single node
 pio run -e utility_a            --target upload
-pio run -e mv_switchgear_a      --target upload
 pio run -e hv_mv_transformer_a  --target upload
-pio run -e lv_switchgear_a      --target upload
+pio run -e mv_switchgear_a      --target upload
 pio run -e mv_lv_transformer_a  --target upload
+pio run -e lv_switchgear_a      --target upload
 pio run -e generator_a          --target upload
 pio run -e ats_a                --target upload
 pio run -e ups_a                --target upload
@@ -210,10 +210,10 @@ mosquitto_pub -h 192.168.4.1 -t "winter-river/utility_a/control" -m "STATUS:OUTA
 For per-node control commands, see the `README.md` inside each component type directory:
 
 - [`src/utility/README.md`](src/utility/README.md)
-- [`src/mv_switchgear/`](src/mv_switchgear/) (no per-component README yet — see `CLAUDE.md` §8 for the control schema)
 - [`src/hv_mv_transformer/README.md`](src/hv_mv_transformer/README.md)
-- [`src/lv_switchgear/README.md`](src/lv_switchgear/README.md)
+- [`src/mv_switchgear/README.md`](src/mv_switchgear/README.md)
 - [`src/mv_lv_transformer/README.md`](src/mv_lv_transformer/README.md)
+- [`src/lv_switchgear/README.md`](src/lv_switchgear/README.md)
 - [`src/generator/README.md`](src/generator/README.md)
 - [`src/ats/README.md`](src/ats/README.md)
 - [`src/ups/README.md`](src/ups/README.md)

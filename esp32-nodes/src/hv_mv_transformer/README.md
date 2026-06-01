@@ -28,9 +28,9 @@ folding it into `mv_switchgear` as a ratio.
 
 ## Broker Behavior
 
-The broker (`broker/main.py`) treats this node like the existing
-`MV_LV_TRANSFORMER` handler: pass parent voltage through (stepped down to
-34.5 kV) when the node's status is `NORMAL` or `WARNING`; produce 0 V on
+The broker (`broker/main.py`) runs the `HV_MV_TRANSFORMER` handler, which
+mirrors the `MV_LV_TRANSFORMER` logic: pass parent voltage through (stepped
+down to 34.5 kV) when the node's status is `NORMAL` or `WARNING`; produce 0 V on
 `FAULT`. The control payload is `STATUS:<state>`.
 
 | State     | Meaning                                                       |

@@ -75,16 +75,16 @@ There is no shared rectifier and no rack-level 2N: side-A failure kills all
 
 ```text
 Side A:
-utility_a -> mv_switchgear_a -> hv_mv_transformer_a -> lv_switchgear_a
-          -> mv_lv_transformer_a
-generator_a ----------------------------------------------------^
+utility_a -> hv_mv_transformer_a -> mv_switchgear_a -> mv_lv_transformer_a
+          -> lv_switchgear_a -> ats_a
+generator_a ---------------------------------------------------^ (ats secondary)
 ats_a -> ups_a -> server_rack_a1, _a2, _a3, _a4
 ats_a -> cooling_a   (mech load, parallel to ups_a)
 
 Side B (mirror):
-utility_b -> mv_switchgear_b -> hv_mv_transformer_b -> lv_switchgear_b
-          -> mv_lv_transformer_b
-generator_b ----------------------------------------------------^
+utility_b -> hv_mv_transformer_b -> mv_switchgear_b -> mv_lv_transformer_b
+          -> lv_switchgear_b -> ats_b
+generator_b ---------------------------------------------------^ (ats secondary)
 ats_b -> ups_b -> server_rack_b1, _b2, _b3, _b4
 ats_b -> cooling_b
 
@@ -101,8 +101,8 @@ Active node IDs (26 broker/DB nodes + 1 broker-synthesized BMS topic):
 
 | Group | Node IDs |
 |---|---|
-| Side A (13) | `utility_a`, `mv_switchgear_a`, `hv_mv_transformer_a`, `lv_switchgear_a`, `mv_lv_transformer_a`, `generator_a`, `ats_a`, `ups_a`, `cooling_a`, `server_rack_a1`, `server_rack_a2`, `server_rack_a3`, `server_rack_a4` |
-| Side B (13) | `utility_b`, `mv_switchgear_b`, `hv_mv_transformer_b`, `lv_switchgear_b`, `mv_lv_transformer_b`, `generator_b`, `ats_b`, `ups_b`, `cooling_b`, `server_rack_b1`, `server_rack_b2`, `server_rack_b3`, `server_rack_b4` |
+| Side A (13) | `utility_a`, `hv_mv_transformer_a`, `mv_switchgear_a`, `mv_lv_transformer_a`, `lv_switchgear_a`, `generator_a`, `ats_a`, `ups_a`, `cooling_a`, `server_rack_a1`, `server_rack_a2`, `server_rack_a3`, `server_rack_a4` |
+| Side B (13) | `utility_b`, `hv_mv_transformer_b`, `mv_switchgear_b`, `mv_lv_transformer_b`, `lv_switchgear_b`, `generator_b`, `ats_b`, `ups_b`, `cooling_b`, `server_rack_b1`, `server_rack_b2`, `server_rack_b3`, `server_rack_b4` |
 | Broker-synthesized (no ESP32 row) | `bms`, `facility`, `weather` — broker publishes each retained from live state every tick |
 
 ⚠ **Slot budget overflow:** 26 active boards vs 24 baseplate slots = 2-slot
@@ -116,14 +116,11 @@ shared rows). `bms`, `facility`, and `weather` are intentionally absent from
 `nodes` — they are broker-published synthetic topics. The broker's
 `online_nodes` ceiling is **26**.
 
-Compatibility note:
+Unknown-node guard:
 
-- Old boards still flashed with `pdu_*`, `lv_dist_*`, `rectifier*`,
-  `lighting_*`, `monitoring_*`, or the single `server_rack_a`/`server_rack_b`
-  firmwares will publish under removed `node_id`s; the broker will log
-  "Ignoring MQTT message from unknown node_id" and drop the telemetry.
 - If a node publishes telemetry but is not present in the `nodes` table, the
-  broker ignores it instead of failing — re-flash with a current env.
+  broker logs "Ignoring MQTT message from unknown node_id" and drops the
+  telemetry instead of failing — re-flash the board with a current env.
 
 ## Part 1 - Pre-Flight Checklist
 
@@ -165,11 +162,11 @@ Physical board inventory (26 boards):
 
 | #  | node_id                | Powered | OLED | WiFi | MQTT | Notes |
 |----|------------------------|---------|------|------|------|-------|
-|  1 | `utility_a`            | [ ]     | [ ]  | [ ]  | [ ]  | |
-|  2 | `mv_switchgear_a`      | [ ]     | [ ]  | [ ]  | [ ]  | 230 kV main breaker |
-|  3 | `hv_mv_transformer_a`  | [ ]     | [ ]  | [ ]  | [ ]  | |
-|  4 | `lv_switchgear_a`      | [ ]     | [ ]  | [ ]  | [ ]  | |
-|  5 | `mv_lv_transformer_a`  | [ ]     | [ ]  | [ ]  | [ ]  | |
+|  1 | `utility_a`            | [ ]     | [ ]  | [ ]  | [ ]  | 230 kV grid feed |
+|  2 | `hv_mv_transformer_a`  | [ ]     | [ ]  | [ ]  | [ ]  | 230 kV → 34.5 kV |
+|  3 | `mv_switchgear_a`      | [ ]     | [ ]  | [ ]  | [ ]  | 34.5 kV MV-bus breaker |
+|  4 | `mv_lv_transformer_a`  | [ ]     | [ ]  | [ ]  | [ ]  | 34.5 kV → 480 V |
+|  5 | `lv_switchgear_a`      | [ ]     | [ ]  | [ ]  | [ ]  | 480 V LV-bus breaker |
 |  6 | `generator_a`          | [ ]     | [ ]  | [ ]  | [ ]  | |
 |  7 | `ats_a`                | [ ]     | [ ]  | [ ]  | [ ]  | LV transfer switch |
 |  8 | `ups_a`                | [ ]     | [ ]  | [ ]  | [ ]  | feeds all 4 side-A racks |
@@ -178,11 +175,11 @@ Physical board inventory (26 boards):
 | 11 | `server_rack_a2`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_a |
 | 12 | `server_rack_a3`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_a |
 | 13 | `server_rack_a4`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_a |
-| 14 | `utility_b`            | [ ]     | [ ]  | [ ]  | [ ]  | |
-| 15 | `mv_switchgear_b`      | [ ]     | [ ]  | [ ]  | [ ]  | 230 kV main breaker |
-| 16 | `hv_mv_transformer_b`  | [ ]     | [ ]  | [ ]  | [ ]  | |
-| 17 | `lv_switchgear_b`      | [ ]     | [ ]  | [ ]  | [ ]  | |
-| 18 | `mv_lv_transformer_b`  | [ ]     | [ ]  | [ ]  | [ ]  | |
+| 14 | `utility_b`            | [ ]     | [ ]  | [ ]  | [ ]  | 230 kV grid feed |
+| 15 | `hv_mv_transformer_b`  | [ ]     | [ ]  | [ ]  | [ ]  | 230 kV → 34.5 kV |
+| 16 | `mv_switchgear_b`      | [ ]     | [ ]  | [ ]  | [ ]  | 34.5 kV MV-bus breaker |
+| 17 | `mv_lv_transformer_b`  | [ ]     | [ ]  | [ ]  | [ ]  | 34.5 kV → 480 V |
+| 18 | `lv_switchgear_b`      | [ ]     | [ ]  | [ ]  | [ ]  | 480 V LV-bus breaker |
 | 19 | `generator_b`          | [ ]     | [ ]  | [ ]  | [ ]  | |
 | 20 | `ats_b`                | [ ]     | [ ]  | [ ]  | [ ]  | LV transfer switch |
 | 21 | `ups_b`                | [ ]     | [ ]  | [ ]  | [ ]  | feeds all 4 side-B racks |
@@ -192,18 +189,6 @@ Physical board inventory (26 boards):
 | 25 | `server_rack_b3`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_b |
 | 26 | `server_rack_b4`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_b |
 |    | `bms` (optional)       | [ ]     | [ ]  | [ ]  | [ ]  | OLED mirror only; broker-synthesized topic, off-baseplate carrier |
-
-Old firmware that may still be flashed on spare boards (broker will log
-"unknown node_id" and drop telemetry from these — re-flash with a current env):
-
-| node_id | Re-flashed | Notes |
-|---|---|---|
-| `lv_dist_a` / `lv_dist_b` | [ ] | dropped — ats now feeds ups directly |
-| `pdu_a` / `pdu_b`         | [ ] | dropped — never in active topology |
-| `rectifier`, `rectifier_a/b` | [ ] | dropped — no shared 2N convergence |
-| `lighting_a` / `lighting_b` | [ ] | dropped |
-| `monitoring_a` / `monitoring_b` | [ ] | dropped — superseded by broker-synthesized `bms` |
-| `server_rack_a` / `server_rack_b` (single) | [ ] | superseded by per-side `_a{1..4}` / `_b{1..4}` |
 
 ### 1.3 Raspberry Pi Services
 
@@ -539,9 +524,10 @@ mosquitto_sub -h 192.168.4.1 -t "winter-river/bms/status" -C 1 -v
 - [ ] `bms/status` is retained.
 - [ ] At baseline, `mode:NORMAL`, `power_state:2N_HEALTHY`,
       `redundancy_lost:0`, `degraded_paths:0`, `active_alarms:0`.
-- [ ] `online_nodes` equals the count of DB-seeded active nodes — **23** under
-      the current topology (`bms` is broker-synthesized and not in `nodes`,
-      so it does not count toward `online_nodes`); less if any node is missing.
+- [ ] `online_nodes` equals the count of DB-seeded active nodes — **26** under
+      the current topology (`bms`, `facility`, and `weather` are broker-synthesized
+      and not in `nodes`, so they do not count toward `online_nodes`); less if any
+      node is missing.
 - [ ] Side A and Side B health flags match the actual `_a` / `_b` chain states.
 
 Drive one upstream fault and confirm the BMS reflects it within ~2 ticks:
@@ -588,8 +574,8 @@ Setup:
 
 Steps:
 
-- [ ] Trainee traces Side A from `utility_a` → `mv_switchgear_a` →
-      `hv_mv_transformer_a` → `lv_switchgear_a` → `mv_lv_transformer_a` →
+- [ ] Trainee traces Side A from `utility_a` → `hv_mv_transformer_a` →
+      `mv_switchgear_a` → `mv_lv_transformer_a` → `lv_switchgear_a` →
       `ats_a` → `ups_a` → `server_rack_a{1..4}`, and notes the parallel
       mech branch `ats_a → cooling_a`.
 - [ ] Trainee traces Side B end-to-end and confirms it's a complete mirror
@@ -842,10 +828,11 @@ Questions:
 - What alerts require immediate escalation?
 - How would a real data center prioritize recovery?
 
-### Scenario 6 - MV Switchgear Open Or Trip
+### Scenario 6 - LV Switchgear Open Or Trip
 
 Objective: teach breaker isolation, protective trips, and fault-boundary
-troubleshooting.
+troubleshooting. `lv_switchgear_a` sits on the 480 V LV bus directly upstream
+of the ATS primary input, so opening it cuts the utility path into the ATS.
 
 Trigger:
 
@@ -950,10 +937,13 @@ Questions:
 - What happens if generator startup exceeds UPS runtime?
 - Why do technicians monitor battery health during normal operation?
 
-### Scenario 9 - HV Switchgear Trip (Side Disconnect)
+### Scenario 9 - MV Switchgear Trip (Side Disconnect)
 
-Objective: show the upstream cut-off behavior of the HV main breaker — the
-fastest way to drop an entire side without touching the utility or generator.
+Objective: show the cut-off behavior of the MV-bus breaker — the fastest way to
+drop an entire side from the 34.5 kV bus without touching the utility or
+generator. `mv_switchgear_a` sits downstream of `hv_mv_transformer_a` and
+upstream of `mv_lv_transformer_a`, so tripping it isolates everything below the
+MV bus while the utility and HV/MV transformer stay energised.
 
 Trigger:
 
@@ -964,17 +954,18 @@ mosquitto_pub -h 192.168.4.1 -t "winter-river/mv_switchgear_a/control" -m "STATU
 Expected:
 
 - [ ] `mv_switchgear_a` reports `TRIPPED` (sticky — survives re-energisation).
-- [ ] `hv_mv_transformer_a` drops to `NO_INPUT` (no upstream feed).
-- [ ] Cascade propagates down the side: `lv_switchgear_a`, `mv_lv_transformer_a`
+- [ ] `utility_a` and `hv_mv_transformer_a` stay normal — they're upstream of
+      the tripped breaker.
+- [ ] Cascade propagates down the side: `mv_lv_transformer_a`, `lv_switchgear_a`
       lose voltage; `ats_a` falls back to `generator_a` (which spins up).
 - [ ] Once the generator is `RUNNING`, side-A racks recover via the ATS
       secondary path. If the generator is forced FAULT first, the cascade
       degenerates to Scenario 4.
 - [ ] `bms/status` shows `power_state:A_ONLY` initially (utility path lost),
       then `2N_HEALTHY` once the generator picks up.
-- [ ] Trainee distinguishes "utility lost" (utility OUTAGE) from "we cut the
-      utility off" (MV switchgear TRIPPED) — both look similar downstream but
-      the diagnosis and recovery differ.
+- [ ] Trainee distinguishes "utility lost" (utility OUTAGE) from "we opened the
+      MV bus" (MV switchgear TRIPPED) — both look similar downstream but the
+      diagnosis and recovery differ.
 
 Recovery (explicitly reclose the breaker):
 
@@ -986,7 +977,7 @@ Questions:
 
 - Why does `TRIPPED` survive re-energisation in the broker model? (Hint:
   real breakers require an explicit reset; sticky-fault semantics mirror that.)
-- How does an HV trip differ from an LV switchgear trip in terms of scope?
+- How does an MV-bus trip differ from an LV switchgear trip in terms of scope?
 - What protection coordinates between the utility and the MV switchgear?
 
 ### Scenario 10 - Cooling Loss And Hot-Aisle Climb
@@ -1318,8 +1309,8 @@ Use these for oral checks, worksheet prompts, and demo discussion.
 
 ### 4.1 Topology And Identification
 
-1. Trace power from `utility_a` down through `mv_switchgear_a` →
-   `hv_mv_transformer_a` → `lv_switchgear_a` → `mv_lv_transformer_a` →
+1. Trace power from `utility_a` down through `hv_mv_transformer_a` →
+   `mv_switchgear_a` → `mv_lv_transformer_a` → `lv_switchgear_a` →
    `ats_a` → `ups_a` → `server_rack_a{1..4}`. Where does cooling branch off?
 2. What is the output voltage at each stage?
 3. Which nodes are duplicated on Side A and Side B (there should be 13 each)?

@@ -19,7 +19,7 @@ WinterRiverEngine (broker/main.py)
     ├── _load_topology()     PostgreSQL → in-memory node graph
     ├── _topo_sort()         Kahn's BFS — respects secondary_parent_id
     ├── _tick()              1 Hz cascade propagation loop
-    │     ├── node type handlers (12 types)
+    │     ├── node type handlers (10 types)
     │     ├── publish control commands → MQTT
     │     └── write_to_influx() → InfluxDB (optional)
     └── PostgreSQL live_status updates
@@ -32,9 +32,10 @@ WinterRiverEngine (broker/main.py)
 | Type | node_ids | Key Logic |
 |------|----------|-----------|
 | `UTILITY` | `utility_a`, `utility_b` | Root nodes; `v_out` = 230 kV when `GRID_OK/SAG/SWELL`, 0 on `OUTAGE/FAULT/OFFLINE` |
-| `HV_MV_TRANSFORMER` | `hv_mv_transformer_a/b` | 230 kV → 34.5 kV step-down; passes when `NORMAL/WARNING`, 0 on `FAULT` |
-| `LV_SWITCHGEAR` | `lv_switchgear_a/b` | Passes parent voltage when `CLOSED`; 0 when `OPEN/TRIPPED/FAULT` |
-| `MV_LV_TRANSFORMER` | `mv_lv_transformer_a/b` | 34.5 kV → 480 V; passes when `NORMAL/WARNING`, 0 on `FAULT` |
+| `HV_MV_TRANSFORMER` | `hv_mv_transformer_a/b` | 230 kV → 34.5 kV step-down (fed from utility); passes when `NORMAL/WARNING`, 0 on `FAULT` |
+| `MV_SWITCHGEAR` | `mv_switchgear_a/b` | 34.5 kV MV-bus breaker, downstream of HV/MV transformer; passes parent voltage when `CLOSED`, 0 when `OPEN/TRIPPED/FAULT` |
+| `MV_LV_TRANSFORMER` | `mv_lv_transformer_a/b` | 34.5 kV → 480 V (fed from MV switchgear); passes when `NORMAL/WARNING`, 0 on `FAULT` |
+| `LV_SWITCHGEAR` | `lv_switchgear_a/b` | 480 V LV-bus breaker, downstream of MV/LV transformer; passes parent voltage when `CLOSED`, 0 when `OPEN/TRIPPED/FAULT`; feeds the ATS primary input |
 | `GENERATOR` | `generator_a`, `generator_b` | Standby while utility is live; 10-tick startup delay on utility loss; 480 V when `RUNNING` |
 | `ATS` | `ats_a`, `ats_b` | LV transfer switch. Prefers transformer (utility) path; falls back to generator; `OPEN` if both down. Output feeds UPS and cooling in parallel. |
 | `UPS` | `ups_a`, `ups_b` | Parent = ats; passes voltage with battery tracking; feeds the side's 4 server_racks |
