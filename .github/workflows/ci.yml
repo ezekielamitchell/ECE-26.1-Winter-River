@@ -66,7 +66,7 @@ jobs:
       # Build one env per node category. Each `_a` env shares its build_src
       # with its `_b` sibling (same source under a different topic prefix),
       # so this catches firmware compile errors across the topology without
-      # rebuilding every essentially-identical binary on every PR. All eight
+      # rebuilding every essentially-identical binary on every PR. All six
       # server_rack envs compile the same source via build_flags, so one is
       # enough to validate.
       - name: Build ESP32 firmware (representative envs)
@@ -82,5 +82,4 @@ jobs:
             -e ats_a \
             -e ups_a \
             -e cooling_a \
-            -e server_rack_a1 \
-            -e bms
+            -e server_rack_a1

@@ -1,8 +1,8 @@
-# Server Rack — `server_rack_{a1..a4,b1..b4}`
+# Server Rack — `server_rack_{a1..a3,b1..b3}`
 
 ## Real-World Role
 
-Server racks are the IT load — the reason the entire power and cooling infrastructure exists. Winter River models 8 racks total (4 per side). Each rack is **single-fed from its side's UPS** (no shared rectifier, no rack-level 2N): a side failure kills all 4 of that side's racks at once. Redundancy lives at the side (block) level, not per-rack. Hot-aisle temperature is driven by the broker thermal model (`broker/thermal.py`) and pushed to each rack's `TEMP:<f>` control every tick.
+Server racks are the IT load — the reason the entire power and cooling infrastructure exists. Winter River models 6 racks total (3 per side). Each rack is **single-fed from its side's UPS** (no shared rectifier, no rack-level 2N): a side failure kills all 3 of that side's racks at once. Redundancy lives at the side (block) level, not per-rack. Hot-aisle temperature is driven by the broker thermal model (`broker/thermal.py`) and pushed to each rack's `TEMP:<f>` control every tick.
 
 ---
 
@@ -10,16 +10,14 @@ Server racks are the IT load — the reason the entire power and cooling infrast
 
 | node_id          | Side | Rated Voltage | Parent   | Notes                                |
 |------------------|------|---------------|----------|--------------------------------------|
-| `server_rack_a1` | A    | 48 V DC       | `ups_a`  | One of four side-A racks             |
+| `server_rack_a1` | A    | 48 V DC       | `ups_a`  | One of three side-A racks            |
 | `server_rack_a2` | A    | 48 V DC       | `ups_a`  |                                      |
 | `server_rack_a3` | A    | 48 V DC       | `ups_a`  |                                      |
-| `server_rack_a4` | A    | 48 V DC       | `ups_a`  |                                      |
-| `server_rack_b1` | B    | 48 V DC       | `ups_b`  | One of four side-B racks             |
+| `server_rack_b1` | B    | 48 V DC       | `ups_b`  | One of three side-B racks            |
 | `server_rack_b2` | B    | 48 V DC       | `ups_b`  |                                      |
 | `server_rack_b3` | B    | 48 V DC       | `ups_b`  |                                      |
-| `server_rack_b4` | B    | 48 V DC       | `ups_b`  |                                      |
 
-All 8 envs compile **the same source file** (`src/server_rack/server_rack.cpp`). PlatformIO `build_flags` inject `WR_NODE_ID` and `WR_RACK_LABEL` per env, so the firmware identifies itself and labels the OLED correctly.
+All 6 envs compile **the same source file** (`src/server_rack/server_rack.cpp`). PlatformIO `build_flags` inject `WR_NODE_ID` and `WR_RACK_LABEL` per env, so the firmware identifies itself and labels the OLED correctly.
 
 ---
 
@@ -71,16 +69,16 @@ Topic: `winter-river/<node_id>/control`
 
 ## Build & Flash
 
-All 8 racks build the same source with per-env build_flags:
+All 6 racks build the same source with per-env build_flags:
 
 ```bash
 # Flash one rack
 pio run -e server_rack_a1 --target upload
-pio run -e server_rack_b4 --target upload
+pio run -e server_rack_b3 --target upload
 
-# Build all eight
-for env in server_rack_a1 server_rack_a2 server_rack_a3 server_rack_a4 \
-           server_rack_b1 server_rack_b2 server_rack_b3 server_rack_b4; do
+# Build all six
+for env in server_rack_a1 server_rack_a2 server_rack_a3 \
+           server_rack_b1 server_rack_b2 server_rack_b3; do
     pio run -e "$env"
 done
 ```

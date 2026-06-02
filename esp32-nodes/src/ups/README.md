@@ -10,10 +10,10 @@ The UPS is the critical bridge between utility or generator power and sensitive 
 
 | node_id | Side | Rated Voltage | Parent  | Children                                            |
 |---------|------|---------------|---------|-----------------------------------------------------|
-| `ups_a` | A    | 480 V AC      | `ats_a` | `server_rack_a1`, `server_rack_a2`, `server_rack_a3`, `server_rack_a4` |
-| `ups_b` | B    | 480 V AC      | `ats_b` | `server_rack_b1`, `server_rack_b2`, `server_rack_b3`, `server_rack_b4` |
+| `ups_a` | A    | 480 V AC      | `ats_a` | `server_rack_a1`, `server_rack_a2`, `server_rack_a3` |
+| `ups_b` | B    | 480 V AC      | `ats_b` | `server_rack_b1`, `server_rack_b2`, `server_rack_b3` |
 
-Each UPS single-feeds the 4 server_racks on its side. No shared rectifier —
+Each UPS single-feeds the 3 server_racks on its side. No shared rectifier —
 sides are fully independent (block-redundant 2N). The racks handle their own
 AC→DC conversion internally.
 

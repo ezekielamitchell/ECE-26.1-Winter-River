@@ -37,9 +37,9 @@ WinterRiverEngine (broker/main.py)
 | `MV_LV_TRANSFORMER` | `mv_lv_transformer_a/b` | 34.5 kV → 480 V; passes when `NORMAL/WARNING`, 0 on `FAULT` |
 | `GENERATOR` | `generator_a`, `generator_b` | Standby while utility is live; 10-tick startup delay on utility loss; 480 V when `RUNNING` |
 | `ATS` | `ats_a`, `ats_b` | LV transfer switch. Prefers transformer (utility) path; falls back to generator; `OPEN` if both down. Output feeds UPS and cooling in parallel. |
-| `UPS` | `ups_a`, `ups_b` | Parent = ats; passes voltage with battery tracking; feeds the side's 4 server_racks |
+| `UPS` | `ups_a`, `ups_b` | Parent = ats; passes voltage with battery tracking; feeds the side's 3 server_racks |
 | `COOLING` | `cooling_a/b` | Parent = ats (mech branch). Fan bank (55 fans/side, 110 total) — drives broker thermal model |
-| `SERVER_RACK` | `server_rack_a1..a4`, `server_rack_b1..b4` | Single-fed from this side's UPS; `NORMAL` when UPS is on grid, `DEGRADED` when UPS is on battery/charging, `FAULT` when UPS is down. Side-A failure kills all 4 side-A racks. |
+| `SERVER_RACK` | `server_rack_a1..a3`, `server_rack_b1..b3` | Single-fed from this side's UPS; `NORMAL` when UPS is on grid, `DEGRADED` when UPS is on battery/charging, `FAULT` when UPS is down. Side-A failure kills all 3 side-A racks. |
 
 ---
 
@@ -73,23 +73,12 @@ This means the ATS output drops to 0 V for ~10 seconds before generator power ar
 ## Block-Redundant 2N
 
 Side A and Side B are two fully independent power chains. There is no shared
-rectifier — each side feeds its own 4 server racks single-sided. Redundancy
+rectifier — each side feeds its own 3 server racks single-sided. Redundancy
 is at the *block* level: if Side A loses utility AND its generator fails,
-all 4 side-A racks go FAULT; Side B continues unaffected.
+all 3 side-A racks go FAULT; Side B continues unaffected.
 
-The BMS aggregator (`_power_state` in `main.py`) derives a `2N_HEALTHY |
-A_ONLY | B_ONLY | DOWN` rollup from per-side UPS health:
-
-| `ups_a.v_out > 0` | `ups_b.v_out > 0` | `power_state` |
-|-------------------|-------------------|---------------|
-| true              | true              | `2N_HEALTHY`  |
-| true              | false             | `A_ONLY`      |
-| false             | true              | `B_ONLY`      |
-| false             | false             | `DOWN`        |
-
-`_aggregate_rack_state` rolls up the 4 racks per side into a worst-of
-`NORMAL / DEGRADED / FAULT` for `rack_a_state` / `rack_b_state` in
-`winter-river/bms/status`.
+Each side is "up" iff its UPS (`ups_a` / `ups_b`) is present and producing
+voltage — there is no shared convergence point to roll the two sides together.
 
 ---
 

@@ -1,8 +1,8 @@
 # ESP32 Nodes — Firmware Reference
 
-PlatformIO firmware for the 26 ESP32 nodes in the ECE 26.1 Winter River simulator. Each node simulates one component in a block-redundant 2N data-centre power chain, publishes JSON telemetry every 5 seconds, subscribes to MQTT control commands, and drives an SSD1306 128×64 OLED display.
+PlatformIO firmware for the 24 ESP32 nodes in the ECE 26.1 Winter River simulator. Each node simulates one component in a block-redundant 2N data-centre power chain, publishes JSON telemetry every 5 seconds, subscribes to MQTT control commands, and drives an SSD1306 128×64 OLED display.
 
-> **Slot budget:** the baseplate has 24 USB-C slots; this firmware tree defines 26 active boards (13 Side A + 13 Side B). Resolve the 2-slot overflow by expanding the baseplate, retiring one rack per side, or carrying two boards on a separate breakout. `bms` is broker-synthesized and the OLED-only `bms` env, if flashed, lives off-baseplate.
+> **Slot budget:** the baseplate has 24 USB-C slots; this firmware tree defines 24 active boards (12 Side A + 12 Side B) — a perfect fit with no overflow.
 
 ---
 
@@ -43,7 +43,7 @@ sudo systemctl start mosquitto
 
 ## Node Inventory
 
-### Side A (13 nodes)
+### Side A (12 nodes)
 
 | #  | `node_id`              | Component type dir                       | Rated voltage              |
 |----|------------------------|------------------------------------------|----------------------------|
@@ -56,15 +56,15 @@ sudo systemctl start mosquitto
 | ⑦  | `ats_a`                | `ats/ats_a/`                             | 480 V (LV transfer switch) |
 | ⑧  | `ups_a`                | `ups/ups_a/`                             | 480 V AC                   |
 | ⑨  | `cooling_a`            | `cooling/cooling_a/`                     | 480 V (fan bank — 55 fans) |
-| ⑩-⑬ | `server_rack_a{1..4}` | `server_rack/` (single shared source)    | 48 V DC                    |
+| ⑩-⑫ | `server_rack_a{1..3}` | `server_rack/` (single shared source)    | 48 V DC                    |
 
-### Side B (13 nodes — mirror of Side A)
+### Side B (12 nodes — mirror of Side A)
 
 All `_a` suffixes replaced with `_b`. Component type directories are identical.
 
 ### Broker-synthesized
 
-`bms` is published by `broker/main.py` (no firmware-side telemetry). The `[env:bms]` env compiles an OLED-only mirror that subscribes to `winter-river/bms/status` and renders the rolled-up state — useful if you want a physical BMS panel, but not required for the simulator to function.
+`facility/status` and `weather/status` are published by `broker/main.py` from live state every tick — they have no ESP32 firmware and no DB row.
 
 ---
 
@@ -72,12 +72,12 @@ All `_a` suffixes replaced with `_b`. Component type directories are identical.
 
 ```
 utility → hv_mv_transformer → mv_switchgear → mv_lv_transformer
-       → lv_switchgear → ats → ups → server_rack_{1..4}
+       → lv_switchgear → ats → ups → server_rack_{1..3}
 generator ─────────────────────────↗
                                 ats ↘ cooling   (parallel mech load)
 ```
 
-Sides are fully independent (block-redundant 2N — no shared rectifier). Side-A failure kills all 4 side-A racks; side-B continues.
+Sides are fully independent (block-redundant 2N — no shared rectifier). Side-A failure kills all 3 side-A racks; side-B continues.
 
 ---
 
@@ -125,12 +125,9 @@ pio run -e generator_a          --target upload
 pio run -e ats_a                --target upload
 pio run -e ups_a                --target upload
 pio run -e cooling_a            --target upload
-pio run -e server_rack_a1       --target upload   # all 8 racks compile the same source
+pio run -e server_rack_a1       --target upload   # all 6 racks compile the same source
 pio run -e server_rack_a2       --target upload   # with WR_NODE_ID / WR_RACK_LABEL set per env
-# ... a3, a4, b1..b4
-
-# OLED-only BMS mirror (broker-synthesized topic)
-pio run -e bms                  --target upload
+# ... a3, b1..b3
 
 # Build all envs without flashing
 pio run

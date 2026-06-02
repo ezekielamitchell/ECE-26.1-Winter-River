@@ -83,13 +83,13 @@ Creates an access point on `wlan0`:
 psql -U <user> -d <database> -f scripts/init_db.sql
 ```
 
-Creates four tables and seeds all 26 active nodes:
+Creates four tables and seeds all 24 active nodes:
 
-- **`nodes`** — static topology (13 Side A + 13 Side B), parent/child links, voltage ratios. `secondary_parent_id` carries the ATS generator input.
+- **`nodes`** — static topology (12 Side A + 12 Side B), parent/child links, voltage ratios. `secondary_parent_id` carries the ATS generator input.
 - **`live_status`** — current digital twin state (presence, voltage in/out, status_msg, battery_level, gen_timer) — one row per node.
 - **`historical_data`** — JSONB log of every incoming MQTT telemetry message.
 - **`facility_metrics`** — per-tick output of `broker/thermal.py` (PUE, hot aisle, airflow, pressures).
 
-Seeded chain per side: `utility → hv_mv_transformer → mv_switchgear → mv_lv_transformer → lv_switchgear → ats → ups → server_rack_{1..4}`, with `generator` as ats's secondary parent and `cooling` branching off ats in parallel with ups.
+Seeded chain per side: `utility → hv_mv_transformer → mv_switchgear → mv_lv_transformer → lv_switchgear → ats → ups → server_rack_{1..3}`, with `generator` as ats's secondary parent and `cooling` branching off ats in parallel with ups.
 
-Seeds the static `nodes` topology for all 26 boards (13 per side) and an initial `live_status` row for each.
+Seeds the static `nodes` topology for all 24 boards (12 per side) and an initial `live_status` row for each.

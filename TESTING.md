@@ -48,7 +48,7 @@ WiFi SSID:
 Broker/database topology used:
 Physical nodes installed:
 Baseplate slots populated (of 24):
-Boards exceeding baseplate (26 active vs 24 slots — 2-slot overflow):
+Boards exceeding baseplate (none — 24 active = 24 slots):
 Firmware environments flashed:
 Grafana dashboard used:
 Known missing or skipped modules:
@@ -69,52 +69,46 @@ ip -4 addr show wlan0
 ## Topology Under Test
 
 The current broker/database simulation topology is **block-redundant 2N** —
-two fully independent power chains, each feeding 4 single-fed server racks.
+two fully independent power chains, each feeding 3 single-fed server racks.
 There is no shared rectifier and no rack-level 2N: side-A failure kills all
-4 of side-A's racks, and side-B continues unaffected.
+3 of side-A's racks, and side-B continues unaffected.
 
 ```text
 Side A:
 utility_a -> mv_switchgear_a -> hv_mv_transformer_a -> lv_switchgear_a
           -> mv_lv_transformer_a
 generator_a ----------------------------------------------------^
-ats_a -> ups_a -> server_rack_a1, _a2, _a3, _a4
+ats_a -> ups_a -> server_rack_a1, _a2, _a3
 ats_a -> cooling_a   (mech load, parallel to ups_a)
 
 Side B (mirror):
 utility_b -> mv_switchgear_b -> hv_mv_transformer_b -> lv_switchgear_b
           -> mv_lv_transformer_b
 generator_b ----------------------------------------------------^
-ats_b -> ups_b -> server_rack_b1, _b2, _b3, _b4
+ats_b -> ups_b -> server_rack_b1, _b2, _b3
 ats_b -> cooling_b
-
-bms (broker-synthesized) -- broker/main.py reads live node state every tick
-                         -> publishes rolled-up winter-river/bms/status
 ```
 
 Each server rack is **single-fed** from its side's UPS. There is no PATH_A /
-PATH_B at the rack level any more — the broker's BMS aggregator derives
-`2N_HEALTHY | A_ONLY | B_ONLY | DOWN` from per-side UPS health and rolls up
-worst-of rack states across each side's 4 racks.
+PATH_B at the rack level — each side is "up" iff its UPS (`ups_a` / `ups_b`)
+is present and producing voltage, and side-A failure drops all 3 of side-A's
+racks while side-B continues.
 
-Active node IDs (26 broker/DB nodes + 1 broker-synthesized BMS topic):
+Active node IDs (24 broker/DB nodes):
 
 | Group | Node IDs |
 |---|---|
-| Side A (13) | `utility_a`, `mv_switchgear_a`, `hv_mv_transformer_a`, `lv_switchgear_a`, `mv_lv_transformer_a`, `generator_a`, `ats_a`, `ups_a`, `cooling_a`, `server_rack_a1`, `server_rack_a2`, `server_rack_a3`, `server_rack_a4` |
-| Side B (13) | `utility_b`, `mv_switchgear_b`, `hv_mv_transformer_b`, `lv_switchgear_b`, `mv_lv_transformer_b`, `generator_b`, `ats_b`, `ups_b`, `cooling_b`, `server_rack_b1`, `server_rack_b2`, `server_rack_b3`, `server_rack_b4` |
-| Broker-synthesized (no ESP32 row) | `bms`, `facility`, `weather` — broker publishes each retained from live state every tick |
+| Side A (12) | `utility_a`, `mv_switchgear_a`, `hv_mv_transformer_a`, `lv_switchgear_a`, `mv_lv_transformer_a`, `generator_a`, `ats_a`, `ups_a`, `cooling_a`, `server_rack_a1`, `server_rack_a2`, `server_rack_a3` |
+| Side B (12) | `utility_b`, `mv_switchgear_b`, `hv_mv_transformer_b`, `lv_switchgear_b`, `mv_lv_transformer_b`, `generator_b`, `ats_b`, `ups_b`, `cooling_b`, `server_rack_b1`, `server_rack_b2`, `server_rack_b3` |
+| Broker-synthesized (no ESP32 row) | `facility`, `weather` — broker publishes each retained from live state every tick |
 
-⚠ **Slot budget overflow:** 26 active boards vs 24 baseplate slots = 2-slot
-overflow. Resolve by (a) expanding the baseplate, (b) retiring one rack per
-side (drops to 24, both sides still mirrored at 12 each), or (c) running the
-2 overflow boards on a separate carrier. Document the chosen resolution in
-the Run Record.
+**Slot budget:** 24 active boards = 24 baseplate slots — a perfect fit, no
+overflow.
 
-DB-row accounting: `nodes` table holds **26 rows** (13 Side A + 13 Side B; no
-shared rows). `bms`, `facility`, and `weather` are intentionally absent from
+DB-row accounting: `nodes` table holds **24 rows** (12 Side A + 12 Side B; no
+shared rows). `facility` and `weather` are intentionally absent from
 `nodes` — they are broker-published synthetic topics. The broker's
-`online_nodes` ceiling is **26**.
+`online_nodes` ceiling is **24**.
 
 Compatibility note:
 
@@ -141,27 +135,24 @@ front of an audience.
 - [ ] All SSD1306 OLEDs are visible and undamaged.
 - [ ] Physical labels match MQTT node IDs.
 - [ ] Side A and Side B are visually separated.
-- [ ] All 4 server racks per side are clearly marked as the IT loads, with
-      side-A racks (`server_rack_a1..a4`) and side-B racks (`server_rack_b1..b4`)
+- [ ] All 3 server racks per side are clearly marked as the IT loads, with
+      side-A racks (`server_rack_a1..a3`) and side-B racks (`server_rack_b1..b3`)
       grouped together.
 - [ ] Workspace ambient temperature is logged: ______ deg F.
 - [ ] Spare USB cable, laptop, and serial monitor are available.
-- [ ] Baseplate slot accounting: 24 slots available / 26 boards defined in
-      firmware. Record the 2-slot overflow resolution (expand / drop 2 racks /
-      external carrier) in the Run Record before continuing.
+- [ ] Baseplate slot accounting: 24 slots available / 24 boards defined in
+      firmware — a perfect fit with no overflow.
 
 ### 1.2 Node Inventory
 
-The active rig defines **26 ESP32 boards** — 13 Side A + 13 Side B, no shared
-boards. The baseplate has 24 slots, so the overflow is handled per the Run
-Record (typically: retire one server_rack per side to fit exactly, leaving
-12 per side / 24 total).
+The active rig defines **24 ESP32 boards** — 12 Side A + 12 Side B, no shared
+boards. The baseplate has 24 slots, so every board has a home with no overflow.
 
-All 26 boards are seeded in `nodes` (broker validates telemetry against this
-table); `bms`, `facility`, and `weather` are broker-synthesized retained
+All 24 boards are seeded in `nodes` (broker validates telemetry against this
+table); `facility` and `weather` are broker-synthesized retained
 topics and have no DB rows.
 
-Physical board inventory (26 boards):
+Physical board inventory (24 boards):
 
 | #  | node_id                | Powered | OLED | WiFi | MQTT | Notes |
 |----|------------------------|---------|------|------|------|-------|
@@ -172,26 +163,23 @@ Physical board inventory (26 boards):
 |  5 | `mv_lv_transformer_a`  | [ ]     | [ ]  | [ ]  | [ ]  | |
 |  6 | `generator_a`          | [ ]     | [ ]  | [ ]  | [ ]  | |
 |  7 | `ats_a`                | [ ]     | [ ]  | [ ]  | [ ]  | LV transfer switch |
-|  8 | `ups_a`                | [ ]     | [ ]  | [ ]  | [ ]  | feeds all 4 side-A racks |
+|  8 | `ups_a`                | [ ]     | [ ]  | [ ]  | [ ]  | feeds all 3 side-A racks |
 |  9 | `cooling_a`            | [ ]     | [ ]  | [ ]  | [ ]  | 55 fans (mech load off ats_a) |
 | 10 | `server_rack_a1`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_a |
 | 11 | `server_rack_a2`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_a |
 | 12 | `server_rack_a3`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_a |
-| 13 | `server_rack_a4`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_a |
-| 14 | `utility_b`            | [ ]     | [ ]  | [ ]  | [ ]  | |
-| 15 | `mv_switchgear_b`      | [ ]     | [ ]  | [ ]  | [ ]  | 230 kV main breaker |
-| 16 | `hv_mv_transformer_b`  | [ ]     | [ ]  | [ ]  | [ ]  | |
-| 17 | `lv_switchgear_b`      | [ ]     | [ ]  | [ ]  | [ ]  | |
-| 18 | `mv_lv_transformer_b`  | [ ]     | [ ]  | [ ]  | [ ]  | |
-| 19 | `generator_b`          | [ ]     | [ ]  | [ ]  | [ ]  | |
-| 20 | `ats_b`                | [ ]     | [ ]  | [ ]  | [ ]  | LV transfer switch |
-| 21 | `ups_b`                | [ ]     | [ ]  | [ ]  | [ ]  | feeds all 4 side-B racks |
-| 22 | `cooling_b`            | [ ]     | [ ]  | [ ]  | [ ]  | 55 fans (mech load off ats_b) |
-| 23 | `server_rack_b1`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_b |
-| 24 | `server_rack_b2`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_b |
-| 25 | `server_rack_b3`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_b |
-| 26 | `server_rack_b4`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_b |
-|    | `bms` (optional)       | [ ]     | [ ]  | [ ]  | [ ]  | OLED mirror only; broker-synthesized topic, off-baseplate carrier |
+| 13 | `utility_b`            | [ ]     | [ ]  | [ ]  | [ ]  | |
+| 14 | `mv_switchgear_b`      | [ ]     | [ ]  | [ ]  | [ ]  | 230 kV main breaker |
+| 15 | `hv_mv_transformer_b`  | [ ]     | [ ]  | [ ]  | [ ]  | |
+| 16 | `lv_switchgear_b`      | [ ]     | [ ]  | [ ]  | [ ]  | |
+| 17 | `mv_lv_transformer_b`  | [ ]     | [ ]  | [ ]  | [ ]  | |
+| 18 | `generator_b`          | [ ]     | [ ]  | [ ]  | [ ]  | |
+| 19 | `ats_b`                | [ ]     | [ ]  | [ ]  | [ ]  | LV transfer switch |
+| 20 | `ups_b`                | [ ]     | [ ]  | [ ]  | [ ]  | feeds all 3 side-B racks |
+| 21 | `cooling_b`            | [ ]     | [ ]  | [ ]  | [ ]  | 55 fans (mech load off ats_b) |
+| 22 | `server_rack_b1`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_b |
+| 23 | `server_rack_b2`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_b |
+| 24 | `server_rack_b3`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_b |
 
 Old firmware that may still be flashed on spare boards (broker will log
 "unknown node_id" and drop telemetry from these — re-flash with a current env):
@@ -202,8 +190,10 @@ Old firmware that may still be flashed on spare boards (broker will log
 | `pdu_a` / `pdu_b`         | [ ] | dropped — never in active topology |
 | `rectifier`, `rectifier_a/b` | [ ] | dropped — no shared 2N convergence |
 | `lighting_a` / `lighting_b` | [ ] | dropped |
-| `monitoring_a` / `monitoring_b` | [ ] | dropped — superseded by broker-synthesized `bms` |
-| `server_rack_a` / `server_rack_b` (single) | [ ] | superseded by per-side `_a{1..4}` / `_b{1..4}` |
+| `monitoring_a` / `monitoring_b` | [ ] | dropped |
+| `bms`, `bms_a/b`               | [ ] | dropped — aggregation removed; no firmware or topic |
+| `server_rack_a4` / `server_rack_b4` | [ ] | dropped — racks reduced to 3 per side (`_a{1..3}` / `_b{1..3}`) |
+| `server_rack_a` / `server_rack_b` (single) | [ ] | superseded by per-side `_a{1..3}` / `_b{1..3}` |
 
 ### 1.3 Raspberry Pi Services
 
@@ -311,7 +301,6 @@ pio run -e generator_a
 pio run -e ats_a
 pio run -e ups_a
 pio run -e server_rack_a1
-pio run -e bms
 ```
 
 Full firmware matrix check:
@@ -391,12 +380,11 @@ Complete this before running failure scenarios.
 - [ ] Both ATS nodes use `UTILITY`.
 - [ ] Both UPS nodes show `NORMAL`, 480 V input, 480 V output, and healthy
       battery.
-- [ ] All 4 `server_rack_a{1..4}` show `NORMAL` (single-fed from `ups_a`).
-- [ ] All 4 `server_rack_b{1..4}` show `NORMAL` (single-fed from `ups_b`).
+- [ ] All 3 `server_rack_a{1..3}` show `NORMAL` (single-fed from `ups_a`).
+- [ ] All 3 `server_rack_b{1..3}` show `NORMAL` (single-fed from `ups_b`).
 - [ ] Cooling is normal on both sides.
-- [ ] `bms` shows `mode:NORMAL`, `power_state:2N_HEALTHY`, `redundancy_lost:0`,
-      `active_alarms:0`, `online_nodes:26` (all 26 broker/DB nodes online;
-      `bms`/`facility`/`weather` are broker-synthesized and not counted).
+- [ ] `./scripts/status.sh` shows all 24 broker/DB nodes online and no faults
+      (`facility`/`weather` are broker-synthesized and not counted).
 - [ ] Grafana shows no stale fault state from a previous run.
 
 Suggested baseline commands:
@@ -416,22 +404,11 @@ mosquitto_pub -h 192.168.4.1 -t "winter-river/ats_a/control" -m "SOURCE:UTILITY 
 mosquitto_pub -h 192.168.4.1 -t "winter-river/ats_b/control" -m "SOURCE:UTILITY STATUS:UTILITY"
 mosquitto_pub -h 192.168.4.1 -t "winter-river/ups_a/control" -m "INPUT:480 BATT:100 STATUS:NORMAL"
 mosquitto_pub -h 192.168.4.1 -t "winter-river/ups_b/control" -m "INPUT:480 BATT:100 STATUS:NORMAL"
-# Each of the 8 server racks gets the same NORMAL/INPUT baseline; broker
+# Each of the 6 server racks gets the same NORMAL/INPUT baseline; broker
 # fills in TEMP every tick from the thermal model.
-for r in a1 a2 a3 a4 b1 b2 b3 b4; do
+for r in a1 a2 a3 b1 b2 b3; do
     mosquitto_pub -h 192.168.4.1 -t "winter-river/server_rack_${r}/control" -m "INPUT:480 STATUS:NORMAL"
 done
-```
-
-Note: `bms` is broker-driven — `winter-river/bms/status` is published by
-`broker/main.py` every tick from live node state. The broker does not
-subscribe to `winter-river/bms/control`, so manual publishes to that topic
-are no-ops; the way to "reset" the BMS rollup is to clear the upstream
-faults and let the next tick recompute. If you need to wipe a stale retained
-`bms/status` while the broker is stopped, clear it directly:
-
-```bash
-mosquitto_pub -h 192.168.4.1 -t "winter-river/bms/status" -r -n
 ```
 
 ## Part 2 - Layer-By-Layer Smoke Tests
@@ -530,38 +507,7 @@ mosquitto_sub -h 192.168.4.1 -t "winter-river/facility/status" -C 1 -v
 - [ ] `fan_count` matches the expected active fan count.
 - [ ] `pue` is finite and plausible.
 
-### 2.9 BMS Aggregator Smoke Test
-
-```bash
-mosquitto_sub -h 192.168.4.1 -t "winter-river/bms/status" -C 1 -v
-```
-
-- [ ] `bms/status` is retained.
-- [ ] At baseline, `mode:NORMAL`, `power_state:2N_HEALTHY`,
-      `redundancy_lost:0`, `degraded_paths:0`, `active_alarms:0`.
-- [ ] `online_nodes` equals the count of DB-seeded active nodes — **23** under
-      the current topology (`bms` is broker-synthesized and not in `nodes`,
-      so it does not count toward `online_nodes`); less if any node is missing.
-- [ ] Side A and Side B health flags match the actual `_a` / `_b` chain states.
-
-Drive one upstream fault and confirm the BMS reflects it within ~2 ticks:
-
-```bash
-mosquitto_pub -h 192.168.4.1 -t "winter-river/utility_a/control" -m "STATUS:OUTAGE VOLT:0"
-sleep 3
-mosquitto_sub -h 192.168.4.1 -t "winter-river/bms/status" -C 1 -v
-```
-
-- [ ] `bms/status` now reflects the Side A degradation (mode/state changed,
-      `degraded_paths` incremented, `active_alarms` > 0).
-
-Restore before continuing:
-
-```bash
-mosquitto_pub -h 192.168.4.1 -t "winter-river/utility_a/control" -m "STATUS:GRID_OK VOLT:230.0 FREQ:60.0"
-```
-
-### 2.10 Grafana Pipeline
+### 2.9 Grafana Pipeline
 
 - [ ] Publish or wait for a fresh node telemetry point.
 - [ ] Telegraf logs no parse or connection errors.
@@ -590,16 +536,12 @@ Steps:
 
 - [ ] Trainee traces Side A from `utility_a` → `mv_switchgear_a` →
       `hv_mv_transformer_a` → `lv_switchgear_a` → `mv_lv_transformer_a` →
-      `ats_a` → `ups_a` → `server_rack_a{1..4}`, and notes the parallel
+      `ats_a` → `ups_a` → `server_rack_a{1..3}`, and notes the parallel
       mech branch `ats_a → cooling_a`.
 - [ ] Trainee traces Side B end-to-end and confirms it's a complete mirror
       of Side A — no shared nodes anywhere.
 - [ ] Trainee identifies utilities, MV switchgear, generators, ATS units,
-      UPS units, cooling (both sides), all 8 server racks, and the `bms`
-      aggregator (broker-published, no ESP32 row in `nodes`).
-- [ ] Trainee reads `winter-river/bms/status` and confirms
-      `power_state:2N_HEALTHY`, `rack_a_state:NORMAL`, `rack_b_state:NORMAL`
-      matches what the individual node OLEDs show.
+      UPS units, cooling (both sides), and all 6 server racks.
 - [ ] Operator compares OLEDs, MQTT, and Grafana.
 
 Expected:
@@ -608,7 +550,7 @@ Expected:
 - [ ] Both MV switchgear nodes report `CLOSED`.
 - [ ] Generators are in `STANDBY`.
 - [ ] Both UPS nodes report `NORMAL`, 480 V in/out.
-- [ ] All 8 server racks report `NORMAL`.
+- [ ] All 6 server racks report `NORMAL`.
 - [ ] Grafana and MQTT agree with OLED state.
 
 Questions:
@@ -722,7 +664,7 @@ Questions:
 ### Scenario 4 - Full Side Failure, Block-Redundant 2N Degraded Operation
 
 Objective: prove that one full side can fail without dropping the other side's
-4 server racks. In block-redundant 2N, side-A failure kills all 4 side-A racks
+3 server racks. In block-redundant 2N, side-A failure kills all 3 side-A racks
 at once — there is no rack-level dual feed. Side B continues normally.
 
 Trigger:
@@ -736,18 +678,13 @@ Expected:
 
 - [ ] Side A cannot energise `ups_a` (utility out, generator failed).
 - [ ] `ups_a` runs on battery briefly, then reports `FAULT` once depleted.
-- [ ] All 4 `server_rack_a{1..4}` cascade to `FAULT` (single-fed from `ups_a`).
-- [ ] Side B stays normal: `ups_b` NORMAL, all 4 `server_rack_b{1..4}` NORMAL.
-- [ ] `bms/status` shows `mode:ALARM`, `power_state:B_ONLY`,
-      `redundancy_lost:1`, `side_a_health:DOWN`, `side_b_health:OK`,
-      `rack_a_state:FAULT`, `rack_b_state:NORMAL`.
-      (Mode is `ALARM` rather than `DEGRADED` because the Side A cascade
-      puts multiple nodes into fault states, pushing `active_alarms` above 1.
-      The broker's `_compute_bms` promotes `DEGRADED` → `ALARM` once
-      `active_alarms > 1`.)
-- [ ] Operators can explain that half the IT capacity is gone (4 of 8 racks)
+- [ ] All 3 `server_rack_a{1..3}` cascade to `FAULT` (single-fed from `ups_a`).
+- [ ] Side B stays normal: `ups_b` NORMAL, all 3 `server_rack_b{1..3}` NORMAL.
+- [ ] Redundancy is lost: only Side B is live (`ups_b` producing voltage,
+      `ups_a` FAULT). Side A's whole chain reads down while Side B is healthy.
+- [ ] Operators can explain that half the IT capacity is gone (3 of 6 racks)
       and recovery requires either utility restoration or generator repair —
-      a second fault on Side B now drops the remaining 4 racks too.
+      a second fault on Side B now drops the remaining 3 racks too.
 
 Recovery:
 
@@ -760,14 +697,14 @@ Questions:
 
 - What does "block-redundant 2N" mean in practical terms, and how does it
   differ from rack-level 2N?
-- Why does losing one side drop 4 racks instead of being absorbed at the rack
+- Why does losing one side drop 3 racks instead of being absorbed at the rack
   level (as in a true dual-fed-per-rack design)?
 - What's the operational cost of block redundancy vs rack-level 2N?
 
 ### Scenario 4b - Single Rack Failure (Workload-Level Redundancy)
 
 Objective: show that losing one rack is not the same as losing a side —
-the 3 other racks on the same side, plus all 4 on the other side, keep
+the 2 other racks on the same side, plus all 3 on the other side, keep
 running. Workloads should fail over via cluster software.
 
 Trigger:
@@ -779,13 +716,12 @@ mosquitto_pub -h 192.168.4.1 -t "winter-river/server_rack_a1/control" -m "STATUS
 Expected:
 
 - [ ] `server_rack_a1` reports `FAULT`.
-- [ ] `server_rack_a2`, `_a3`, `_a4` remain `NORMAL` (same UPS, same side).
-- [ ] All 4 `server_rack_b{1..4}` remain `NORMAL`.
-- [ ] `bms/status` shows `mode:DEGRADED`, `power_state:2N_HEALTHY` (power is
-      fine — this is a rack-internal fault), `rack_a_state:FAULT` (worst-of
-      across the 4 a-racks), `rack_b_state:NORMAL`, `active_alarms:>=1`.
+- [ ] `server_rack_a2`, `_a3` remain `NORMAL` (same UPS, same side).
+- [ ] All 3 `server_rack_b{1..3}` remain `NORMAL`.
+- [ ] Power upstream is still `2N_HEALTHY` — both UPS nodes are producing
+      voltage; this is a rack-internal fault, not a power-chain failure.
 - [ ] If you're running real workloads, trainees should articulate that
-      VMs/containers should have already failed over to one of the other 7
+      VMs/containers should have already failed over to one of the other 5
       racks — this is workload-level redundancy, distinct from
       power-level redundancy.
 
@@ -798,8 +734,8 @@ mosquitto_pub -h 192.168.4.1 -t "winter-river/server_rack_a1/control" -m "STATUS
 Questions:
 
 - What's the difference between "power redundancy" and "workload redundancy"?
-- A single rack failing hits the BMS as `DEGRADED` even though all upstream
-  power is `2N_HEALTHY`. Why is that the correct classification?
+- A single rack failing degrades IT capacity even though all upstream
+  power is `2N_HEALTHY`. Why are those two different kinds of "degraded"?
 - In a real DC, what would cause one rack to fail while the rest of the hall
   is fine? (Hint: rack-level cooling, rack-level fire, rack-level breaker,
   rack-internal fault, mistaken human action.)
@@ -821,10 +757,9 @@ Expected:
 
 - [ ] Both sides lose normal and emergency source power.
 - [ ] Both UPS nodes eventually exhaust battery and report `FAULT`.
-- [ ] All 8 server racks (`server_rack_a{1..4}` + `_b{1..4}`) reach `FAULT`.
-- [ ] `bms/status` shows `mode:FAULT`, `power_state:DOWN`,
-      `side_a_health:DOWN`, `side_b_health:DOWN`, `rack_a_state:FAULT`,
-      `rack_b_state:FAULT`, `active_alarms:>=4`.
+- [ ] All 6 server racks (`server_rack_a{1..3}` + `_b{1..3}`) reach `FAULT`.
+- [ ] Both sides read down: `ups_a` and `ups_b` both `FAULT`, every chain
+      node on both sides faulted or unpowered.
 - [ ] Grafana clearly shows simultaneous Side A and Side B failure.
 
 Recovery:
@@ -970,8 +905,9 @@ Expected:
 - [ ] Once the generator is `RUNNING`, side-A racks recover via the ATS
       secondary path. If the generator is forced FAULT first, the cascade
       degenerates to Scenario 4.
-- [ ] `bms/status` shows `power_state:A_ONLY` initially (utility path lost),
-      then `2N_HEALTHY` once the generator picks up.
+- [ ] Redundancy is briefly lost on Side A (utility path gone, `ups_a` on
+      battery), then restored to full 2N once the generator picks up and
+      `ups_a` is producing voltage again.
 - [ ] Trainee distinguishes "utility lost" (utility OUTAGE) from "we cut the
       utility off" (MV switchgear TRIPPED) — both look similar downstream but
       the diagnosis and recovery differ.
@@ -1070,7 +1006,7 @@ mosquitto_pub -h 192.168.4.1 -t "winter-river/mv_lv_transformer_a/control" -m "L
 Expected:
 
 - [ ] `mv_lv_transformer_a` reports `WARNING` with elevated load and temp.
-- [ ] All 4 side-A racks remain `NORMAL` — `WARNING` doesn't trip the chain.
+- [ ] All 3 side-A racks remain `NORMAL` — `WARNING` doesn't trip the chain.
 - [ ] Push further to drive a real fault:
       `mosquitto_pub -t "winter-river/mv_lv_transformer_a/control" -m "STATUS:FAULT"`
       and observe the side-A cascade (matches Scenario 4 expectations).
@@ -1093,7 +1029,8 @@ Questions:
 
 Objective: show that not every fault is a power problem. Killing fans on a
 single side degrades cooling without affecting any rack's power feed —
-trainees learn to read `cooling_state` separately from `power_state` in BMS.
+trainees learn to read the cooling/thermal state separately from the power
+chain.
 
 Trigger (drop side-A fans to half capacity):
 
@@ -1105,11 +1042,11 @@ Expected:
 
 - [ ] `cooling_a` reports `fans_running:25` (down from 55).
 - [ ] `facility/status` recomputes — `fan_count` becomes 80 (25 + 55),
-      `q_cfm` drops, `hot_aisle_f` climbs.
-- [ ] `bms/status` shows `mode:DEGRADED`, `power_state:2N_HEALTHY`
-      (unchanged — this is a cooling alarm, not a power alarm),
-      `cooling_state:DEGRADED`.
-- [ ] All 8 racks remain `NORMAL` (power is fine; they may report higher
+      `q_cfm` drops, `hot_aisle_f` climbs, `mode` shifts toward
+      `OVERHEATING`/`UNDERPRESSURED`.
+- [ ] Power upstream is unchanged — both UPS nodes still `NORMAL` and
+      `2N_HEALTHY`; this is a cooling/thermal alarm, not a power alarm.
+- [ ] All 6 racks remain `NORMAL` (power is fine; they may report higher
       `inlet_f` via thermal broadcast).
 - [ ] Trainee can articulate that thermal alarms have different urgency
       curves than power alarms — heat takes minutes to become critical
@@ -1197,51 +1134,7 @@ Questions:
 - What should a technician check first when all nodes disappear at once?
 - How is WiFi loss different from power-chain failure?
 
-### Scenario 16 - BMS Aggregator Sanity
-
-Objective: confirm the broker-published `winter-river/bms/status` aggregate
-correctly reflects induced upstream state, and that trainees can read it as
-a single rollup rather than chasing 26 per-node OLEDs.
-
-Trigger (induce one degraded condition that affects multiple fields):
-
-```bash
-mosquitto_pub -h 192.168.4.1 -t "winter-river/ups_a/control" -m "INPUT:0 STATUS:ON_BATTERY"
-```
-
-Expected on `winter-river/bms/status`:
-
-- [ ] `mode` rises to `DEGRADED` or `ALARM` (depending on cascade depth).
-- [ ] `power_state` reflects per-side UPS health (`A_ONLY` if `ups_a` is
-      fully out, or `2N_HEALTHY` while it's still on battery).
-- [ ] `side_a_health` reports `DEGRADED` once an upstream non-normal state
-      appears, `DOWN` when the chain fully drops.
-- [ ] `rack_a_state` rolls up worst-of across the 4 a-racks
-      (`NORMAL → DEGRADED` while UPS is on battery → `FAULT` if it drains).
-- [ ] `active_alarms` count matches the number of non-normal nodes (excluding
-      generators in STANDBY).
-- [ ] The bms ESP32 board (if flashed) renders the same state on its OLED.
-- [ ] Operator can use BMS alone to triage without reading individual nodes.
-
-Recovery:
-
-```bash
-mosquitto_pub -h 192.168.4.1 -t "winter-river/ups_a/control" -m "INPUT:480 BATT:100 STATUS:NORMAL"
-```
-
-Note: `bms` is broker-driven. Manual publishes to `winter-river/bms/control`
-are no-ops — the broker recomputes `winter-river/bms/status` every tick from
-live node state and ignores incoming control commands on that topic.
-
-Questions:
-
-- What does the BMS aggregator tell you that the per-node OLEDs don't?
-- Why is `power_state` derived from per-side UPS health rather than from the
-  full upstream chain?
-- When the BMS shows `mode:ALARM` but `power_state:2N_HEALTHY`, what is the
-  fault category (hint: cooling / rack-level / facility, not power)?
-
-### Scenario 17 - Cascading Multi-Fault Incident
+### Scenario 16 - Cascading Multi-Fault Incident
 
 Objective: show that real incidents often involve stacked faults.
 
@@ -1275,7 +1168,7 @@ Questions:
 - What information belongs in an incident timeline?
 - Why can the first visible alarm be different from the root cause?
 
-### Scenario 18 - Full Recovery And Return To Service
+### Scenario 17 - Full Recovery And Return To Service
 
 Objective: confirm clean recovery and remove stale state.
 
@@ -1289,12 +1182,11 @@ Steps:
 - [ ] Restore ATS source to `UTILITY`.
 - [ ] Restore UPS input and battery level.
 - [ ] Restore cooling to nominal (`FANS_RUNNING:55 STATUS:NORMAL`) on both sides.
-- [ ] Restore all 8 server racks to `INPUT:480 STATUS:NORMAL`.
-- [ ] Confirm `bms/status` returns to `mode:NORMAL`,
-      `power_state:2N_HEALTHY`, `redundancy_lost:0`, `active_alarms:0`,
-      `rack_a_state:NORMAL`, `rack_b_state:NORMAL`.
-      The BMS is your single sign-off check — if it's NORMAL, the whole rig
-      is consistent.
+- [ ] Restore all 6 server racks to `INPUT:480 STATUS:NORMAL`.
+- [ ] Confirm `./scripts/status.sh` shows all 24 nodes online with no faults,
+      both UPS nodes `NORMAL` (full 2N), all 6 racks `NORMAL`, and
+      `facility/status` back to `mode:NORMAL`. This is your single sign-off
+      check — if it's clean, the whole rig is consistent.
 - [ ] Run `./scripts/status.sh`.
 - [ ] Check Grafana for stale alarms.
 
@@ -1320,18 +1212,16 @@ Use these for oral checks, worksheet prompts, and demo discussion.
 
 1. Trace power from `utility_a` down through `mv_switchgear_a` →
    `hv_mv_transformer_a` → `lv_switchgear_a` → `mv_lv_transformer_a` →
-   `ats_a` → `ups_a` → `server_rack_a{1..4}`. Where does cooling branch off?
+   `ats_a` → `ups_a` → `server_rack_a{1..3}`. Where does cooling branch off?
 2. What is the output voltage at each stage?
-3. Which nodes are duplicated on Side A and Side B (there should be 13 each)?
+3. Which nodes are duplicated on Side A and Side B (there should be 12 each)?
 4. Why are there **no** shared nodes in this topology? What changed between
    the old shared-rectifier design and the current block-redundant 2N?
 5. What is the rack input voltage and current type? Where does AC→DC
    conversion happen now that the rectifier was removed?
-6. Which nodes are source equipment, distribution equipment, IT loads, and
-   facility-aggregation (BMS)?
-7. What is the difference between `winter-river/facility/status` and
-   `winter-river/bms/status`? Which one would an electrical engineer read
-   first? Which would an operations manager read first?
+6. Which nodes are source equipment, distribution equipment, and IT loads?
+7. What does `winter-river/facility/status` report, and which role
+   (electrical engineer vs operations manager) would read it first?
 
 ### 4.2 Redundancy Concepts
 
@@ -1343,7 +1233,7 @@ Use these for oral checks, worksheet prompts, and demo discussion.
 4. Which failure removes redundancy but doesn't drop any rack? (Hint: think
    about utility loss with generator still healthy.)
 5. Which combination of failures drops half the racks but not the other half?
-6. Which combination drops all 8 racks at once? (Hint: with no shared node,
+6. Which combination drops all 6 racks at once? (Hint: with no shared node,
    this requires faults on both sides.)
 7. What is the difference between **power redundancy** (2N power feeds) and
    **workload redundancy** (multiple racks running mirrored workloads)? Which
@@ -1385,11 +1275,9 @@ Use these for oral checks, worksheet prompts, and demo discussion.
 8. What data is stored in InfluxDB?
 9. What can Grafana show that a single OLED cannot?
 10. What can an OLED show when Grafana is unavailable?
-11. The `bms` node's firmware just renders state — all aggregation logic
-    runs in the broker. Why is that the correct split? What would go wrong
-    if the BMS firmware tried to compute its own rollup from MQTT?
-12. If `bms` says `mode:NORMAL` but a single node's OLED shows `FAULT`,
-    which one is wrong, and how do you find out?
+11. Why does the simulation/aggregation logic run in the broker rather than
+    on the ESP32 nodes? What would go wrong if each node tried to compute a
+    facility-wide rollup from MQTT itself?
 
 ### 4.6 Technician Troubleshooting
 
@@ -1399,18 +1287,16 @@ Use these for oral checks, worksheet prompts, and demo discussion.
 4. A retained `OFFLINE` message will not clear. What do you check?
 5. A control command does nothing. What topic and payload do you verify?
 6. A generator never starts. Which upstream states and timers do you inspect?
-7. Only `server_rack_a1` is `FAULT`; `_a2`, `_a3`, `_a4` and all four
+7. Only `server_rack_a1` is `FAULT`; `_a2`, `_a3` and all three
    b-racks are `NORMAL`. What's the inspection order? (Hint: the side's
    UPS and chain are clearly fine — look at the rack-local CPU, inlet
    temp, or status_msg.)
-8. All 4 `server_rack_a*` are `FAULT` but all 4 `server_rack_b*` are
+8. All 3 `server_rack_a*` are `FAULT` but all 3 `server_rack_b*` are
    `NORMAL`. What's the inspection order? (Hint: side-A's `ups_a` /
    `ats_a` / generator / utility / MV switchgear are the failure domain.)
-9. All 8 racks are `FAULT`. What's the inspection order? (Hint: this
+9. All 6 racks are `FAULT`. What's the inspection order? (Hint: this
    requires faults on both sides — start with the broker and MQTT first
    to rule out a management-plane mirage, then sweep both sides upstream.)
-9. The `bms` shows `mode:ALARM` and `active_alarms:3` but every individual
-   node OLED shows `NORMAL`. What's happening, and what do you check first?
 10. What information belongs in an incident handoff?
 
 ### 4.7 Design Stretch
@@ -1433,18 +1319,18 @@ A full system run passes when all of these are true:
 - [ ] Simulation engine propagates a Side A failure without affecting Side B.
 - [ ] Generator startup delay and ATS transfer are visible.
 - [ ] UPS ride-through or battery state is visible.
-- [ ] All 4 `server_rack_b*` stay `NORMAL` during a Side A power failure;
-      all 4 `server_rack_a*` cascade to `FAULT` (block-redundant 2N
+- [ ] All 3 `server_rack_b*` stay `NORMAL` during a Side A power failure;
+      all 3 `server_rack_a*` cascade to `FAULT` (block-redundant 2N
       semantics — no rack-level dual feed).
 - [ ] A single-rack fault (`server_rack_a1` only) drops *that* rack to
-      `FAULT` while the other 7 stay `NORMAL` — proves workload-level
+      `FAULT` while the other 5 stay `NORMAL` — proves workload-level
       redundancy is independent of power-level redundancy.
-- [ ] All 8 racks fail or report no power during dual-side loss.
+- [ ] All 6 racks fail or report no power during dual-side loss.
 - [ ] MV switchgear `TRIPPED` on one side cascades the same way as utility
       OUTAGE on that side (after generator picks up, side recovers).
-- [ ] `bms/status` reflects every scenario within ~2 ticks: `mode`,
-      `power_state`, `redundancy_lost`, `rack_a_state`, `rack_b_state`,
-      `active_alarms` all match what individual node telemetry shows.
+- [ ] `./scripts/status.sh` and the individual node telemetry agree within
+      ~2 ticks of each induced scenario — per-side UPS health, rack states,
+      and fault counts all match the live node states.
 - [ ] Cooling failure is visible as a separate operational risk.
 - [ ] `winter-river/facility/status` mode transitions are observed at least
       once (e.g. `NORMAL` -> `OVERHEATING` or `UNDERPRESSURED` -> `FAULT`),

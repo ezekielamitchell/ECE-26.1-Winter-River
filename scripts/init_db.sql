@@ -1,12 +1,12 @@
 -- Winter River topology (Side A + Side B, fully independent block-redundant 2N)
--- Each side is a complete power chain feeding 4 server racks. Sides do not
--- share a rectifier or any other power node — side-A failure kills all 4 of
+-- Each side is a complete power chain feeding 3 server racks. Sides do not
+-- share a rectifier or any other power node — side-A failure kills all 3 of
 -- side-A's racks. Redundancy is at the side (block) level, not per-rack.
 --
 -- Chain per side (switchgear sits downstream of its transformer):
 --   utility → hv_mv_transformer → mv_switchgear (34.5 kV MV bus)
 --   → mv_lv_transformer → lv_switchgear (480 V LV bus);
---   generator ↗ ats (LV transfer switch) → ups → server_rack_{1..4};
+--   generator ↗ ats (LV transfer switch) → ups → server_rack_{1..3};
 --   ats ↘ cooling (mech load, parallel to ups)
 --
 -- Naming convention: switchgear is named by the bus voltage it sits on.
@@ -14,9 +14,8 @@
 -- lv_switchgear is on the 480 V LV bus (downstream of the MV/LV transformer).
 -- There is no switchgear on the 230 kV side in this topology.
 --
--- Total: 26 active broker/DB nodes = 13 per side × 2 sides.
--- `bms` is broker-published only (NOT seeded here); broker/main.py synthesizes
--- winter-river/bms/status from live node state every tick.
+-- Total: 24 active broker/DB nodes = 12 per side × 2 sides
+-- (fits the 24-slot baseplate exactly).
 --
 -- Run as: psql -U postgres -d winter_river -f scripts/init_db.sql
 
@@ -84,7 +83,7 @@ CREATE INDEX facility_metrics_ts_idx ON facility_metrics(timestamp DESC);
 -- ── SEED DATA: SIDE A ─────────────────────────────────────────────────────────
 -- IT path:   utility_a → hv_mv_transformer_a → mv_switchgear_a (34.5 kV MV bus)
 --            → mv_lv_transformer_a → lv_switchgear_a (480 V LV bus);
---            generator_a ↗ ats_a → ups_a → server_rack_a{1..4}
+--            generator_a ↗ ats_a → ups_a → server_rack_a{1..3}
 -- Mech path: ats_a → cooling_a (parallel to ups_a)
 
 INSERT INTO nodes (node_id, node_type, side, parent_id, secondary_parent_id, rated_voltage, v_ratio) VALUES
@@ -106,11 +105,10 @@ INSERT INTO nodes (node_id, node_type, side, parent_id, secondary_parent_id, rat
 ('ups_a',               'UPS',               'A', 'ats_a',                  NULL,             480.0, 1.0),
 -- ⑨ Cooling: 480 V mech load, branches off ats_a (parallel to ups_a)
 ('cooling_a',           'COOLING',           'A', 'ats_a',                  NULL,             480.0, 1.0),
--- ⑩-⑬ Four server racks, each single-fed from ups_a (480 V AC → 48 V DC inside)
+-- ⑩-⑫ Three server racks, each single-fed from ups_a (480 V AC → 48 V DC inside)
 ('server_rack_a1',      'SERVER_RACK',       'A', 'ups_a',                  NULL,              48.0, 0.1),
 ('server_rack_a2',      'SERVER_RACK',       'A', 'ups_a',                  NULL,              48.0, 0.1),
-('server_rack_a3',      'SERVER_RACK',       'A', 'ups_a',                  NULL,              48.0, 0.1),
-('server_rack_a4',      'SERVER_RACK',       'A', 'ups_a',                  NULL,              48.0, 0.1);
+('server_rack_a3',      'SERVER_RACK',       'A', 'ups_a',                  NULL,              48.0, 0.1);
 
 -- ── SEED DATA: SIDE B (mirror of Side A) ─────────────────────────────────────
 
@@ -126,8 +124,7 @@ INSERT INTO nodes (node_id, node_type, side, parent_id, secondary_parent_id, rat
 ('cooling_b',           'COOLING',           'B', 'ats_b',                  NULL,             480.0, 1.0),
 ('server_rack_b1',      'SERVER_RACK',       'B', 'ups_b',                  NULL,              48.0, 0.1),
 ('server_rack_b2',      'SERVER_RACK',       'B', 'ups_b',                  NULL,              48.0, 0.1),
-('server_rack_b3',      'SERVER_RACK',       'B', 'ups_b',                  NULL,              48.0, 0.1),
-('server_rack_b4',      'SERVER_RACK',       'B', 'ups_b',                  NULL,              48.0, 0.1);
+('server_rack_b3',      'SERVER_RACK',       'B', 'ups_b',                  NULL,              48.0, 0.1);
 
 -- ── INITIALISE live_status FOR ALL NODES ──────────────────────────────────────
 INSERT INTO live_status (node_id) SELECT node_id FROM nodes;

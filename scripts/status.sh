@@ -156,7 +156,6 @@ else
     node_status "server_rack_a1     " server_rack_a1
     node_status "server_rack_a2     " server_rack_a2
     node_status "server_rack_a3     " server_rack_a3
-    node_status "server_rack_a4     " server_rack_a4
 
     echo "  Side B:"
     node_status "utility_b          " utility_b
@@ -171,12 +170,10 @@ else
     node_status "server_rack_b1     " server_rack_b1
     node_status "server_rack_b2     " server_rack_b2
     node_status "server_rack_b3     " server_rack_b3
-    node_status "server_rack_b4     " server_rack_b4
 
     echo "  Broker-synthesized:"
     node_status "facility           " facility
     node_status "weather            " weather
-    node_status "bms                " bms
 fi
 echo ""
 

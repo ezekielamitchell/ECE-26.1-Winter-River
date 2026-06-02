@@ -350,68 +350,6 @@ class TestControlCmd:
         assert "TEMP:94.7" in out and "INPUT:480.0" in out
 
 
-# ── BMS aggregation helpers ───────────────────────────────────────────────────
-
-class TestPowerState:
-    """`_power_state` now reads UPS health on each side directly — no shared
-    rectifier convergence in the new topology."""
-
-    @pytest.mark.parametrize("a_v, a_present, b_v, b_present, expected", [
-        (480.0, True, 480.0, True,  "2N_HEALTHY"),
-        (480.0, True,   0.0, True,  "A_ONLY"),
-        (  0.0, True, 480.0, True,  "B_ONLY"),
-        (  0.0, True,   0.0, True,  "DOWN"),
-        (480.0, False,480.0, True,  "B_ONLY"),  # ups_a offline → A is down
-        (480.0, True, 480.0, False, "A_ONLY"),  # ups_b offline
-    ])
-    def test_power_state_truth_table(self, engine, a_v, a_present, b_v, b_present, expected):
-        nodes = {
-            "ups_a": _node("ups_a", "UPS", v_out=a_v, is_present=a_present),
-            "ups_b": _node("ups_b", "UPS", v_out=b_v, is_present=b_present),
-        }
-        assert engine._power_state(nodes) == expected
-
-    def test_power_state_down_when_no_ups(self, engine):
-        assert engine._power_state({}) == "DOWN"
-
-
-class TestAggregateRackState:
-    """`_aggregate_rack_state` rolls up 4 racks per side into worst-of state."""
-
-    def _racks(self, side, states):
-        return {
-            f"server_rack_{side.lower()}{i+1}": _node(
-                f"server_rack_{side.lower()}{i+1}", "SERVER_RACK",
-                side=side, status_msg=state,
-            )
-            for i, state in enumerate(states)
-        }
-
-    def test_all_normal(self, engine):
-        nodes = self._racks("A", ["NORMAL", "NORMAL", "NORMAL", "NORMAL"])
-        assert engine._aggregate_rack_state(nodes, "A") == "NORMAL"
-
-    def test_one_degraded(self, engine):
-        nodes = self._racks("A", ["NORMAL", "DEGRADED", "NORMAL", "NORMAL"])
-        assert engine._aggregate_rack_state(nodes, "A") == "DEGRADED"
-
-    def test_one_fault_dominates_degraded(self, engine):
-        nodes = self._racks("A", ["NORMAL", "DEGRADED", "FAULT", "NORMAL"])
-        assert engine._aggregate_rack_state(nodes, "A") == "FAULT"
-
-    def test_no_racks_for_side_returns_offline(self, engine):
-        nodes = self._racks("B", ["NORMAL", "NORMAL", "NORMAL", "NORMAL"])
-        assert engine._aggregate_rack_state(nodes, "A") == "OFFLINE"
-
-    def test_side_filter_isolates_a_from_b(self, engine):
-        nodes = {
-            **self._racks("A", ["NORMAL", "NORMAL", "NORMAL", "NORMAL"]),
-            **self._racks("B", ["FAULT",  "FAULT",  "FAULT",  "FAULT" ]),
-        }
-        assert engine._aggregate_rack_state(nodes, "A") == "NORMAL"
-        assert engine._aggregate_rack_state(nodes, "B") == "FAULT"
-
-
 # ── on_message — MQTT ingestion ───────────────────────────────────────────────
 
 class _FakeCursor:
