@@ -42,10 +42,11 @@ static void renderDisplay() {
 void setup() { wr::begin(NODE_ID, onMqtt); }
 
 void loop() {
-  if (!wr::mqttReconnect(NODE_ID)) { delay(2000); return; }
+  if (!wr::mqttReconnect(NODE_ID)) { delay(1000); return; }
+  wr::mqtt.loop();  // pump every iteration: drain queued control + service keepalive
+  if (!wr::dueForTelemetry()) { delay(10); return; }
   wr::message_count++;
   renderDisplay();
-  wr::mqtt.loop();
 
   String payload = String("{\"ts\":\"") + wr::timestamp() +
                    "\",\"battery_pct\":" + String(battery_pct) +
@@ -57,5 +58,4 @@ void loop() {
                    "}";
   wr::mqtt.publish(wr::statusTopic(NODE_ID).c_str(), payload.c_str(), true);
   Serial.println(payload);
-  delay(wr::TELEMETRY_INTERVAL_MS);
 }

@@ -509,10 +509,15 @@ class WinterRiverEngine:
             self._latest_thermal = self._compute_tick_thermal(nodes)
 
             # Pass 2: publish control commands.
+            # QoS 0: control is idempotent and re-sent every tick (≤1 s), so an
+            # occasional drop self-heals on the next tick. QoS 1 here meant
+            # 24 nodes × 1 Hz of inflight PUBACK traffic; a node servicing MQTT
+            # slowly couldn't keep up, the backlog wedged its socket, and
+            # Mosquitto dropped it ("MQTT FAILED"). QoS 0 removes that pressure.
             for nid in order:
                 node = nodes[nid]
                 cmd  = self._control_cmd(node, node["v_out"], node["status_msg"])
-                self.mqtt_client.publish(f"winter-river/{nid}/control", cmd, qos=1)
+                self.mqtt_client.publish(f"winter-river/{nid}/control", cmd, qos=0)
                 log.debug("→ %s/control: %s", nid, cmd)
 
             # Publish derived facility + weather state for Telegraf / Grafana.
