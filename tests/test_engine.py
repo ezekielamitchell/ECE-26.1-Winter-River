@@ -254,12 +254,20 @@ class TestComputeNode:
         v, s = engine._compute_node(rack, {"ups_a": ups, "server_rack_a1": rack})
         assert (v, s) == (48.0, "NORMAL")
 
-    @pytest.mark.parametrize("ups_status", ["ON_BATTERY", "CHARGING"])
-    def test_server_rack_degraded_when_ups_on_battery(self, engine, ups_status):
-        ups = _node("ups_a", "UPS", v_out=480.0, status_msg=ups_status)
+    def test_server_rack_degraded_when_ups_on_battery(self, engine):
+        ups = _node("ups_a", "UPS", v_out=480.0, status_msg="ON_BATTERY")
         rack = _node("server_rack_a1", "SERVER_RACK", side="A", parent_id="ups_a")
         v, s = engine._compute_node(rack, {"ups_a": ups, "server_rack_a1": rack})
         assert (v, s) == (48.0, "DEGRADED")
+
+    def test_server_rack_normal_when_ups_charging(self, engine):
+        """Once the side is back on generator/utility power the UPS reads CHARGING;
+        racks are fed clean power again and recover to NORMAL while the battery
+        recharges in the background (the recharge does not degrade the IT load)."""
+        ups = _node("ups_a", "UPS", v_out=480.0, status_msg="CHARGING")
+        rack = _node("server_rack_a1", "SERVER_RACK", side="A", parent_id="ups_a")
+        v, s = engine._compute_node(rack, {"ups_a": ups, "server_rack_a1": rack})
+        assert (v, s) == (48.0, "NORMAL")
 
     def test_server_rack_fault_without_ups_feed(self, engine):
         ups = _node("ups_a", "UPS", v_out=0.0, status_msg="FAULT")
@@ -297,6 +305,14 @@ class TestControlCmd:
         n = _node("u", "UPS", battery_level=72)
         out = engine._control_cmd(n, 480.0, "CHARGING")
         assert "BATT:72" in out and "STATUS:CHARGING" in out
+        assert "INPUT:480.0" in out   # fed (CHARGING) → input live
+
+    def test_ups_input_zero_on_battery(self, engine):
+        """Islanding on battery: the firmware-facing INPUT token must read 0 even
+        though the UPS still outputs 480 V to the racks downstream."""
+        n = _node("u", "UPS", battery_level=50)
+        out = engine._control_cmd(n, 480.0, "ON_BATTERY")
+        assert "INPUT:0.0" in out and "STATUS:ON_BATTERY" in out
 
     def test_cooling_carries_thermal_when_available(self, engine):
         engine._latest_thermal = {

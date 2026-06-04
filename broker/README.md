@@ -39,7 +39,7 @@ WinterRiverEngine (broker/main.py)
 | `ATS` | `ats_a`, `ats_b` | LV transfer switch. Prefers transformer (utility) path; falls back to generator; `OPEN` if both down. Output feeds UPS and cooling in parallel. |
 | `UPS` | `ups_a`, `ups_b` | Parent = ats; passes voltage with battery tracking; feeds the side's 3 server_racks |
 | `COOLING` | `cooling_a/b` | Parent = ats (mech branch). Fan bank (55 fans/side, 110 total) — drives broker thermal model |
-| `SERVER_RACK` | `server_rack_a1..a3`, `server_rack_b1..b3` | Single-fed from this side's UPS; `NORMAL` when UPS is on grid, `DEGRADED` when UPS is on battery/charging, `FAULT` when UPS is down. Side-A failure kills all 3 side-A racks. |
+| `SERVER_RACK` | `server_rack_a1..a3`, `server_rack_b1..b3` | Single-fed from this side's UPS; `NORMAL` when UPS is on grid or recharging (`CHARGING`), `DEGRADED` only while UPS is `ON_BATTERY`, `FAULT` when UPS is down. Side-A failure kills all 3 side-A racks. |
 
 ---
 

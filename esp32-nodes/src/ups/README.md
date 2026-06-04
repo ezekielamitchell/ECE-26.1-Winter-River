@@ -68,6 +68,13 @@ Topic: `winter-river/<node_id>/control`
 | `input_v >= 440` and `battery_pct < 100` | `CHARGING`      |
 | `input_v >= 440` and `battery_pct == 100`| `NORMAL`        |
 
+> These auto-thresholds are a **standalone fallback**. When `broker/main.py` is
+> driving the sim it sends an explicit `STATUS:` every tick and that takes
+> precedence — the firmware applies the table above only when a control message
+> carried no `STATUS:` token (the `status_set` gate). This stops the broker's
+> `CHARGING` from being re-pinned to `ON_BATTERY` while the battery is still
+> below 25 %.
+
 ---
 
 ## Build & Flash

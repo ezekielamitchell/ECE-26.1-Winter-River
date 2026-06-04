@@ -1,12 +1,12 @@
-// server_rack.cpp — 48 V DC IT rack. One source file shared by all 8 racks
-// (server_rack_a1..a4, server_rack_b1..b4). NODE_ID and OLED label are
+// server_rack.cpp — 48 V DC IT rack. One source file shared by all 6 racks
+// (server_rack_a1..a3, server_rack_b1..b3). NODE_ID and OLED label are
 // injected via PlatformIO build_flags:
 //   '-DWR_NODE_ID="server_rack_a1"' '-DWR_RACK_LABEL="rack_a1"'
 //
 // Each rack is single-fed from its side's UPS (ups_a or ups_b). There is
 // no rectifier convergence and no PATH_A/PATH_B redundancy at the rack
 // level — redundancy lives at the side (block) level. Side-A failure kills
-// all 4 of side-A's racks; side-B continues independently.
+// all 3 of side-A's racks; side-B continues independently.
 // States: NORMAL, DEGRADED, FAULT.
 #include <winter_river.h>
 

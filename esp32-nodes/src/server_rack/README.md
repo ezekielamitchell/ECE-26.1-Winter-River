@@ -44,10 +44,10 @@ There is no `path_a` / `path_b` field — the shared rectifier (and its dual fee
 | State      | Meaning                                                              |
 |------------|----------------------------------------------------------------------|
 | `NORMAL`   | UPS on grid, inlet temp and CPU within limits                       |
-| `DEGRADED` | UPS on battery/charging, OR inlet > 85 °F, OR CPU > 80 %            |
+| `DEGRADED` | UPS `ON_BATTERY`, OR inlet > 85 °F, OR CPU > 80 %                   |
 | `FAULT`    | UPS dead, OR inlet > 95 °F, OR CPU > 95 %                           |
 
-`DEGRADED` from UPS status is set by `broker/main.py` (the rack inherits it from its parent UPS). Thermal / CPU thresholds are evaluated locally in the firmware.
+The UPS-driven state is set by `broker/main.py`: the rack is `DEGRADED` only while its parent UPS is `ON_BATTERY`, and `FAULT` when the UPS is dead — it returns to `NORMAL` once the side is back on utility/generator power, even while the UPS is still `CHARGING` its battery. Thermal / CPU thresholds are evaluated locally in the firmware.
 
 ---
 

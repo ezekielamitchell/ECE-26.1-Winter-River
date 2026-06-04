@@ -383,12 +383,15 @@ class WinterRiverEngine:
 
         # ── SERVER_RACK ───────────────────────────────────────────────────────
         # Single-fed from this side's UPS (480 V AC → 48 V DC inside the rack).
-        # No rack-level 2N — side-level (block) redundancy only. If parent UPS
-        # is on battery (DEGRADED operational state) the rack reports DEGRADED.
+        # No rack-level 2N — side-level (block) redundancy only. The rack reports
+        # DEGRADED only while its UPS is actually islanding on battery (ON_BATTERY).
+        # Once the side is back on utility/generator power the UPS reads CHARGING and
+        # the racks are fed clean power again, so they return to NORMAL — the battery
+        # recharging in the background does not degrade the IT load.
         elif ntype == "SERVER_RACK":
             if parent_v > 0:
                 ups_status = parent["status_msg"] if parent else "NORMAL"
-                if ups_status in ("ON_BATTERY", "CHARGING"):
+                if ups_status == "ON_BATTERY":
                     return 48.0, "DEGRADED"
                 return 48.0, "NORMAL"
             return 0.0, "FAULT"
@@ -425,9 +428,13 @@ class WinterRiverEngine:
             return f"SOURCE:{status} STATUS:{status}"
 
         elif ntype == "UPS":
-            return (
-                f"INPUT:{v_out:.1f} BATT:{node['battery_level']} STATUS:{status}"
-            )
+            # Send the UPS *input* voltage (what the ATS delivers), not its output.
+            # While islanding on battery (ON_BATTERY / FAULT) the input is dead, so
+            # the node's OLED correctly shows Vin:0 during an outage. v_out remains the
+            # UPS output used for downstream propagation above; only this firmware-facing
+            # INPUT token is derived from the computed status.
+            ups_input = 480.0 if status in ("NORMAL", "CHARGING") else 0.0
+            return f"INPUT:{ups_input:.1f} BATT:{node['battery_level']} STATUS:{status}"
 
         elif ntype == "COOLING":
             t = self._latest_thermal
@@ -516,6 +523,14 @@ class WinterRiverEngine:
             # Mosquitto dropped it ("MQTT FAILED"). QoS 0 removes that pressure.
             for nid in order:
                 node = nodes[nid]
+                # Utility is an exogenous input (firmware/manual-owned), not a broker
+                # output. Echoing a command back at it would overwrite a manually
+                # injected STATUS:OUTAGE with the last telemetry-reported state on the
+                # next 1 Hz tick — so the outage never sticks or cascades. The broker
+                # still reads utility state from telemetry in on_message and propagates
+                # it downstream; recovery is a manual STATUS:GRID_OK on utility/control.
+                if node["node_type"] == "UTILITY":
+                    continue
                 cmd  = self._control_cmd(node, node["v_out"], node["status_msg"])
                 self.mqtt_client.publish(f"winter-river/{nid}/control", cmd, qos=0)
                 log.debug("→ %s/control: %s", nid, cmd)
