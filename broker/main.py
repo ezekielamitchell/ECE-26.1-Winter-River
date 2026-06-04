@@ -24,7 +24,7 @@ import psycopg2
 import toml
 from psycopg2.extras import RealDictCursor
 
-from thermal import ThermalConfig, compute_thermal, resolve_weather
+from thermal import WEATHER_PRESETS, ThermalConfig, compute_thermal, resolve_weather
 
 try:
     from influxdb_client import InfluxDBClient, Point
@@ -45,6 +45,13 @@ TICK_RATE   = _cfg.get("simulation", {}).get("tick_rate", 1.0)
 
 # Generator startup delay in simulation ticks (1 tick = 1 s at default tick rate)
 GEN_STARTUP_TICKS = 10
+
+# Weather starts deterministically at this preset on every broker boot. Runtime
+# changes arrive over MQTT (winter-river/weather/control) and are never persisted
+# — a restart always returns here regardless of the last command. The TOML
+# [weather] block is no longer read at startup; thermal sizing stays in [thermal].
+# See _handle_weather_control.
+DEFAULT_WEATHER_PRESET = 1
 
 # Mark a node OFFLINE if no telemetry arrives in this window. Covers silent
 # ESP32 hangs that don't fire the MQTT LWT — telemetry interval is 5 s, so
@@ -89,7 +96,10 @@ class WinterRiverEngine:
             log.warning("MQTT setup failed (%s) — will retry in background", exc)
 
         self._thermal_cfg = ThermalConfig.from_mapping(_cfg.get("thermal"))
-        self._weather     = resolve_weather(_cfg.get("weather", {}))
+        # Always boot at the default preset (not config-driven) so every broker
+        # start is deterministic; operators change weather at runtime via MQTT
+        # (winter-river/weather/control → _handle_weather_control).
+        self._weather     = resolve_weather({"preset": DEFAULT_WEATHER_PRESET})
         self._latest_thermal = None
         self._facility_metrics_disabled = False
 
@@ -139,6 +149,8 @@ class WinterRiverEngine:
         if rc == 0:
             log.info("MQTT connected to %s:%d", MQTT_BROKER, MQTT_PORT)
             client.subscribe("winter-river/+/status", qos=1)
+            # Operator weather control (thermal-only; weather is not a DB node).
+            client.subscribe("winter-river/weather/control", qos=1)
         else:
             log.warning("MQTT connect failed (rc=%d) — will retry", rc)
 
@@ -162,6 +174,12 @@ class WinterRiverEngine:
 
     def on_message(self, client, userdata, msg):
         """Update live_status and historical_data from ESP32 MQTT telemetry."""
+        # Operator weather control is thermal-only and `weather` is not a DB node,
+        # so route it before any DB / node_id validation (also works in no-DB mode).
+        if msg.topic == "winter-river/weather/control":
+            self._handle_weather_control(msg)
+            return
+
         # No DB → no node_id validation possible → drop the message.
         if self.db is None:
             return
@@ -229,6 +247,91 @@ class WinterRiverEngine:
                 self.db.rollback()
             except Exception:
                 pass
+
+    def _handle_weather_control(self, msg):
+        """Apply an operator weather command from winter-river/weather/control.
+
+        Space-delimited tokens are processed in order (compound commands):
+          PRESET:<1-6>    select a preset, clearing any custom overrides
+          RESET           return to the default preset (startup state)
+          OUTDOOR_F:<f>   override outdoor dry-bulb temperature (°F)
+          RH_PCT:<f>      override relative humidity (clamped 0..100)
+
+        Semantics:
+          * Retained messages are ignored so every broker restart truly begins at
+            the default preset — runtime commands must be published non-retained.
+          * Parsing is atomic: any invalid token logs a warning and leaves the
+            current weather (and weather/status) unchanged — nothing is published.
+          * A fresh dict is assigned to self._weather (never mutated in place) so
+            the simulation-tick thread always reads a complete weather object.
+          * On success the new weather/status is republished immediately; the next
+            tick recomputes thermal/facility values from it.
+        """
+        # Startup must always begin at the default preset, so a retained command
+        # left on the topic must not re-apply on the next broker boot.
+        if getattr(msg, "retain", False):
+            log.warning("Ignoring retained weather/control message "
+                        "(runtime commands must be non-retained)")
+            return
+
+        try:
+            text = msg.payload.decode("utf-8").strip()
+        except (UnicodeDecodeError, AttributeError):
+            log.warning("Ignoring weather/control message with undecodable payload")
+            return
+
+        if not text:
+            return
+
+        # Build into a local dict; only commit to self._weather if every token
+        # parses, so a bad token in a compound command changes nothing.
+        w = dict(self._weather)
+        custom = bool(w.get("custom", False))
+
+        for token in text.split():
+            if token.upper() == "RESET":
+                w = resolve_weather({"preset": DEFAULT_WEATHER_PRESET})
+                custom = False
+                continue
+
+            if ":" not in token:
+                log.warning("Ignoring malformed weather token %r", token)
+                return
+
+            key, _, value = token.partition(":")
+            key = key.upper()
+            try:
+                if key == "PRESET":
+                    preset = int(value)
+                    if preset not in WEATHER_PRESETS:
+                        raise ValueError(f"unknown preset {preset}")
+                    w = resolve_weather({"preset": preset})
+                    custom = False
+                elif key == "OUTDOOR_F":
+                    w["outdoor_f"] = float(value)
+                    custom = True
+                elif key == "RH_PCT":
+                    w["rh_pct"] = max(0.0, min(float(value), 100.0))
+                    custom = True
+                else:
+                    log.warning("Ignoring unknown weather token %r", token)
+                    return
+            except ValueError as exc:
+                log.warning("Ignoring invalid weather token %r (%s)", token, exc)
+                return
+
+        if custom:
+            w["custom"] = True
+        else:
+            w.pop("custom", None)
+
+        self._weather = w
+        log.info(
+            "Weather set via MQTT: %s (%.1f F / %.0f%% RH)%s",
+            w.get("name"), w["outdoor_f"], w["rh_pct"],
+            " [custom]" if custom else "",
+        )
+        self._publish_weather_status()
 
     # ── Topological sort ──────────────────────────────────────────────────────
 
@@ -644,6 +747,9 @@ class WinterRiverEngine:
             "outdoor_f": w["outdoor_f"],
             "rh_pct":    w["rh_pct"],
         }
+        # Only present after OUTDOOR_F / RH_PCT overrode a selected preset.
+        if w.get("custom"):
+            payload["custom"] = True
         self.mqtt_client.publish(
             "winter-river/weather/status",
             json.dumps(payload), qos=1, retain=True,

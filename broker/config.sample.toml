@@ -24,16 +24,22 @@ token  = "my-super-secret-auth-token"   # change for production
 org    = "iot-project"
 bucket = "mqtt_metrics"
 
-# ── Thermal / airflow model ──────────────────────────────────────────────────
-# Outdoor weather feeding the thermal model.
-# preset: 1=Virginia Summer, 2=Eastern Oregon Winter, 3=Ohio Spring,
-#         4=Arizona Summer, 5=Stockholm Winter, 6=Singapore Monsoon
-# Set outdoor_f / rh_pct to override the preset's defaults at any time.
-[weather]
-preset = 1
-# outdoor_f = 95.0
-# rh_pct    = 50.0
+# ── Weather (thermal model input) ────────────────────────────────────────────
+# Weather is NOT read from config. The broker always boots at preset 1
+# (Virginia Summer) for deterministic startup, then accepts runtime changes over
+# MQTT on winter-river/weather/control:
+#
+#   mosquitto_pub -h 192.168.4.1 -t "winter-river/weather/control" -m "PRESET:4"
+#   mosquitto_pub -h 192.168.4.1 -t "winter-river/weather/control" -m "PRESET:6 RH_PCT:75"
+#   mosquitto_pub -h 192.168.4.1 -t "winter-river/weather/control" -m "RESET"
+#
+# Tokens (space-delimited, applied in order): PRESET:<1-6>, RESET,
+#   OUTDOOR_F:<f>, RH_PCT:<f>. Presets: 1=Virginia Summer, 2=Eastern Oregon
+#   Winter, 3=Ohio Spring, 4=Arizona Summer, 5=Stockholm Winter,
+#   6=Singapore Monsoon. Runtime weather is never persisted — a broker restart
+#   always returns to preset 1. (There is intentionally no [weather] table.)
 
+# ── Thermal / airflow model ──────────────────────────────────────────────────
 # Thermal model parameters. Defaults match the Capstone reference (8.8 MW
 # fan capacity, 8000 servers/module → 200 racks/module). See broker/thermal.py
 # for the full ThermalConfig schema.

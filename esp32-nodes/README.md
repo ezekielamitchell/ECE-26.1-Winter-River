@@ -65,6 +65,20 @@ All `_a` suffixes replaced with `_b`. Component type directories are identical.
 
 `facility/status` and `weather/status` are published by `broker/main.py` from live state every tick — they have no ESP32 firmware and no DB row.
 
+`weather/control` is an operator input handled by the broker (not a node): publish
+to it to change the thermal model's outdoor conditions at runtime. The broker boots
+at preset 1 (Virginia Summer) and republishes `weather/status` on each command.
+
+```bash
+mosquitto_pub -h 192.168.4.1 -t "winter-river/weather/control" -m "PRESET:4"      # Arizona Summer
+mosquitto_pub -h 192.168.4.1 -t "winter-river/weather/control" -m "PRESET:6 RH_PCT:75"
+mosquitto_pub -h 192.168.4.1 -t "winter-river/weather/control" -m "RESET"         # back to preset 1
+```
+
+Tokens: `PRESET:<1-6>`, `RESET`, `OUTDOOR_F:<f>`, `RH_PCT:<f>`. Commands must be
+non-retained; runtime weather is not persisted across broker restarts. See
+[`broker/README.md`](../broker/README.md#weather-control) for the full reference.
+
 ---
 
 ## Power Chain (per side)

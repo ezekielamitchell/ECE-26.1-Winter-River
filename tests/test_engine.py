@@ -14,7 +14,7 @@ import pytest
 
 import main as broker_main
 from main import GEN_STARTUP_TICKS, WinterRiverEngine
-from thermal import ThermalConfig
+from thermal import ThermalConfig, resolve_weather
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -509,6 +509,166 @@ class TestOnMessage:
             None, None, _make_msg("winter-river/utility_a/status", '{"status":"ONLINE"}')
         )
         ingest_engine.db.rollback.assert_called_once()
+
+
+# ── weather MQTT control ──────────────────────────────────────────────────────
+
+def _weather_msg(payload, retain=False):
+    """Build a winter-river/weather/control message. `retain` is set explicitly
+    because a bare MagicMock attribute is truthy — which would make every message
+    look retained to _handle_weather_control."""
+    msg = MagicMock()
+    msg.topic = "winter-river/weather/control"
+    msg.payload = payload if isinstance(payload, (bytes, bytearray)) \
+        else payload.encode()
+    msg.retain = retain
+    return msg
+
+
+@pytest.fixture
+def weather_engine():
+    """Engine with only the attrs the weather-control path touches. The DB cursor
+    is wired up so tests can assert weather control performs NO database I/O."""
+    eng = WinterRiverEngine.__new__(WinterRiverEngine)
+    eng._thermal_cfg = ThermalConfig()
+    eng._weather = resolve_weather({"preset": 1})
+    eng.mqtt_client = MagicMock()
+    eng._known_nodes = {"utility_a", "cooling_a"}
+    eng._exec_log = []
+    eng.db = MagicMock()
+    eng.db.cursor = lambda: _FakeCursor(eng._exec_log, eng._known_nodes)
+    return eng
+
+
+@pytest.fixture
+def constructed_engine(monkeypatch):
+    """Run the real __init__ with MQTT / Postgres / InfluxDB stubbed out, so we
+    can assert on actual startup wiring (default weather + subscriptions)."""
+    fake_client = MagicMock()
+    monkeypatch.setattr(broker_main.mqtt, "Client", lambda *a, **k: fake_client)
+    monkeypatch.setattr(
+        broker_main.psycopg2, "connect",
+        MagicMock(side_effect=broker_main.psycopg2.OperationalError("no db")),
+    )
+    monkeypatch.setattr(broker_main, "HAS_INFLUX", False)
+    return WinterRiverEngine()
+
+
+class TestWeatherStartup:
+    def test_default_weather_is_preset_1(self, constructed_engine):
+        w = constructed_engine._weather
+        assert w["preset"] == 1
+        assert w["name"] == "Virginia Summer"
+        assert "custom" not in w
+
+    def test_on_connect_subscribes_status_and_weather_control(self, constructed_engine):
+        client = MagicMock()
+        constructed_engine._on_mqtt_connect(client, None, None, 0)
+        subscribed = [c.args[0] for c in client.subscribe.call_args_list]
+        assert "winter-river/+/status" in subscribed
+        assert "winter-river/weather/control" in subscribed
+
+    def test_on_connect_failure_subscribes_nothing(self, constructed_engine):
+        client = MagicMock()
+        constructed_engine._on_mqtt_connect(client, None, None, 5)  # rc != 0
+        client.subscribe.assert_not_called()
+
+
+class TestWeatherControl:
+    def test_preset_4_updates_weather_and_publishes_retained(self, weather_engine):
+        weather_engine.on_message(None, None, _weather_msg("PRESET:4"))
+        w = weather_engine._weather
+        assert w["preset"] == 4
+        assert w["name"] == "Arizona Summer"
+        assert w["outdoor_f"] == pytest.approx(109.4)
+        assert "custom" not in w
+
+        pub = weather_engine.mqtt_client.publish
+        pub.assert_called_once()
+        assert pub.call_args.args[0] == "winter-river/weather/status"
+        assert pub.call_args.kwargs.get("retain") is True
+        assert pub.call_args.kwargs.get("qos") == 1
+        body = json.loads(pub.call_args.args[1])
+        assert body["preset"] == 4 and body["name"] == "Arizona Summer"
+        assert "custom" not in body
+
+    def test_reset_returns_to_default_preset(self, weather_engine):
+        weather_engine._weather = resolve_weather({"preset": 4})
+        weather_engine.on_message(None, None, _weather_msg("RESET"))
+        w = weather_engine._weather
+        assert w["preset"] == 1 and w["name"] == "Virginia Summer"
+        assert "custom" not in w
+
+    def test_compound_preset_then_override_marks_custom(self, weather_engine):
+        weather_engine.on_message(None, None, _weather_msg("PRESET:6 RH_PCT:75"))
+        w = weather_engine._weather
+        assert w["preset"] == 6 and w["name"] == "Singapore Monsoon"
+        assert w["rh_pct"] == 75.0
+        assert w["outdoor_f"] == pytest.approx(91.4)  # preset's outdoor retained
+        assert w["custom"] is True
+        body = json.loads(weather_engine.mqtt_client.publish.call_args.args[1])
+        assert body["custom"] is True and body["rh_pct"] == 75.0
+
+    def test_outdoor_f_override_marks_custom(self, weather_engine):
+        weather_engine.on_message(None, None, _weather_msg("OUTDOOR_F:72.5"))
+        w = weather_engine._weather
+        assert w["outdoor_f"] == 72.5 and w["custom"] is True
+        assert w["preset"] == 1  # preset itself unchanged
+
+    def test_rh_pct_override_is_clamped(self, weather_engine):
+        weather_engine.on_message(None, None, _weather_msg("RH_PCT:150"))
+        assert weather_engine._weather["rh_pct"] == 100.0
+        weather_engine.on_message(None, None, _weather_msg("RH_PCT:-20"))
+        assert weather_engine._weather["rh_pct"] == 0.0
+
+    def test_preset_clears_prior_custom_override(self, weather_engine):
+        weather_engine.on_message(None, None, _weather_msg("OUTDOOR_F:50"))
+        assert weather_engine._weather["custom"] is True
+        weather_engine.on_message(None, None, _weather_msg("PRESET:5"))
+        w = weather_engine._weather
+        assert w["preset"] == 5 and "custom" not in w
+        assert w["outdoor_f"] == pytest.approx(33.8)  # Stockholm; override gone
+
+    @pytest.mark.parametrize("cmd", [
+        "PRESET:9", "PRESET:0", "PRESET:abc", "OUTDOOR_F:hot",
+        "RH_PCT:wet", "GARBAGE", "FOO:1", "PRESET:4 OUTDOOR_F:nope",
+    ])
+    def test_invalid_command_leaves_weather_unchanged(self, weather_engine, cmd):
+        before = dict(weather_engine._weather)
+        weather_engine.on_message(None, None, _weather_msg(cmd))
+        assert weather_engine._weather == before
+        weather_engine.mqtt_client.publish.assert_not_called()
+
+    def test_bad_utf8_payload_leaves_weather_unchanged(self, weather_engine):
+        before = dict(weather_engine._weather)
+        weather_engine.on_message(None, None, _weather_msg(b"\xff\xfe PRESET:4"))
+        assert weather_engine._weather == before
+        weather_engine.mqtt_client.publish.assert_not_called()
+
+    def test_empty_payload_is_noop(self, weather_engine):
+        before = dict(weather_engine._weather)
+        weather_engine.on_message(None, None, _weather_msg("   "))
+        assert weather_engine._weather == before
+        weather_engine.mqtt_client.publish.assert_not_called()
+
+    def test_retained_weather_control_is_ignored(self, weather_engine):
+        before = dict(weather_engine._weather)
+        weather_engine.on_message(None, None, _weather_msg("PRESET:4", retain=True))
+        assert weather_engine._weather == before
+        weather_engine.mqtt_client.publish.assert_not_called()
+
+    def test_weather_control_bypasses_db_and_writes_nothing(self, weather_engine):
+        weather_engine.on_message(None, None, _weather_msg("PRESET:3"))
+        assert weather_engine._weather["preset"] == 3
+        # Routed before any node validation — no live_status / historical_data I/O.
+        assert weather_engine._exec_log == []
+        weather_engine.db.commit.assert_not_called()
+
+    def test_weather_control_works_without_db(self, weather_engine):
+        weather_engine.db = None
+        weather_engine.on_message(None, None, _weather_msg("PRESET:2"))
+        assert weather_engine._weather["preset"] == 2
+        assert weather_engine._weather["name"] == "Eastern Oregon Winter"
 
 
 # ── module-level smoke ────────────────────────────────────────────────────────

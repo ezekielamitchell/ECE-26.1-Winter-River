@@ -190,9 +190,42 @@ live_status (
 | Direction | Topic pattern | Content |
 |-----------|---------------|---------|
 | Inbound | `winter-river/<node_id>/status` | JSON telemetry (retained, every 5s) |
+| Inbound | `winter-river/weather/control` | Operator weather commands (non-retained), e.g. `PRESET:4` |
 | Outbound | `winter-river/<node_id>/control` | Space-delimited commands, e.g. `INPUT:480.0 STATUS:NORMAL` |
+| Outbound | `winter-river/facility/status` | Computed thermal/PUE state (retained, every tick) |
+| Outbound | `winter-river/weather/status` | Active outdoor conditions feeding the thermal model (retained, every tick) |
 
 Full command reference: see each component's README in `esp32-nodes/src/<type>/README.md`.
+
+### Weather control
+
+The thermal model's outdoor weather can be changed at runtime over MQTT. The
+broker **always boots at preset 1 (Virginia Summer)** for deterministic startup;
+weather is no longer read from `config.toml`. Publish to `winter-river/weather/control`
+to change it — the broker republishes `weather/status` immediately and the next
+tick recomputes facility temps from the new weather.
+
+| Token | Effect |
+|-------|--------|
+| `PRESET:<1-6>` | Select a preset, clearing any custom overrides |
+| `RESET` | Return to preset 1 (the startup default) |
+| `OUTDOOR_F:<f>` | Override outdoor dry-bulb temperature (°F) |
+| `RH_PCT:<f>` | Override relative humidity (clamped 0–100) |
+
+Presets: `1` Virginia Summer · `2` Eastern Oregon Winter · `3` Ohio Spring ·
+`4` Arizona Summer · `5` Stockholm Winter · `6` Singapore Monsoon.
+
+```bash
+mosquitto_pub -h 192.168.4.1 -t "winter-river/weather/control" -m "PRESET:4"
+mosquitto_pub -h 192.168.4.1 -t "winter-river/weather/control" -m "PRESET:6 RH_PCT:75"
+mosquitto_pub -h 192.168.4.1 -t "winter-river/weather/control" -m "RESET"
+```
+
+Tokens are space-delimited and applied in order, so a compound command selects a
+preset then overrides one field (the `weather/status` payload then carries
+`"custom": true`). Invalid commands are logged and ignored — the current weather
+is left unchanged. Commands must be **non-retained** (retained messages are
+ignored) so a restart truly returns to preset 1; runtime weather is never persisted.
 
 ---
 
