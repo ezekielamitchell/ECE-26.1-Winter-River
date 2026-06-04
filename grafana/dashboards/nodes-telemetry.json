@@ -1,7 +1,7 @@
 {
   "title": "Winter River — Node Status",
   "uid": "winter-river-nodes",
-  "description": "Power chain state for all 25 ESP32 nodes (Side A, Side B, server_rack). Refresh: 5s.",
+  "description": "Power chain state for the 24 ESP32 nodes (12 Side A + 12 Side B). Refresh: 5s.",
   "tags": ["winter-river", "mqtt", "esp32", "power"],
   "timezone": "",
   "editable": true,
@@ -157,11 +157,11 @@
           "OFFLINE":    { "text": "OFFLINE",    "color": "red",    "index": 20 }
         }}] } } },
 
-    { "id": 6, "type": "stat", "title": "ats_a",
+    { "id": 6, "type": "stat", "title": "lv_switchgear_a",
       "datasource": { "type": "influxdb", "uid": "influxdb-mqtt" },
       "gridPos": { "h": 5, "w": 4, "x": 16, "y": 1 },
       "targets": [{ "refId": "A", "datasource": { "type": "influxdb", "uid": "influxdb-mqtt" },
-        "query": "from(bucket: \"mqtt_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mqtt_consumer\")\n  |> filter(fn: (r) => r.node_id == \"ats_a\")\n  |> filter(fn: (r) => r._field == \"state\")\n  |> last()" }],
+        "query": "from(bucket: \"mqtt_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mqtt_consumer\")\n  |> filter(fn: (r) => r.node_id == \"lv_switchgear_a\")\n  |> filter(fn: (r) => r._field == \"state\")\n  |> last()" }],
       "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center",
         "orientation": "auto", "textMode": "value",
         "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" } },
@@ -403,11 +403,11 @@
           "OFFLINE":    { "text": "OFFLINE",    "color": "red",    "index": 20 }
         }}] } } },
 
-    { "id": 19, "type": "stat", "title": "ats_b",
+    { "id": 19, "type": "stat", "title": "lv_switchgear_b",
       "datasource": { "type": "influxdb", "uid": "influxdb-mqtt" },
       "gridPos": { "h": 5, "w": 4, "x": 16, "y": 12 },
       "targets": [{ "refId": "A", "datasource": { "type": "influxdb", "uid": "influxdb-mqtt" },
-        "query": "from(bucket: \"mqtt_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mqtt_consumer\")\n  |> filter(fn: (r) => r.node_id == \"ats_b\")\n  |> filter(fn: (r) => r._field == \"state\")\n  |> last()" }],
+        "query": "from(bucket: \"mqtt_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mqtt_consumer\")\n  |> filter(fn: (r) => r.node_id == \"lv_switchgear_b\")\n  |> filter(fn: (r) => r._field == \"state\")\n  |> last()" }],
       "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center",
         "orientation": "auto", "textMode": "value",
         "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" } },
@@ -513,11 +513,11 @@
     { "id": 27, "type": "row", "title": "Shared + Load History", "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 } },
 
-    { "id": 28, "type": "stat", "title": "server_rack",
+    { "id": 28, "type": "stat", "title": "server_rack_a1",
       "datasource": { "type": "influxdb", "uid": "influxdb-mqtt" },
       "gridPos": { "h": 5, "w": 6, "x": 0, "y": 23 },
       "targets": [{ "refId": "A", "datasource": { "type": "influxdb", "uid": "influxdb-mqtt" },
-        "query": "from(bucket: \"mqtt_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mqtt_consumer\")\n  |> filter(fn: (r) => r.node_id == \"server_rack\")\n  |> filter(fn: (r) => r._field == \"state\")\n  |> last()" }],
+        "query": "from(bucket: \"mqtt_metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mqtt_consumer\")\n  |> filter(fn: (r) => r.node_id == \"server_rack_a1\")\n  |> filter(fn: (r) => r._field == \"state\")\n  |> last()" }],
       "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center",
         "orientation": "auto", "textMode": "value",
         "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" } },

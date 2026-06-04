@@ -63,7 +63,7 @@ the power reaches them:
 ____  ups_a            (battery backup)
 ____  utility_a        (grid coming in)
 ____  server_rack_a1   (the computers)
-____  generator_a / ats_a   (backup + the switch that picks grid-or-backup)
+____  generator_a / lv_switchgear_a   (backup engine + the switch that picks grid-or-backup)
 ____  transformer_a    (changes the voltage)
 ```
 
@@ -169,16 +169,17 @@ Instructor signature: ___________________________
    ```bash
    ./scripts/status.sh
    ```
-   All 24 nodes should be online, both `ups_a` / `ups_b` `NORMAL`, all 6 racks
+   All 24 nodes should be online, both `ups_a` / `ups_b` `NORMAL`, all 8 racks
    `NORMAL`. The system is safe low-voltage — there is no shock hazard.
 
 ### Answers
 - **Part 1:** 1→B, 2→F, 3→C, 4→E, 5→D, 6→A
-- **Part 2:** `utility_a` =1, `transformer_a` =2, `generator_a / ats_a` =3,
+- **Part 2:** `utility_a` =1, `transformer_a` =2, `generator_a / lv_switchgear_a` =3,
   `ups_a` =4, `server_rack_a1` =5.
   *(Full real chain, for reference: utility → HV/MV transformer → MV switchgear
-  → MV/LV transformer → LV switchgear → ATS → UPS → server rack. The trainee
-  version is collapsed to 5 stops on purpose.)*
+  → MV/LV transformer → LV switchgear → UPS → server rack, with the generator
+  tying into the LV switchgear, which is the grid-or-backup transfer point. The
+  trainee version is collapsed to 5 stops on purpose.)*
 - **Part 3:** (1) **Two** — Side A and Side B. (2) So that if one side fails,
   the other keeps the servers running (redundancy / "2N"). (3) **True.**
 - **Part 5:** 1→b, 2→b, 3→a, 4→c

@@ -2,11 +2,12 @@
 Winter River Simulation Engine
 Reads ESP32 MQTT telemetry → propagates power hierarchy → publishes control commands.
 Topology: Side A + Side B are two fully independent block-redundant chains.
-Each side feeds 3 server_racks single-sided (no shared rectifier, no rack-level
-2N). Side-A failure kills all 3 of side-A's racks; side-B continues.
+Each side feeds 4 server_racks single-sided (no shared rectifier, no rack-level
+2N). Side-A failure kills all 4 of side-A's racks; side-B continues.
 Chain per side: utility → hv_mv_xfmr → mv_switchgear (34.5 kV) → mv_lv_xfmr
-→ lv_switchgear (480 V); generator ↗ ats (LV transfer switch) → ups
-→ server_rack_{1..3}; ats ↘ cooling.
+→ lv_switchgear (480 V LV transfer point); generator ↗ lv_switchgear → ups
+→ server_rack_{1..4}; lv_switchgear ↘ cooling. The LV switchgear is the
+utility↔generator transfer point (no separate ATS node).
 24 active nodes total (12 per side). Tick rate: 1 Hz (configurable in config.toml).
 """
 
@@ -309,9 +310,16 @@ class WinterRiverEngine:
         # Its output feeds the MV/LV transformer.
         elif ntype == "MV_SWITCHGEAR":
             status = node["status_msg"]
-            if parent_v > 0 and status not in ("OPEN", "TRIPPED", "FAULT"):
+            # Operator-open and protective trips are sticky — they hold the
+            # breaker open until an explicit CLOSE / STATUS:CLOSED clears them.
+            if status in ("OPEN", "TRIPPED", "FAULT"):
+                return 0.0, status
+            if parent_v > 0:
                 return 34500.0, "CLOSED"
-            return 0.0, status if status in ("TRIPPED", "FAULT") else "OPEN"
+            # Unfed is reported as NO_INPUT (NOT sticky) so the breaker re-closes
+            # automatically once the upstream chain is re-energised. (A sticky
+            # "OPEN" here latched the bus dead and blocked utility recovery.)
+            return 0.0, "NO_INPUT"
 
         # ── MV_LV_TRANSFORMER ─────────────────────────────────────────────────
         # 34.5 kV → 480 V step-down, fed from mv_switchgear (MV bus).
@@ -321,14 +329,24 @@ class WinterRiverEngine:
                 return 480.0, "NORMAL" if status not in ("WARNING", "FAULT") else status
             return 0.0, "FAULT" if node["status_msg"] == "FAULT" else "NO_INPUT"
 
-        # ── LV_SWITCHGEAR ─────────────────────────────────────────────────────
-        # Switchgear downstream of the MV/LV transformer, operating on the
-        # 480 V LV bus. Feeds the ATS primary input.
+        # ── LV_SWITCHGEAR (utility↔generator transfer point) ──────────────────
+        # 480 V LV bus, downstream of the MV/LV transformer. Absorbs the former
+        # ATS role: parent = MV/LV transformer (utility path, preferred),
+        # secondary_parent = generator (backup). Its 480 V output energises this
+        # side's ups + cooling in parallel.
         elif ntype == "LV_SWITCHGEAR":
             status = node["status_msg"]
-            if parent_v > 0 and status not in ("OPEN", "TRIPPED", "FAULT"):
-                return 480.0, "CLOSED"
-            return 0.0, status if status in ("TRIPPED", "FAULT") else "OPEN"
+            # Operator-open and protective trips are sticky — they drop the LV bus
+            # (both sources) until an explicit CLOSE / STATUS:CLOSED clears them.
+            if status in ("OPEN", "TRIPPED", "FAULT"):
+                return 0.0, status
+            if parent_v > 0:
+                return 480.0, "CLOSED"        # closed on the utility-derived path
+            if sec_parent_v > 0:
+                return 480.0, "GENERATOR"     # transferred to the standby generator
+            # Both sources dead: NO_INPUT (NOT sticky) so the bus re-energises
+            # automatically when either the utility path or the generator returns.
+            return 0.0, "NO_INPUT"
 
         # ── GENERATOR ─────────────────────────────────────────────────────────
         elif ntype == "GENERATOR":
@@ -354,18 +372,8 @@ class WinterRiverEngine:
 
             return 480.0, "RUNNING"
 
-        # ── ATS (Automatic Transfer Switch) ───────────────────────────────────
-        # parent          = transformer path (preferred)
-        # secondary_parent = generator path (backup)
-        elif ntype == "ATS":
-            if parent_v > 0:
-                return parent_v, "UTILITY"
-            if sec_parent_v > 0:
-                return sec_parent_v, "GENERATOR"
-            return 0.0, "OPEN"
-
         # ── UPS ───────────────────────────────────────────────────────────────
-        # parent = ats_a / ats_b (LV transfer switch output)
+        # parent = lv_switchgear_a / lv_switchgear_b (the LV transfer point)
         elif ntype == "UPS":
             if parent_v > 0:
                 node["battery_level"] = min(100, node["battery_level"] + 1)
@@ -377,7 +385,8 @@ class WinterRiverEngine:
             return 0.0, "FAULT"
 
         # ── COOLING ───────────────────────────────────────────────────────────
-        # parent = ats_a / ats_b (parallel to UPS — mech load off LV bus)
+        # parent = lv_switchgear_a / lv_switchgear_b (parallel to UPS — mech load
+        # off the LV bus, so it rides the generator transfer too)
         elif ntype == "COOLING":
             return (480.0, "NORMAL") if parent_v > 0 else (0.0, "OFF")
 
@@ -424,11 +433,8 @@ class WinterRiverEngine:
             rpm = 1800 if status == "RUNNING" else (600 if status == "STARTING" else 0)
             return f"RPM:{rpm} STATUS:{status}"
 
-        elif ntype == "ATS":
-            return f"SOURCE:{status} STATUS:{status}"
-
         elif ntype == "UPS":
-            # Send the UPS *input* voltage (what the ATS delivers), not its output.
+            # Send the UPS *input* voltage (what the LV switchgear delivers), not its output.
             # While islanding on battery (ON_BATTERY / FAULT) the input is dead, so
             # the node's OLED correctly shows Vin:0 during an outage. v_out remains the
             # UPS output used for downstream propagation above; only this firmware-facing

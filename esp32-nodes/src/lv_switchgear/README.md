@@ -2,14 +2,17 @@
 
 ## Real-World Role
 
-The LV switchgear is the low-voltage protection and isolation stage on the
-**480 V bus**, immediately downstream of the MV/LV step-down transformer. It is
-the last switchable point before the automatic transfer switch (ATS): its output
-is the ATS *primary* (utility-derived) input, with the standby generator feeding
-the ATS secondary. Opening or tripping the LV switchgear forces the ATS to fall
-back to the generator (if running) or to drop the side. In real installations
-this is a low-voltage switchboard with a main breaker, branch breakers, and
-metering feeding the UPS and mechanical loads.
+The LV switchgear is the low-voltage protection, isolation, and **source-transfer**
+stage on the **480 V bus**, immediately downstream of the MV/LV step-down
+transformer. It is the utility↔generator transfer point for the side — the role a
+separate automatic transfer switch (ATS) used to play in this model. Its
+**primary** input is the MV/LV-transformer (utility-derived) path; its
+**secondary** input is the standby generator. It prefers the utility path and
+transfers to the generator when the LV bus loses its transformer feed. Its output
+energises the side's UPS (IT path) and cooling (mech path) in parallel — so
+opening or tripping it drops the whole side. In real installations this is a
+low-voltage switchboard with a main breaker, a generator tie breaker, branch
+breakers, and metering.
 
 > **Naming:** switchgear is named for the bus voltage it sits on. `mv_switchgear`
 > is on the 34.5 kV **MV** bus (downstream of the HV/MV transformer);
@@ -20,17 +23,19 @@ metering feeding the UPS and mechanical loads.
 
 ## Nodes in This Topology
 
-| node_id           | Side | Rated Voltage | Parent                  | Child   |
-|-------------------|------|---------------|-------------------------|---------|
-| `lv_switchgear_a` | A    | 480 V         | `mv_lv_transformer_a`   | `ats_a` |
-| `lv_switchgear_b` | B    | 480 V         | `mv_lv_transformer_b`   | `ats_b` |
+| node_id           | Side | Rated Voltage | Parent (primary)      | Secondary parent | Children              |
+|-------------------|------|---------------|-----------------------|------------------|-----------------------|
+| `lv_switchgear_a` | A    | 480 V         | `mv_lv_transformer_a` | `generator_a`    | `ups_a`, `cooling_a`  |
+| `lv_switchgear_b` | B    | 480 V         | `mv_lv_transformer_b` | `generator_b`    | `ups_b`, `cooling_b`  |
 
 Chain context (per side):
-`utility → hv_mv_transformer → mv_switchgear → mv_lv_transformer → `**`lv_switchgear`**` → ats`
+`utility → hv_mv_transformer → mv_switchgear → mv_lv_transformer → `**`lv_switchgear`**` → ups → server_rack_{1..4}`
+with `generator ↗ lv_switchgear` (secondary feed) and `lv_switchgear ↘ cooling`
+(mech branch, parallel to the UPS).
 
-The LV switchgear output is the **ATS primary input**. The generator feeds the
-ATS secondary; `ats_*` prefers the LV switchgear path and falls back to the
-generator when the LV bus is dead.
+The LV switchgear is the side's transfer point: it prefers the
+MV/LV-transformer (utility) path and falls back to `generator_*` when the LV bus
+loses its transformer feed. There is no separate ATS node.
 
 ---
 
@@ -52,15 +57,21 @@ Topic: `winter-river/<node_id>/status`
 
 ## States
 
-| State     | Meaning                                                        |
-|-----------|----------------------------------------------------------------|
-| `CLOSED`  | Normal — main breaker closed, 480 V LV bus energised, feeding the ATS primary |
-| `OPEN`    | Main breaker opened, or no upstream feed (forces ATS to generator) |
-| `TRIPPED` | Protective relay triggered a fault trip — sticky               |
-| `FAULT`   | Overcurrent / overload detected — sticky                       |
+| State       | Meaning                                                                 |
+|-------------|--------------------------------------------------------------------------|
+| `CLOSED`    | Normal — main breaker closed on the utility (MV/LV transformer) path; 480 V LV bus energised |
+| `GENERATOR` | Transferred to the standby generator (utility path lost, generator running) — bus still 480 V |
+| `NO_INPUT`  | Both sources dead (no transformer feed, generator not running) — **not sticky** |
+| `OPEN`      | Main breaker opened by the operator — sticky; drops the whole side       |
+| `TRIPPED`   | Protective relay triggered a fault trip — sticky                         |
+| `FAULT`     | Overcurrent / overload detected — sticky                                 |
 
-`TRIPPED` and `FAULT` survive re-energisation — the broker's `_compute_node`
-honours them until cleared with an explicit `STATUS:CLOSED` control.
+`OPEN`, `TRIPPED`, and `FAULT` are sticky — they hold the bus dead (blocking
+**both** sources) until cleared with an explicit `CLOSE` / `STATUS:CLOSED`
+control. `NO_INPUT` is **not** sticky: it is just the "no live source" label, so
+the bus re-energises the moment the utility path or the generator returns. (That
+is what carries a utility-outage → generator-transfer → utility-recovery cascade
+end to end.)
 
 ---
 
@@ -93,13 +104,17 @@ faulted, and `OPEN STATUS:<state>` otherwise.
 
 ## Broker Behavior
 
-`broker/main.py::_compute_node` LV_SWITCHGEAR case:
+`broker/main.py::_compute_node` LV_SWITCHGEAR case (the transfer logic):
 
-- If `parent.v_out > 0` and `status_msg` is not in `{OPEN, TRIPPED, FAULT}` → output 480 V, state `CLOSED`
-- Otherwise → output 0 V, state stays sticky (`TRIPPED` / `FAULT`) or falls to `OPEN`
+- `status_msg` in `{OPEN, TRIPPED, FAULT}` (sticky) → output 0 V, hold that state
+- else `parent.v_out > 0` (utility path live) → output 480 V, state `CLOSED`
+- else `secondary_parent.v_out > 0` (generator running) → output 480 V, state `GENERATOR`
+- else (both sources dead) → output 0 V, state `NO_INPUT` (non-sticky)
 
-Because this node feeds the ATS primary, opening it is the clean way to demo an
-ATS transfer to generator without faulting the upstream chain.
+The control command is `CLOSE STATUS:<state>` when energised and
+`OPEN STATUS:<state>` when not. Because the generator now ties in behind this
+switchgear, the clean way to demo a transfer is to drop the **utility** upstream
+(`utility_a STATUS:OUTAGE`) and watch the bus go `CLOSED → NO_INPUT → GENERATOR`.
 
 ---
 
@@ -125,12 +140,19 @@ pio run -e lv_switchgear_b
 # Subscribe to live telemetry
 mosquitto_sub -h 192.168.4.1 -t "winter-river/lv_switchgear_a/status" -v
 
-# Open the LV breaker (forces ats_a to transfer to the generator)
+# Demo the generator transfer by dropping the utility upstream; the broker
+# transfers the LV bus to the generator (CLOSED → NO_INPUT → GENERATOR), then
+# back to the utility path (GENERATOR → CLOSED) on recovery.
+mosquitto_pub -h 192.168.4.1 -t "winter-river/utility_a/control" -m "STATUS:OUTAGE"
+mosquitto_pub -h 192.168.4.1 -t "winter-river/utility_a/control" -m "STATUS:GRID_OK"
+
+# Open the LV main breaker — drops the WHOLE side (ups + cooling), generator
+# included, since the generator ties in behind this switchgear. Sticky.
 mosquitto_pub -h 192.168.4.1 -t "winter-river/lv_switchgear_a/control" -m "OPEN"
 
-# Simulate a fault trip
+# Simulate a fault trip (sticky)
 mosquitto_pub -h 192.168.4.1 -t "winter-river/lv_switchgear_a/control" -m "STATUS:TRIPPED"
 
-# Restore and re-close breaker
+# Restore and re-close the breaker
 mosquitto_pub -h 192.168.4.1 -t "winter-river/lv_switchgear_a/control" -m "CLOSE"
 ```

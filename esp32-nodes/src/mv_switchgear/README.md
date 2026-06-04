@@ -27,7 +27,7 @@ down on that side.
 | `mv_switchgear_b` | B    | 34.5 kV       | `hv_mv_transformer_b`   | `mv_lv_transformer_b` |
 
 Chain context (per side):
-`utility → hv_mv_transformer → `**`mv_switchgear`**` → mv_lv_transformer → lv_switchgear → ats`
+`utility → hv_mv_transformer → `**`mv_switchgear`**` → mv_lv_transformer → lv_switchgear → ups → server_rack_{1..4}`
 
 ---
 
@@ -49,15 +49,18 @@ Topic: `winter-river/<node_id>/status`
 
 ## States
 
-| State     | Meaning                                                        |
-|-----------|----------------------------------------------------------------|
-| `CLOSED`  | Normal — main breaker closed, MV bus energised from the HV/MV transformer |
-| `OPEN`    | Main breaker manually or automatically opened, or no upstream feed |
-| `TRIPPED` | Protective relay triggered a fault trip — sticky               |
-| `FAULT`   | Overcurrent / overload detected — sticky                       |
+| State      | Meaning                                                        |
+|------------|----------------------------------------------------------------|
+| `CLOSED`   | Normal — main breaker closed, MV bus energised from the HV/MV transformer |
+| `NO_INPUT` | No upstream feed (HV/MV transformer dead) — **not sticky**, re-closes when re-energised |
+| `OPEN`     | Main breaker opened by the operator — sticky                   |
+| `TRIPPED`  | Protective relay triggered a fault trip — sticky               |
+| `FAULT`    | Overcurrent / overload detected — sticky                       |
 
-`TRIPPED` and `FAULT` survive re-energisation — the broker's `_compute_node`
-honours them until cleared with an explicit `STATUS:CLOSED` control.
+`OPEN`, `TRIPPED`, and `FAULT` are sticky — they survive re-energisation until
+cleared with an explicit `CLOSE` / `STATUS:CLOSED` control. `NO_INPUT` is the
+non-sticky "unfed" label, so the breaker re-closes automatically once the
+upstream chain comes back (this is what lets a utility outage recover cleanly).
 
 ---
 
@@ -92,8 +95,9 @@ faulted, and `OPEN STATUS:<state>` otherwise.
 
 `broker/main.py::_compute_node` MV_SWITCHGEAR case:
 
-- If `parent.v_out > 0` and `status_msg` is not in `{OPEN, TRIPPED, FAULT}` → output 34.5 kV, state `CLOSED`
-- Otherwise → output 0 V, state stays sticky (`TRIPPED` / `FAULT`) or falls to `OPEN`
+- `status_msg` in `{OPEN, TRIPPED, FAULT}` (sticky) → output 0 V, hold that state
+- else `parent.v_out > 0` → output 34.5 kV, state `CLOSED`
+- else (unfed) → output 0 V, state `NO_INPUT` (non-sticky, re-closes when re-fed)
 
 ---
 

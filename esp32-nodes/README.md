@@ -45,18 +45,17 @@ sudo systemctl start mosquitto
 
 ### Side A (12 nodes)
 
-| #  | `node_id`              | Component type dir                       | Rated voltage              |
-|----|------------------------|------------------------------------------|----------------------------|
-| ①  | `utility_a`            | `utility/utility_a/`                     | 230 kV                     |
-| ②  | `mv_switchgear_a`      | `mv_switchgear/mv_switchgear_a/`         | 230 kV (main breaker)      |
-| ③  | `hv_mv_transformer_a`  | `hv_mv_transformer/hv_mv_transformer_a/` | 34.5 kV out                |
-| ④  | `lv_switchgear_a`      | `lv_switchgear/lv_switchgear_a/`         | 34.5 kV                    |
-| ⑤  | `mv_lv_transformer_a`  | `mv_lv_transformer/mv_lv_transformer_a/` | 480 V out                  |
-| ⑥  | `generator_a`          | `generator/generator_a/`                 | 480 V                      |
-| ⑦  | `ats_a`                | `ats/ats_a/`                             | 480 V (LV transfer switch) |
-| ⑧  | `ups_a`                | `ups/ups_a/`                             | 480 V AC                   |
-| ⑨  | `cooling_a`            | `cooling/cooling_a/`                     | 480 V (fan bank — 55 fans) |
-| ⑩-⑫ | `server_rack_a{1..3}` | `server_rack/` (single shared source)    | 48 V DC                    |
+| #   | `node_id`              | Component type dir                       | Rated voltage              |
+|-----|------------------------|------------------------------------------|----------------------------|
+| ①   | `utility_a`            | `utility/utility_a/`                     | 230 kV                     |
+| ②   | `hv_mv_transformer_a`  | `hv_mv_transformer/hv_mv_transformer_a/` | 230 kV → 34.5 kV           |
+| ③   | `mv_switchgear_a`      | `mv_switchgear/mv_switchgear_a/`         | 34.5 kV MV bus             |
+| ④   | `mv_lv_transformer_a`  | `mv_lv_transformer/mv_lv_transformer_a/` | 34.5 kV → 480 V            |
+| ⑤   | `lv_switchgear_a`      | `lv_switchgear/lv_switchgear_a/`         | 480 V LV bus (transfer pt) |
+| ⑥   | `generator_a`          | `generator/generator_a/`                 | 480 V (standby)            |
+| ⑦   | `ups_a`                | `ups/ups_a/`                             | 480 V AC                   |
+| ⑧   | `cooling_a`            | `cooling/cooling_a/`                     | 480 V (fan bank — 55 fans) |
+| ⑨-⑫ | `server_rack_a{1..4}`  | `server_rack/` (single shared source)    | 48 V DC                    |
 
 ### Side B (12 nodes — mirror of Side A)
 
@@ -72,12 +71,14 @@ All `_a` suffixes replaced with `_b`. Component type directories are identical.
 
 ```
 utility → hv_mv_transformer → mv_switchgear → mv_lv_transformer
-       → lv_switchgear → ats → ups → server_rack_{1..3}
-generator ─────────────────────────↗
-                                ats ↘ cooling   (parallel mech load)
+       → lv_switchgear → ups → server_rack_{1..4}
+generator ──────────↗  (lv_switchgear secondary feed / transfer point)
+        lv_switchgear ↘ cooling   (parallel mech load)
 ```
 
-Sides are fully independent (block-redundant 2N — no shared rectifier). Side-A failure kills all 3 side-A racks; side-B continues.
+The LV switchgear is the utility↔generator transfer point (there is no separate
+ATS node). Sides are fully independent (block-redundant 2N — no shared
+rectifier). Side-A failure kills all 4 side-A racks; side-B continues.
 
 ---
 
@@ -117,17 +118,16 @@ All commands run from the `esp32-nodes/` directory:
 ```bash
 # Build + flash a single node
 pio run -e utility_a            --target upload
-pio run -e mv_switchgear_a      --target upload
 pio run -e hv_mv_transformer_a  --target upload
-pio run -e lv_switchgear_a      --target upload
+pio run -e mv_switchgear_a      --target upload
 pio run -e mv_lv_transformer_a  --target upload
+pio run -e lv_switchgear_a      --target upload
 pio run -e generator_a          --target upload
-pio run -e ats_a                --target upload
 pio run -e ups_a                --target upload
 pio run -e cooling_a            --target upload
-pio run -e server_rack_a1       --target upload   # all 6 racks compile the same source
+pio run -e server_rack_a1       --target upload   # all 8 racks compile the same source
 pio run -e server_rack_a2       --target upload   # with WR_NODE_ID / WR_RACK_LABEL set per env
-# ... a3, b1..b3
+# ... a3, a4, b1..b4
 
 # Build all envs without flashing
 pio run
@@ -212,7 +212,6 @@ For per-node control commands, see the `README.md` inside each component type di
 - [`src/lv_switchgear/README.md`](src/lv_switchgear/README.md)
 - [`src/mv_lv_transformer/README.md`](src/mv_lv_transformer/README.md)
 - [`src/generator/README.md`](src/generator/README.md)
-- [`src/ats/README.md`](src/ats/README.md)
 - [`src/ups/README.md`](src/ups/README.md)
 - [`src/cooling/README.md`](src/cooling/README.md)
 - [`src/server_rack/README.md`](src/server_rack/README.md)

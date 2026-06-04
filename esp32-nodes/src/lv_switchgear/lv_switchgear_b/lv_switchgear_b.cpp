@@ -1,7 +1,11 @@
-// lv_switchgear_b.cpp — LV switchgear, Side B.
-// Operates on the 480 V LV bus, downstream of mv_lv_transformer_b; its output
-// feeds the ATS primary input. Mirror of lv_switchgear_a.
-// States: CLOSED, OPEN, TRIPPED, FAULT
+// lv_switchgear_b.cpp — LV switchgear, Side B. 480 V LV transfer point.
+// Operates on the 480 V LV bus, downstream of mv_lv_transformer_b. Mirror of
+// lv_switchgear_a: the utility↔generator transfer point (absorbed the former
+// ATS role). The broker closes it onto the MV/LV-transformer path or the
+// generator, and its output energises ups_b + cooling_b in parallel.
+// States: CLOSED (utility path), GENERATOR (on backup), NO_INPUT (both sources
+// dead), OPEN (operator), TRIPPED, FAULT. The broker owns the STATUS string;
+// this firmware just renders it.
 #include <winter_river.h>
 
 static const char *NODE_ID = "lv_switchgear_b";

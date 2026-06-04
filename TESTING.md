@@ -69,37 +69,39 @@ ip -4 addr show wlan0
 ## Topology Under Test
 
 The current broker/database simulation topology is **block-redundant 2N** —
-two fully independent power chains, each feeding 3 single-fed server racks.
+two fully independent power chains, each feeding 4 single-fed server racks.
 There is no shared rectifier and no rack-level 2N: side-A failure kills all
-3 of side-A's racks, and side-B continues unaffected.
+4 of side-A's racks, and side-B continues unaffected.
 
 ```text
 Side A:
-utility_a -> mv_switchgear_a -> hv_mv_transformer_a -> lv_switchgear_a
-          -> mv_lv_transformer_a
-generator_a ----------------------------------------------------^
-ats_a -> ups_a -> server_rack_a1, _a2, _a3
-ats_a -> cooling_a   (mech load, parallel to ups_a)
+utility_a -> hv_mv_transformer_a -> mv_switchgear_a -> mv_lv_transformer_a
+          -> lv_switchgear_a
+generator_a ---------------------------^   (lv_switchgear_a secondary feed)
+lv_switchgear_a -> ups_a -> server_rack_a1, _a2, _a3, _a4
+lv_switchgear_a -> cooling_a   (mech load, parallel to ups_a)
 
 Side B (mirror):
-utility_b -> mv_switchgear_b -> hv_mv_transformer_b -> lv_switchgear_b
-          -> mv_lv_transformer_b
-generator_b ----------------------------------------------------^
-ats_b -> ups_b -> server_rack_b1, _b2, _b3
-ats_b -> cooling_b
+utility_b -> hv_mv_transformer_b -> mv_switchgear_b -> mv_lv_transformer_b
+          -> lv_switchgear_b
+generator_b ---------------------------^   (lv_switchgear_b secondary feed)
+lv_switchgear_b -> ups_b -> server_rack_b1, _b2, _b3, _b4
+lv_switchgear_b -> cooling_b
 ```
 
-Each server rack is **single-fed** from its side's UPS. There is no PATH_A /
-PATH_B at the rack level — each side is "up" iff its UPS (`ups_a` / `ups_b`)
-is present and producing voltage, and side-A failure drops all 3 of side-A's
-racks while side-B continues.
+`lv_switchgear_*` is the utility↔generator transfer point (there is no separate
+ATS node): it prefers the MV/LV-transformer path and transfers to the generator
+when that path is lost. Each server rack is **single-fed** from its side's UPS.
+There is no PATH_A / PATH_B at the rack level — each side is "up" iff its UPS
+(`ups_a` / `ups_b`) is present and producing voltage, and side-A failure drops
+all 4 of side-A's racks while side-B continues.
 
 Active node IDs (24 broker/DB nodes):
 
 | Group | Node IDs |
 |---|---|
-| Side A (12) | `utility_a`, `mv_switchgear_a`, `hv_mv_transformer_a`, `lv_switchgear_a`, `mv_lv_transformer_a`, `generator_a`, `ats_a`, `ups_a`, `cooling_a`, `server_rack_a1`, `server_rack_a2`, `server_rack_a3` |
-| Side B (12) | `utility_b`, `mv_switchgear_b`, `hv_mv_transformer_b`, `lv_switchgear_b`, `mv_lv_transformer_b`, `generator_b`, `ats_b`, `ups_b`, `cooling_b`, `server_rack_b1`, `server_rack_b2`, `server_rack_b3` |
+| Side A (12) | `utility_a`, `hv_mv_transformer_a`, `mv_switchgear_a`, `mv_lv_transformer_a`, `lv_switchgear_a`, `generator_a`, `ups_a`, `cooling_a`, `server_rack_a1`, `server_rack_a2`, `server_rack_a3`, `server_rack_a4` |
+| Side B (12) | `utility_b`, `hv_mv_transformer_b`, `mv_switchgear_b`, `mv_lv_transformer_b`, `lv_switchgear_b`, `generator_b`, `ups_b`, `cooling_b`, `server_rack_b1`, `server_rack_b2`, `server_rack_b3`, `server_rack_b4` |
 | Broker-synthesized (no ESP32 row) | `facility`, `weather` — broker publishes each retained from live state every tick |
 
 **Slot budget:** 24 active boards = 24 baseplate slots — a perfect fit, no
@@ -135,8 +137,8 @@ front of an audience.
 - [ ] All SSD1306 OLEDs are visible and undamaged.
 - [ ] Physical labels match MQTT node IDs.
 - [ ] Side A and Side B are visually separated.
-- [ ] All 3 server racks per side are clearly marked as the IT loads, with
-      side-A racks (`server_rack_a1..a3`) and side-B racks (`server_rack_b1..b3`)
+- [ ] All 4 server racks per side are clearly marked as the IT loads, with
+      side-A racks (`server_rack_a1..a4`) and side-B racks (`server_rack_b1..b4`)
       grouped together.
 - [ ] Workspace ambient temperature is logged: ______ deg F.
 - [ ] Spare USB cable, laptop, and serial monitor are available.
@@ -156,44 +158,44 @@ Physical board inventory (24 boards):
 
 | #  | node_id                | Powered | OLED | WiFi | MQTT | Notes |
 |----|------------------------|---------|------|------|------|-------|
-|  1 | `utility_a`            | [ ]     | [ ]  | [ ]  | [ ]  | |
-|  2 | `mv_switchgear_a`      | [ ]     | [ ]  | [ ]  | [ ]  | 230 kV main breaker |
-|  3 | `hv_mv_transformer_a`  | [ ]     | [ ]  | [ ]  | [ ]  | |
-|  4 | `lv_switchgear_a`      | [ ]     | [ ]  | [ ]  | [ ]  | |
-|  5 | `mv_lv_transformer_a`  | [ ]     | [ ]  | [ ]  | [ ]  | |
-|  6 | `generator_a`          | [ ]     | [ ]  | [ ]  | [ ]  | |
-|  7 | `ats_a`                | [ ]     | [ ]  | [ ]  | [ ]  | LV transfer switch |
-|  8 | `ups_a`                | [ ]     | [ ]  | [ ]  | [ ]  | feeds all 3 side-A racks |
-|  9 | `cooling_a`            | [ ]     | [ ]  | [ ]  | [ ]  | 55 fans (mech load off ats_a) |
-| 10 | `server_rack_a1`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_a |
-| 11 | `server_rack_a2`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_a |
-| 12 | `server_rack_a3`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_a |
-| 13 | `utility_b`            | [ ]     | [ ]  | [ ]  | [ ]  | |
-| 14 | `mv_switchgear_b`      | [ ]     | [ ]  | [ ]  | [ ]  | 230 kV main breaker |
-| 15 | `hv_mv_transformer_b`  | [ ]     | [ ]  | [ ]  | [ ]  | |
-| 16 | `lv_switchgear_b`      | [ ]     | [ ]  | [ ]  | [ ]  | |
-| 17 | `mv_lv_transformer_b`  | [ ]     | [ ]  | [ ]  | [ ]  | |
-| 18 | `generator_b`          | [ ]     | [ ]  | [ ]  | [ ]  | |
-| 19 | `ats_b`                | [ ]     | [ ]  | [ ]  | [ ]  | LV transfer switch |
-| 20 | `ups_b`                | [ ]     | [ ]  | [ ]  | [ ]  | feeds all 3 side-B racks |
-| 21 | `cooling_b`            | [ ]     | [ ]  | [ ]  | [ ]  | 55 fans (mech load off ats_b) |
-| 22 | `server_rack_b1`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_b |
-| 23 | `server_rack_b2`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_b |
-| 24 | `server_rack_b3`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_b |
+|  1 | `utility_a`            | [ ]     | [ ]  | [ ]  | [ ]  | 230 kV grid root |
+|  2 | `hv_mv_transformer_a`  | [ ]     | [ ]  | [ ]  | [ ]  | 230 kV → 34.5 kV |
+|  3 | `mv_switchgear_a`      | [ ]     | [ ]  | [ ]  | [ ]  | 34.5 kV MV-bus breaker |
+|  4 | `mv_lv_transformer_a`  | [ ]     | [ ]  | [ ]  | [ ]  | 34.5 kV → 480 V |
+|  5 | `lv_switchgear_a`      | [ ]     | [ ]  | [ ]  | [ ]  | 480 V LV bus + utility↔gen transfer point |
+|  6 | `generator_a`          | [ ]     | [ ]  | [ ]  | [ ]  | feeds lv_switchgear_a secondary |
+|  7 | `ups_a`                | [ ]     | [ ]  | [ ]  | [ ]  | feeds all 4 side-A racks |
+|  8 | `cooling_a`            | [ ]     | [ ]  | [ ]  | [ ]  | 55 fans (mech load off lv_switchgear_a) |
+|  9 | `server_rack_a1`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_a |
+| 10 | `server_rack_a2`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_a |
+| 11 | `server_rack_a3`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_a |
+| 12 | `server_rack_a4`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_a |
+| 13 | `utility_b`            | [ ]     | [ ]  | [ ]  | [ ]  | 230 kV grid root |
+| 14 | `hv_mv_transformer_b`  | [ ]     | [ ]  | [ ]  | [ ]  | 230 kV → 34.5 kV |
+| 15 | `mv_switchgear_b`      | [ ]     | [ ]  | [ ]  | [ ]  | 34.5 kV MV-bus breaker |
+| 16 | `mv_lv_transformer_b`  | [ ]     | [ ]  | [ ]  | [ ]  | 34.5 kV → 480 V |
+| 17 | `lv_switchgear_b`      | [ ]     | [ ]  | [ ]  | [ ]  | 480 V LV bus + utility↔gen transfer point |
+| 18 | `generator_b`          | [ ]     | [ ]  | [ ]  | [ ]  | feeds lv_switchgear_b secondary |
+| 19 | `ups_b`                | [ ]     | [ ]  | [ ]  | [ ]  | feeds all 4 side-B racks |
+| 20 | `cooling_b`            | [ ]     | [ ]  | [ ]  | [ ]  | 55 fans (mech load off lv_switchgear_b) |
+| 21 | `server_rack_b1`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_b |
+| 22 | `server_rack_b2`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_b |
+| 23 | `server_rack_b3`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_b |
+| 24 | `server_rack_b4`       | [ ]     | [ ]  | [ ]  | [ ]  | single-fed from ups_b |
 
 Old firmware that may still be flashed on spare boards (broker will log
 "unknown node_id" and drop telemetry from these — re-flash with a current env):
 
 | node_id | Re-flashed | Notes |
 |---|---|---|
-| `lv_dist_a` / `lv_dist_b` | [ ] | dropped — ats now feeds ups directly |
+| `ats_a` / `ats_b` | [ ] | dropped — transfer role folded into `lv_switchgear_*`; re-flash as `server_rack_a4` / `server_rack_b4` |
+| `lv_dist_a` / `lv_dist_b` | [ ] | dropped — lv_switchgear now feeds ups directly |
 | `pdu_a` / `pdu_b`         | [ ] | dropped — never in active topology |
 | `rectifier`, `rectifier_a/b` | [ ] | dropped — no shared 2N convergence |
 | `lighting_a` / `lighting_b` | [ ] | dropped |
 | `monitoring_a` / `monitoring_b` | [ ] | dropped |
 | `bms`, `bms_a/b`               | [ ] | dropped — aggregation removed; no firmware or topic |
-| `server_rack_a4` / `server_rack_b4` | [ ] | dropped — racks reduced to 3 per side (`_a{1..3}` / `_b{1..3}`) |
-| `server_rack_a` / `server_rack_b` (single) | [ ] | superseded by per-side `_a{1..3}` / `_b{1..3}` |
+| `server_rack_a` / `server_rack_b` (single) | [ ] | superseded by per-side `_a{1..4}` / `_b{1..4}` |
 
 ### 1.3 Raspberry Pi Services
 
@@ -297,10 +299,11 @@ Build checks from a development machine:
 cd esp32-nodes
 pio run -e utility_a
 pio run -e mv_switchgear_a
+pio run -e lv_switchgear_a
 pio run -e generator_a
-pio run -e ats_a
 pio run -e ups_a
 pio run -e server_rack_a1
+pio run -e server_rack_a4
 ```
 
 Full firmware matrix check:
@@ -374,14 +377,14 @@ Complete this before running failure scenarios.
 - [ ] Both utilities show `GRID_OK`.
 - [ ] Both MV switchgear nodes show `CLOSED`.
 - [ ] Both HV/MV transformers show normal pass-through.
-- [ ] Both LV switchgear nodes show closed/normal.
+- [ ] Both LV switchgear nodes show `CLOSED` (on the utility path — the transfer
+      point is sitting on the MV/LV-transformer feed, not the generator).
 - [ ] Both MV/LV transformers show normal temperature and 480 V output.
 - [ ] Both generators show `STANDBY`, not `RUNNING`.
-- [ ] Both ATS nodes use `UTILITY`.
 - [ ] Both UPS nodes show `NORMAL`, 480 V input, 480 V output, and healthy
       battery.
-- [ ] All 3 `server_rack_a{1..3}` show `NORMAL` (single-fed from `ups_a`).
-- [ ] All 3 `server_rack_b{1..3}` show `NORMAL` (single-fed from `ups_b`).
+- [ ] All 4 `server_rack_a{1..4}` show `NORMAL` (single-fed from `ups_a`).
+- [ ] All 4 `server_rack_b{1..4}` show `NORMAL` (single-fed from `ups_b`).
 - [ ] Cooling is normal on both sides.
 - [ ] `./scripts/status.sh` shows all 24 broker/DB nodes online and no faults
       (`facility`/`weather` are broker-synthesized and not counted).
@@ -400,13 +403,13 @@ mosquitto_pub -h 192.168.4.1 -t "winter-river/mv_lv_transformer_a/control" -m "S
 mosquitto_pub -h 192.168.4.1 -t "winter-river/mv_lv_transformer_b/control" -m "STATUS:NORMAL TEMP:108 LOAD:45"
 mosquitto_pub -h 192.168.4.1 -t "winter-river/generator_a/control" -m "STATUS:STANDBY RPM:0 LOAD:0 FUEL:85"
 mosquitto_pub -h 192.168.4.1 -t "winter-river/generator_b/control" -m "STATUS:STANDBY RPM:0 LOAD:0 FUEL:85"
-mosquitto_pub -h 192.168.4.1 -t "winter-river/ats_a/control" -m "SOURCE:UTILITY STATUS:UTILITY"
-mosquitto_pub -h 192.168.4.1 -t "winter-river/ats_b/control" -m "SOURCE:UTILITY STATUS:UTILITY"
+# The LV switchgear is the transfer point — CLOSE it on the utility path (above).
+# There is no ats_* node to command.
 mosquitto_pub -h 192.168.4.1 -t "winter-river/ups_a/control" -m "INPUT:480 BATT:100 STATUS:NORMAL"
 mosquitto_pub -h 192.168.4.1 -t "winter-river/ups_b/control" -m "INPUT:480 BATT:100 STATUS:NORMAL"
-# Each of the 6 server racks gets the same NORMAL/INPUT baseline; broker
+# Each of the 8 server racks gets the same NORMAL/INPUT baseline; broker
 # fills in TEMP every tick from the thermal model.
-for r in a1 a2 a3 b1 b2 b3; do
+for r in a1 a2 a3 a4 b1 b2 b3 b4; do
     mosquitto_pub -h 192.168.4.1 -t "winter-river/server_rack_${r}/control" -m "INPUT:480 STATUS:NORMAL"
 done
 ```
@@ -534,14 +537,15 @@ Setup:
 
 Steps:
 
-- [ ] Trainee traces Side A from `utility_a` → `mv_switchgear_a` →
-      `hv_mv_transformer_a` → `lv_switchgear_a` → `mv_lv_transformer_a` →
-      `ats_a` → `ups_a` → `server_rack_a{1..3}`, and notes the parallel
-      mech branch `ats_a → cooling_a`.
+- [ ] Trainee traces Side A from `utility_a` → `hv_mv_transformer_a` →
+      `mv_switchgear_a` → `mv_lv_transformer_a` → `lv_switchgear_a` →
+      `ups_a` → `server_rack_a{1..4}`, and notes the parallel
+      mech branch `lv_switchgear_a → cooling_a` plus the generator tie-in
+      `generator_a → lv_switchgear_a` (secondary feed / transfer point).
 - [ ] Trainee traces Side B end-to-end and confirms it's a complete mirror
       of Side A — no shared nodes anywhere.
-- [ ] Trainee identifies utilities, MV switchgear, generators, ATS units,
-      UPS units, cooling (both sides), and all 6 server racks.
+- [ ] Trainee identifies utilities, MV switchgear, generators, the LV switchgear
+      transfer point, UPS units, cooling (both sides), and all 8 server racks.
 - [ ] Operator compares OLEDs, MQTT, and Grafana.
 
 Expected:
@@ -550,7 +554,7 @@ Expected:
 - [ ] Both MV switchgear nodes report `CLOSED`.
 - [ ] Generators are in `STANDBY`.
 - [ ] Both UPS nodes report `NORMAL`, 480 V in/out.
-- [ ] All 6 server racks report `NORMAL`.
+- [ ] All 8 server racks report `NORMAL`.
 - [ ] Grafana and MQTT agree with OLED state.
 
 Questions:
@@ -561,8 +565,8 @@ Questions:
 
 ### Scenario 1 - Utility Outage With Generator Startup
 
-Objective: show utility loss, generator startup delay, ATS transfer, and UPS
-ride-through.
+Objective: show utility loss, generator startup delay, the LV switchgear
+transfer to generator, and UPS ride-through.
 
 Trigger:
 
@@ -574,14 +578,17 @@ Expected:
 
 - [ ] `utility_a` reports `OUTAGE`.
 - [ ] `generator_a` transitions `STANDBY` -> `STARTING` -> `RUNNING`.
-- [ ] `ats_a` transfers from `UTILITY` to `GENERATOR`.
+- [ ] `lv_switchgear_a` transfers `CLOSED` -> `NO_INPUT` (during the ~10 s
+      startup gap) -> `GENERATOR` (once the gen is `RUNNING`).
 - [ ] `ups_a` carries load during the startup window (state `ON_BATTERY` then
       `CHARGING` once gen comes up).
+- [ ] `cooling_a` also rides the generator (it's fed off `lv_switchgear_a`):
+      `OFF` during the gap, back to `NORMAL` once on the generator.
 - [ ] Side B remains normal throughout.
 - [ ] Server rack stays `NORMAL` once the gen has picked up Side A. It may
       momentarily flag `DEGRADED` only during the transfer window itself; if it
-      remains `DEGRADED` after the gen reports `RUNNING`, the ATS transfer or
-      generator pickup failed and the test has not passed.
+      remains `DEGRADED` after the gen reports `RUNNING`, the LV switchgear
+      transfer or generator pickup failed and the test has not passed.
 
 Recovery:
 
@@ -589,7 +596,7 @@ Recovery:
 mosquitto_pub -h 192.168.4.1 -t "winter-river/utility_a/control" -m "STATUS:GRID_OK VOLT:230.0 FREQ:60.0"
 ```
 
-- [ ] ATS returns to `UTILITY`.
+- [ ] `lv_switchgear_a` returns to `CLOSED` (back on the utility path).
 - [ ] Generator returns to `STANDBY`.
 - [ ] Server rack returns to `NORMAL`.
 
@@ -642,7 +649,8 @@ mosquitto_pub -h 192.168.4.1 -t "winter-river/generator_a/control" -m "STATUS:FA
 
 Expected:
 
-- [ ] ATS cannot transfer to a usable generator source.
+- [ ] `lv_switchgear_a` cannot transfer to a usable source (utility path dead,
+      generator faulted) — it reports `NO_INPUT`.
 - [ ] Side A downstream equipment loses normal source power.
 - [ ] UPS carries load only as long as battery behavior allows.
 - [ ] Server rack remains online only if Side B is healthy.
@@ -657,14 +665,14 @@ mosquitto_pub -h 192.168.4.1 -t "winter-river/utility_a/control" -m "STATUS:GRID
 
 Questions:
 
-- What should a technician verify before blaming the ATS?
+- What should a technician verify before blaming the transfer logic or generator?
 - What alarms are urgent versus informational?
 - What work should stop while only one side is healthy?
 
 ### Scenario 4 - Full Side Failure, Block-Redundant 2N Degraded Operation
 
 Objective: prove that one full side can fail without dropping the other side's
-3 server racks. In block-redundant 2N, side-A failure kills all 3 side-A racks
+4 server racks. In block-redundant 2N, side-A failure kills all 4 side-A racks
 at once — there is no rack-level dual feed. Side B continues normally.
 
 Trigger:
@@ -678,13 +686,13 @@ Expected:
 
 - [ ] Side A cannot energise `ups_a` (utility out, generator failed).
 - [ ] `ups_a` runs on battery briefly, then reports `FAULT` once depleted.
-- [ ] All 3 `server_rack_a{1..3}` cascade to `FAULT` (single-fed from `ups_a`).
-- [ ] Side B stays normal: `ups_b` NORMAL, all 3 `server_rack_b{1..3}` NORMAL.
+- [ ] All 4 `server_rack_a{1..4}` cascade to `FAULT` (single-fed from `ups_a`).
+- [ ] Side B stays normal: `ups_b` NORMAL, all 4 `server_rack_b{1..4}` NORMAL.
 - [ ] Redundancy is lost: only Side B is live (`ups_b` producing voltage,
       `ups_a` FAULT). Side A's whole chain reads down while Side B is healthy.
-- [ ] Operators can explain that half the IT capacity is gone (3 of 6 racks)
+- [ ] Operators can explain that half the IT capacity is gone (4 of 8 racks)
       and recovery requires either utility restoration or generator repair —
-      a second fault on Side B now drops the remaining 3 racks too.
+      a second fault on Side B now drops the remaining 4 racks too.
 
 Recovery:
 
@@ -697,14 +705,14 @@ Questions:
 
 - What does "block-redundant 2N" mean in practical terms, and how does it
   differ from rack-level 2N?
-- Why does losing one side drop 3 racks instead of being absorbed at the rack
+- Why does losing one side drop 4 racks instead of being absorbed at the rack
   level (as in a true dual-fed-per-rack design)?
 - What's the operational cost of block redundancy vs rack-level 2N?
 
 ### Scenario 4b - Single Rack Failure (Workload-Level Redundancy)
 
 Objective: show that losing one rack is not the same as losing a side —
-the 2 other racks on the same side, plus all 3 on the other side, keep
+the 3 other racks on the same side, plus all 4 on the other side, keep
 running. Workloads should fail over via cluster software.
 
 Trigger:
@@ -716,8 +724,8 @@ mosquitto_pub -h 192.168.4.1 -t "winter-river/server_rack_a1/control" -m "STATUS
 Expected:
 
 - [ ] `server_rack_a1` reports `FAULT`.
-- [ ] `server_rack_a2`, `_a3` remain `NORMAL` (same UPS, same side).
-- [ ] All 3 `server_rack_b{1..3}` remain `NORMAL`.
+- [ ] `server_rack_a2`, `_a3`, `_a4` remain `NORMAL` (same UPS, same side).
+- [ ] All 4 `server_rack_b{1..4}` remain `NORMAL`.
 - [ ] Power upstream is still `2N_HEALTHY` — both UPS nodes are producing
       voltage; this is a rack-internal fault, not a power-chain failure.
 - [ ] If you're running real workloads, trainees should articulate that
@@ -757,7 +765,7 @@ Expected:
 
 - [ ] Both sides lose normal and emergency source power.
 - [ ] Both UPS nodes eventually exhaust battery and report `FAULT`.
-- [ ] All 6 server racks (`server_rack_a{1..3}` + `_b{1..3}`) reach `FAULT`.
+- [ ] All 8 server racks (`server_rack_a{1..4}` + `_b{1..4}`) reach `FAULT`.
 - [ ] Both sides read down: `ups_a` and `ups_b` both `FAULT`, every chain
       node on both sides faulted or unpowered.
 - [ ] Grafana clearly shows simultaneous Side A and Side B failure.
@@ -796,9 +804,13 @@ mosquitto_pub -h 192.168.4.1 -t "winter-river/lv_switchgear_a/control" -m "STATU
 
 Expected:
 
-- [ ] Equipment upstream of switchgear remains normal.
-- [ ] Utility path downstream of switchgear loses input.
-- [ ] ATS may transfer to generator if the generator path is healthy.
+- [ ] Equipment upstream of the switchgear (utility, transformers, MV switchgear)
+      remains normal.
+- [ ] `lv_switchgear_a` is `TRIPPED` (sticky). Because it IS the transfer point,
+      tripping it blocks **both** the utility path and the generator, so the whole
+      side's LV bus drops (`ups_a` + `cooling_a` lose input). The generator does
+      not rescue this — the open breaker is downstream of the transfer.
+- [ ] `ups_a` rides battery briefly, then the side's racks go `DEGRADED` → `FAULT`.
 - [ ] Side B remains normal.
 - [ ] Trainee can identify the fault boundary.
 
@@ -827,9 +839,12 @@ mosquitto_pub -h 192.168.4.1 -t "winter-river/mv_lv_transformer_a/control" -m "L
 Expected:
 
 - [ ] Transformer reports fault and high temperature.
-- [ ] Utility path to ATS is lost or derated according to the model.
-- [ ] Generator may pick up the side if utility loss is interpreted at the ATS
-      and generator is available.
+- [ ] The utility path feeding `lv_switchgear_a` is lost (its primary input dies).
+- [ ] The generator does NOT auto-pick-up a transformer-only fault — it starts on
+      a *utility* `OUTAGE`, not a transformer fault. With utility still `GRID_OK`,
+      `generator_a` stays `STANDBY` and `lv_switchgear_a` reports `NO_INPUT`, so
+      Side A drops. (Also command `utility_a STATUS:OUTAGE` if you want the gen to
+      transfer in.)
 - [ ] Side B remains normal.
 
 Recovery:
@@ -885,9 +900,9 @@ Questions:
 - What happens if generator startup exceeds UPS runtime?
 - Why do technicians monitor battery health during normal operation?
 
-### Scenario 9 - HV Switchgear Trip (Side Disconnect)
+### Scenario 9 - MV Switchgear Trip (Side Disconnect)
 
-Objective: show the upstream cut-off behavior of the HV main breaker — the
+Objective: show the upstream cut-off behavior of the MV main breaker — the
 fastest way to drop an entire side without touching the utility or generator.
 
 Trigger:
@@ -900,17 +915,20 @@ Expected:
 
 - [ ] `mv_switchgear_a` reports `TRIPPED` (sticky — survives re-energisation).
 - [ ] `hv_mv_transformer_a` drops to `NO_INPUT` (no upstream feed).
-- [ ] Cascade propagates down the side: `lv_switchgear_a`, `mv_lv_transformer_a`
-      lose voltage; `ats_a` falls back to `generator_a` (which spins up).
-- [ ] Once the generator is `RUNNING`, side-A racks recover via the ATS
-      secondary path. If the generator is forced FAULT first, the cascade
-      degenerates to Scenario 4.
-- [ ] Redundancy is briefly lost on Side A (utility path gone, `ups_a` on
-      battery), then restored to full 2N once the generator picks up and
-      `ups_a` is producing voltage again.
-- [ ] Trainee distinguishes "utility lost" (utility OUTAGE) from "we cut the
-      utility off" (MV switchgear TRIPPED) — both look similar downstream but
-      the diagnosis and recovery differ.
+- [ ] Cascade propagates down the side: `mv_lv_transformer_a` → `NO_INPUT`, and
+      `lv_switchgear_a` loses its utility-path feed.
+- [ ] The generator does NOT auto-start here: it watches *utility* state, and
+      `utility_a` is still `GRID_OK`, so `generator_a` stays `STANDBY`. With no
+      transformer feed and no running generator, `lv_switchgear_a` reports
+      `NO_INPUT` and Side A drops (`ups_a` rides battery → side-A racks
+      `DEGRADED` → `FAULT`). A tripped MV breaker is NOT interpreted as a utility
+      outage. (To force a generator transfer instead, also command
+      `utility_a STATUS:OUTAGE`.)
+- [ ] Side B remains normal.
+- [ ] Trainee distinguishes "utility lost" (utility OUTAGE → generator transfers
+      in at `lv_switchgear_a`) from "we cut the utility off downstream" (MV
+      switchgear TRIPPED → generator stays standby, side drops) — they look
+      similar at the racks but the generator's response and the recovery differ.
 
 Recovery (explicitly reclose the breaker):
 
@@ -1006,7 +1024,7 @@ mosquitto_pub -h 192.168.4.1 -t "winter-river/mv_lv_transformer_a/control" -m "L
 Expected:
 
 - [ ] `mv_lv_transformer_a` reports `WARNING` with elevated load and temp.
-- [ ] All 3 side-A racks remain `NORMAL` — `WARNING` doesn't trip the chain.
+- [ ] All 4 side-A racks remain `NORMAL` — `WARNING` doesn't trip the chain.
 - [ ] Push further to drive a real fault:
       `mosquitto_pub -t "winter-river/mv_lv_transformer_a/control" -m "STATUS:FAULT"`
       and observe the side-A cascade (matches Scenario 4 expectations).
@@ -1046,7 +1064,7 @@ Expected:
       `OVERHEATING`/`UNDERPRESSURED`.
 - [ ] Power upstream is unchanged — both UPS nodes still `NORMAL` and
       `2N_HEALTHY`; this is a cooling/thermal alarm, not a power alarm.
-- [ ] All 6 racks remain `NORMAL` (power is fine; they may report higher
+- [ ] All 8 racks remain `NORMAL` (power is fine; they may report higher
       `inlet_f` via thermal broadcast).
 - [ ] Trainee can articulate that thermal alarms have different urgency
       curves than power alarms — heat takes minutes to become critical
@@ -1177,14 +1195,14 @@ Steps:
 - [ ] Restore utilities to `GRID_OK`.
 - [ ] Reclose both MV switchgear nodes (`CLOSE STATUS:CLOSED`).
 - [ ] Restore generators to `STANDBY`.
-- [ ] Reclose LV switchgear.
+- [ ] Reclose LV switchgear (`CLOSE STATUS:CLOSED`) — confirm it returns to
+      `CLOSED` on the utility path (not `GENERATOR`/`NO_INPUT`).
 - [ ] Restore transformer status and temperature.
-- [ ] Restore ATS source to `UTILITY`.
 - [ ] Restore UPS input and battery level.
 - [ ] Restore cooling to nominal (`FANS_RUNNING:55 STATUS:NORMAL`) on both sides.
-- [ ] Restore all 6 server racks to `INPUT:480 STATUS:NORMAL`.
+- [ ] Restore all 8 server racks to `INPUT:480 STATUS:NORMAL`.
 - [ ] Confirm `./scripts/status.sh` shows all 24 nodes online with no faults,
-      both UPS nodes `NORMAL` (full 2N), all 6 racks `NORMAL`, and
+      both UPS nodes `NORMAL` (full 2N), all 8 racks `NORMAL`, and
       `facility/status` back to `mode:NORMAL`. This is your single sign-off
       check — if it's clean, the whole rig is consistent.
 - [ ] Run `./scripts/status.sh`.
@@ -1210,9 +1228,10 @@ Use these for oral checks, worksheet prompts, and demo discussion.
 
 ### 4.1 Topology And Identification
 
-1. Trace power from `utility_a` down through `mv_switchgear_a` →
-   `hv_mv_transformer_a` → `lv_switchgear_a` → `mv_lv_transformer_a` →
-   `ats_a` → `ups_a` → `server_rack_a{1..3}`. Where does cooling branch off?
+1. Trace power from `utility_a` down through `hv_mv_transformer_a` →
+   `mv_switchgear_a` → `mv_lv_transformer_a` → `lv_switchgear_a` →
+   `ups_a` → `server_rack_a{1..4}`. Where does cooling branch off, and where
+   does the generator tie in?
 2. What is the output voltage at each stage?
 3. Which nodes are duplicated on Side A and Side B (there should be 12 each)?
 4. Why are there **no** shared nodes in this topology? What changed between
@@ -1233,7 +1252,7 @@ Use these for oral checks, worksheet prompts, and demo discussion.
 4. Which failure removes redundancy but doesn't drop any rack? (Hint: think
    about utility loss with generator still healthy.)
 5. Which combination of failures drops half the racks but not the other half?
-6. Which combination drops all 6 racks at once? (Hint: with no shared node,
+6. Which combination drops all 8 racks at once? (Hint: with no shared node,
    this requires faults on both sides.)
 7. What is the difference between **power redundancy** (2N power feeds) and
    **workload redundancy** (multiple racks running mirrored workloads)? Which
@@ -1246,7 +1265,8 @@ Use these for oral checks, worksheet prompts, and demo discussion.
 
 ### 4.3 Failure Modes
 
-1. What does the ATS do when utility power is lost?
+1. What does the LV switchgear (the transfer point) do when utility power is
+   lost? What state does it report while the generator is starting vs running?
 2. Why does generator power not appear instantly?
 3. What bridges the generator startup gap?
 4. How is a breaker trip different from a utility outage?
@@ -1287,14 +1307,14 @@ Use these for oral checks, worksheet prompts, and demo discussion.
 4. A retained `OFFLINE` message will not clear. What do you check?
 5. A control command does nothing. What topic and payload do you verify?
 6. A generator never starts. Which upstream states and timers do you inspect?
-7. Only `server_rack_a1` is `FAULT`; `_a2`, `_a3` and all three
+7. Only `server_rack_a1` is `FAULT`; `_a2`, `_a3`, `_a4` and all four
    b-racks are `NORMAL`. What's the inspection order? (Hint: the side's
    UPS and chain are clearly fine — look at the rack-local CPU, inlet
    temp, or status_msg.)
-8. All 3 `server_rack_a*` are `FAULT` but all 3 `server_rack_b*` are
+8. All 4 `server_rack_a*` are `FAULT` but all 4 `server_rack_b*` are
    `NORMAL`. What's the inspection order? (Hint: side-A's `ups_a` /
-   `ats_a` / generator / utility / MV switchgear are the failure domain.)
-9. All 6 racks are `FAULT`. What's the inspection order? (Hint: this
+   `lv_switchgear_a` / generator / utility / MV switchgear are the failure domain.)
+9. All 8 racks are `FAULT`. What's the inspection order? (Hint: this
    requires faults on both sides — start with the broker and MQTT first
    to rule out a management-plane mirage, then sweep both sides upstream.)
 10. What information belongs in an incident handoff?
@@ -1317,17 +1337,20 @@ A full system run passes when all of these are true:
 - [ ] MQTT accepts status and control traffic.
 - [ ] LWT offline detection works for at least one unplug test.
 - [ ] Simulation engine propagates a Side A failure without affecting Side B.
-- [ ] Generator startup delay and ATS transfer are visible.
+- [ ] Generator startup delay and the LV switchgear transfer to generator
+      (`CLOSED` → `NO_INPUT` → `GENERATOR`) are visible.
 - [ ] UPS ride-through or battery state is visible.
-- [ ] All 3 `server_rack_b*` stay `NORMAL` during a Side A power failure;
-      all 3 `server_rack_a*` cascade to `FAULT` (block-redundant 2N
+- [ ] All 4 `server_rack_b*` stay `NORMAL` during a Side A power failure;
+      all 4 `server_rack_a*` cascade to `FAULT` (block-redundant 2N
       semantics — no rack-level dual feed).
 - [ ] A single-rack fault (`server_rack_a1` only) drops *that* rack to
-      `FAULT` while the other 5 stay `NORMAL` — proves workload-level
+      `FAULT` while the other 7 stay `NORMAL` — proves workload-level
       redundancy is independent of power-level redundancy.
-- [ ] All 6 racks fail or report no power during dual-side loss.
-- [ ] MV switchgear `TRIPPED` on one side cascades the same way as utility
-      OUTAGE on that side (after generator picks up, side recovers).
+- [ ] All 8 racks fail or report no power during dual-side loss.
+- [ ] MV switchgear `TRIPPED` on one side drops that side WITHOUT a generator
+      transfer (the generator watches *utility* state, which is still healthy) —
+      contrast with a utility `OUTAGE`, which DOES transfer the LV switchgear to
+      the generator. Recovery is an explicit `CLOSE` of the MV breaker.
 - [ ] `./scripts/status.sh` and the individual node telemetry agree within
       ~2 ticks of each induced scenario — per-side UPS health, rack states,
       and fault counts all match the live node states.
@@ -1339,7 +1362,8 @@ A full system run passes when all of these are true:
 - [ ] Broker-loss and WiFi-loss behavior are understood.
 - [ ] Grafana reflects at least one normal state and one fault state.
 - [ ] Recovery returns all required nodes to normal.
-- [ ] Trainee can answer the core 2N, ATS, UPS, cooling, and MQTT questions.
+- [ ] Trainee can answer the core 2N, transfer-point (LV switchgear), UPS,
+      cooling, and MQTT questions.
 
 ## Part 6 - Issue Log Template
 

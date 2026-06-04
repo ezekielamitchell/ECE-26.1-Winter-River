@@ -8,12 +8,15 @@ Diesel (or natural gas) generators are the backbone of a data center's backup po
 
 ## Nodes in This Topology
 
-| node_id       | Side | Rated Voltage | Parent | Child   |
-|---------------|------|---------------|--------|---------|
-| `generator_a` | A    | 480 V         | none   | `ats_a` |
-| `generator_b` | B    | 480 V         | none   | `ats_b` |
+| node_id       | Side | Rated Voltage | Parent | Child (as secondary feed) |
+|---------------|------|---------------|--------|---------------------------|
+| `generator_a` | A    | 480 V         | none   | `lv_switchgear_a`         |
+| `generator_b` | B    | 480 V         | none   | `lv_switchgear_b`         |
 
-The generator is an autonomous power source. It connects to the ATS as the secondary (backup) input and is not downstream of any other node in normal operation.
+The generator is an autonomous power source. It ties into the side's LV switchgear
+as the secondary (backup) input — the switchgear prefers the utility (MV/LV
+transformer) path and transfers to the generator when that path is lost. The
+generator is not downstream of any other node.
 
 ---
 

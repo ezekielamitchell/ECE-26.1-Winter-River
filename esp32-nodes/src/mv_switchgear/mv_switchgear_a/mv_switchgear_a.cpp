@@ -1,6 +1,8 @@
 // mv_switchgear_a.cpp — MV switchgear, Side A.
 // Operates on the 34.5 kV MV bus, downstream of hv_mv_transformer_a; its
-// output feeds mv_lv_transformer_a. States: CLOSED, OPEN, TRIPPED, FAULT
+// output feeds mv_lv_transformer_a.
+// States: CLOSED, NO_INPUT (unfed — clears when re-energised), OPEN
+// (operator), TRIPPED, FAULT. The broker owns the STATUS string.
 #include <winter_river.h>
 
 static const char *NODE_ID = "mv_switchgear_a";

@@ -8,14 +8,15 @@ Computer Room Air Conditioning (CRAC) and Computer Room Air Handling (CRAH) unit
 
 ## Nodes in This Topology
 
-| node_id     | Side | Rated Voltage | Parent  | Children |
-|-------------|------|---------------|---------|----------|
-| `cooling_a` | A    | 480 V AC      | `ats_a` | none     |
-| `cooling_b` | B    | 480 V AC      | `ats_b` | none     |
+| node_id     | Side | Rated Voltage | Parent            | Children |
+|-------------|------|---------------|-------------------|----------|
+| `cooling_a` | A    | 480 V AC      | `lv_switchgear_a` | none     |
+| `cooling_b` | B    | 480 V AC      | `lv_switchgear_b` | none     |
 
-Cooling is the mechanical branch off `ats` (parallel to UPS). Each side has
-its own 55-fan bank; combined nominal = 110 fans feeding the broker thermal
-model (`broker/thermal.py`).
+Cooling is the mechanical branch off the LV switchgear (parallel to the UPS), so
+it rides the same utility↔generator transfer the IT path does. Each side has its
+own 55-fan bank; combined nominal = 110 fans feeding the broker thermal model
+(`broker/thermal.py`).
 
 ---
 

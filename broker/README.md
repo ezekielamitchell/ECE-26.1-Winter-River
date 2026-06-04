@@ -33,19 +33,18 @@ WinterRiverEngine (broker/main.py)
 |------|----------|-----------|
 | `UTILITY` | `utility_a`, `utility_b` | Root nodes; `v_out` = 230 kV when `GRID_OK/SAG/SWELL`, 0 on `OUTAGE/FAULT/OFFLINE` |
 | `HV_MV_TRANSFORMER` | `hv_mv_transformer_a/b` | 230 kV → 34.5 kV step-down; passes when `NORMAL/WARNING`, 0 on `FAULT` |
-| `LV_SWITCHGEAR` | `lv_switchgear_a/b` | Passes parent voltage when `CLOSED`; 0 when `OPEN/TRIPPED/FAULT` |
+| `LV_SWITCHGEAR` | `lv_switchgear_a/b` | **Utility↔generator transfer point** (absorbed the ATS role). Primary = MV/LV transformer (utility) path → `CLOSED`; secondary = generator → `GENERATOR`; `NO_INPUT` when both dead (non-sticky); `OPEN/TRIPPED/FAULT` sticky. Output feeds UPS + cooling in parallel. |
 | `MV_LV_TRANSFORMER` | `mv_lv_transformer_a/b` | 34.5 kV → 480 V; passes when `NORMAL/WARNING`, 0 on `FAULT` |
-| `GENERATOR` | `generator_a`, `generator_b` | Standby while utility is live; 10-tick startup delay on utility loss; 480 V when `RUNNING` |
-| `ATS` | `ats_a`, `ats_b` | LV transfer switch. Prefers transformer (utility) path; falls back to generator; `OPEN` if both down. Output feeds UPS and cooling in parallel. |
-| `UPS` | `ups_a`, `ups_b` | Parent = ats; passes voltage with battery tracking; feeds the side's 3 server_racks |
-| `COOLING` | `cooling_a/b` | Parent = ats (mech branch). Fan bank (55 fans/side, 110 total) — drives broker thermal model |
-| `SERVER_RACK` | `server_rack_a1..a3`, `server_rack_b1..b3` | Single-fed from this side's UPS; `NORMAL` when UPS is on grid or recharging (`CHARGING`), `DEGRADED` only while UPS is `ON_BATTERY`, `FAULT` when UPS is down. Side-A failure kills all 3 side-A racks. |
+| `GENERATOR` | `generator_a`, `generator_b` | Standby while utility is live; 10-tick startup delay on utility loss; 480 V when `RUNNING`. Feeds the LV switchgear's secondary input. |
+| `UPS` | `ups_a`, `ups_b` | Parent = lv_switchgear; passes voltage with battery tracking; feeds the side's 4 server_racks |
+| `COOLING` | `cooling_a/b` | Parent = lv_switchgear (mech branch, rides the transfer). Fan bank (55 fans/side, 110 total) — drives broker thermal model |
+| `SERVER_RACK` | `server_rack_a1..a4`, `server_rack_b1..b4` | Single-fed from this side's UPS; `NORMAL` when UPS is on grid or recharging (`CHARGING`), `DEGRADED` only while UPS is `ON_BATTERY`, `FAULT` when UPS is down. Side-A failure kills all 4 side-A racks. |
 
 ---
 
 ## Topological Sort
 
-The engine uses **Kahn's BFS algorithm** so cascade propagation always visits parents before children — even with the dual-parent structure required by ATS and the 2N server rack.
+The engine uses **Kahn's BFS algorithm** so cascade propagation always visits parents before children — even with the dual-parent structure of the LV switchgear transfer point (primary = MV/LV transformer, secondary = generator).
 
 ```python
 def _topo_sort(self, nodes):
@@ -66,16 +65,16 @@ Each tick:    → gen_timer decrements, state = STARTING, v_out = 0
 Timer = 0     → state = RUNNING, v_out = 480 V
 ```
 
-This means the ATS output drops to 0 V for ~10 seconds before generator power arrives — exactly matching a real data centre emergency scenario where the UPS must carry the load during the gap.
+This means the LV switchgear output drops to 0 V (`NO_INPUT`) for ~10 seconds before it transfers to the generator (`GENERATOR`) — exactly matching a real data centre emergency scenario where the UPS must carry the load during the gap.
 
 ---
 
 ## Block-Redundant 2N
 
 Side A and Side B are two fully independent power chains. There is no shared
-rectifier — each side feeds its own 3 server racks single-sided. Redundancy
+rectifier — each side feeds its own 4 server racks single-sided. Redundancy
 is at the *block* level: if Side A loses utility AND its generator fails,
-all 3 side-A racks go FAULT; Side B continues unaffected.
+all 4 side-A racks go FAULT; Side B continues unaffected.
 
 Each side is "up" iff its UPS (`ups_a` / `ups_b`) is present and producing
 voltage — there is no shared convergence point to roll the two sides together.
@@ -164,10 +163,10 @@ Key tables:
 ```sql
 nodes (
     node_id              VARCHAR(50) PRIMARY KEY,
-    node_type            VARCHAR(30),     -- UTILITY, LV_SWITCHGEAR, GENERATOR, ATS, etc.
+    node_type            VARCHAR(30),     -- UTILITY, LV_SWITCHGEAR, GENERATOR, UPS, etc.
     side                 CHAR(1),         -- 'A' or 'B' (no shared nodes)
     parent_id            VARCHAR(50),     -- primary upstream node
-    secondary_parent_id  VARCHAR(50),     -- ATS generator input
+    secondary_parent_id  VARCHAR(50),     -- LV switchgear's generator input
     rated_voltage        FLOAT,
     v_ratio              FLOAT
 )

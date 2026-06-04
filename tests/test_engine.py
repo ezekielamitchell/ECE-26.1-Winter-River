@@ -61,20 +61,20 @@ class TestTopoSort:
         order = engine._topo_sort(nodes)
         assert order == ["a", "b", "c"]
 
-    def test_dual_parent_ats_after_both_sources(self, engine):
-        """ATS is the only dual-parent node in the new topology — primary =
-        transformer path, secondary = generator. Topo sort must place ATS
-        after both."""
+    def test_dual_parent_lv_switchgear_after_both_sources(self, engine):
+        """lv_switchgear is the dual-parent transfer node (it absorbed the ATS
+        role) — primary = MV/LV transformer path, secondary = generator. Topo
+        sort must place it after both sources."""
         nodes = {
-            "xfmr_a":      _node("xfmr_a",      "MV_LV_TRANSFORMER"),
-            "generator_a": _node("generator_a", "GENERATOR", side="a"),
-            "ats_a":       _node("ats_a",       "ATS",
-                                 parent_id="xfmr_a",
-                                 secondary_parent_id="generator_a"),
+            "mv_lv_transformer_a": _node("mv_lv_transformer_a", "MV_LV_TRANSFORMER"),
+            "generator_a":         _node("generator_a", "GENERATOR", side="a"),
+            "lv_switchgear_a":     _node("lv_switchgear_a", "LV_SWITCHGEAR",
+                                         parent_id="mv_lv_transformer_a",
+                                         secondary_parent_id="generator_a"),
         }
         order = engine._topo_sort(nodes)
-        assert order.index("ats_a") > order.index("xfmr_a")
-        assert order.index("ats_a") > order.index("generator_a")
+        assert order.index("lv_switchgear_a") > order.index("mv_lv_transformer_a")
+        assert order.index("lv_switchgear_a") > order.index("generator_a")
 
     def test_utility_scheduled_before_generator(self, engine):
         """Both are roots; broker prioritises UTILITY so generator can read it."""
@@ -140,11 +140,30 @@ class TestComputeNode:
         v, s = engine._compute_node(n, {"t": parent, "sw": n})
         assert v == 0.0 and s == sticky
 
-    def test_mv_switchgear_opens_when_unfed(self, engine):
+    def test_mv_switchgear_no_input_when_unfed(self, engine):
+        """Unfed reports the NON-sticky NO_INPUT (not OPEN), so the breaker
+        re-closes automatically when the upstream chain re-energises."""
         parent = _node("t", "HV_MV_TRANSFORMER", v_out=0.0, status_msg="NO_INPUT")
         n = _node("sw", "MV_SWITCHGEAR", parent_id="t")
         v, s = engine._compute_node(n, {"t": parent, "sw": n})
-        assert v == 0.0 and s == "OPEN"
+        assert v == 0.0 and s == "NO_INPUT"
+
+    def test_mv_switchgear_rerecloses_after_unfed(self, engine):
+        """NO_INPUT must clear once parent voltage returns (regression guard for
+        the OPEN latch that previously blocked utility recovery)."""
+        parent = _node("t", "HV_MV_TRANSFORMER", v_out=34500.0)
+        n = _node("sw", "MV_SWITCHGEAR", parent_id="t", status_msg="NO_INPUT")
+        v, s = engine._compute_node(n, {"t": parent, "sw": n})
+        assert v == 34500.0 and s == "CLOSED"
+
+    @pytest.mark.parametrize("sticky", ["OPEN", "TRIPPED", "FAULT"])
+    def test_mv_switchgear_operator_open_and_trips_are_sticky(self, engine, sticky):
+        """Operator OPEN and protective trips hold the breaker open even when
+        fed, until an explicit CLOSE / STATUS:CLOSED clears them."""
+        parent = _node("t", "HV_MV_TRANSFORMER", v_out=34500.0)
+        n = _node("sw", "MV_SWITCHGEAR", parent_id="t", status_msg=sticky)
+        v, s = engine._compute_node(n, {"t": parent, "sw": n})
+        assert v == 0.0 and s == sticky
 
     # HV_MV_TRANSFORMER — now fed directly from utility (no upstream switchgear)
     def test_hv_mv_transformer_steps_down(self, engine):
@@ -198,54 +217,78 @@ class TestComputeNode:
         v, s = engine._compute_node(gen, {"generator_z": gen})
         assert (v, s) == (480.0, "RUNNING")
 
-    # ATS — prefers primary (LV switchgear) over secondary (generator)
-    def test_ats_prefers_utility_path(self, engine):
-        prim = _node("sw", "LV_SWITCHGEAR", v_out=480.0)
-        sec  = _node("gen", "GENERATOR",    v_out=480.0)
-        ats  = _node("ats", "ATS", parent_id="sw", secondary_parent_id="gen")
-        v, s = engine._compute_node(ats, {"sw": prim, "gen": sec, "ats": ats})
-        assert (v, s) == (480.0, "UTILITY")
+    # LV_SWITCHGEAR transfer point — prefers the utility path (parent = MV/LV
+    # transformer) over the generator (secondary). Absorbed the former ATS role.
+    def test_lv_switchgear_on_utility_path(self, engine):
+        prim = _node("xfmr", "MV_LV_TRANSFORMER", v_out=480.0)
+        gen  = _node("gen",  "GENERATOR",         v_out=480.0)
+        sw   = _node("lv_switchgear_a", "LV_SWITCHGEAR",
+                     parent_id="xfmr", secondary_parent_id="gen")
+        v, s = engine._compute_node(sw, {"xfmr": prim, "gen": gen, "lv_switchgear_a": sw})
+        assert (v, s) == (480.0, "CLOSED")
 
-    def test_ats_falls_back_to_generator(self, engine):
-        prim = _node("sw", "LV_SWITCHGEAR", v_out=0.0)
-        sec  = _node("gen", "GENERATOR",    v_out=480.0)
-        ats  = _node("ats", "ATS", parent_id="sw", secondary_parent_id="gen")
-        v, s = engine._compute_node(ats, {"sw": prim, "gen": sec, "ats": ats})
+    def test_lv_switchgear_transfers_to_generator(self, engine):
+        prim = _node("xfmr", "MV_LV_TRANSFORMER", v_out=0.0)
+        gen  = _node("gen",  "GENERATOR",         v_out=480.0)
+        sw   = _node("lv_switchgear_a", "LV_SWITCHGEAR",
+                     parent_id="xfmr", secondary_parent_id="gen")
+        v, s = engine._compute_node(sw, {"xfmr": prim, "gen": gen, "lv_switchgear_a": sw})
         assert (v, s) == (480.0, "GENERATOR")
 
-    def test_ats_open_when_both_dead(self, engine):
-        prim = _node("sw", "LV_SWITCHGEAR", v_out=0.0)
-        sec  = _node("gen", "GENERATOR",    v_out=0.0)
-        ats  = _node("ats", "ATS", parent_id="sw", secondary_parent_id="gen")
-        v, s = engine._compute_node(ats, {"sw": prim, "gen": sec, "ats": ats})
-        assert (v, s) == (0.0, "OPEN")
+    def test_lv_switchgear_no_input_when_both_sources_dead(self, engine):
+        prim = _node("xfmr", "MV_LV_TRANSFORMER", v_out=0.0)
+        gen  = _node("gen",  "GENERATOR",         v_out=0.0)
+        sw   = _node("lv_switchgear_a", "LV_SWITCHGEAR",
+                     parent_id="xfmr", secondary_parent_id="gen")
+        v, s = engine._compute_node(sw, {"xfmr": prim, "gen": gen, "lv_switchgear_a": sw})
+        assert (v, s) == (0.0, "NO_INPUT")
 
-    # UPS — charge / discharge state machine. Parent = ATS in the
-    # new topology (no lv_dist between ats and ups).
+    def test_lv_switchgear_recloses_on_utility_after_no_input(self, engine):
+        """NO_INPUT is not sticky: when the utility path returns the switchgear
+        re-closes — this is what lets utility recovery cascade downstream."""
+        prim = _node("xfmr", "MV_LV_TRANSFORMER", v_out=480.0)
+        sw   = _node("lv_switchgear_a", "LV_SWITCHGEAR",
+                     parent_id="xfmr", status_msg="NO_INPUT")
+        v, s = engine._compute_node(sw, {"xfmr": prim, "lv_switchgear_a": sw})
+        assert (v, s) == (480.0, "CLOSED")
+
+    @pytest.mark.parametrize("sticky", ["OPEN", "TRIPPED", "FAULT"])
+    def test_lv_switchgear_sticky_states_block_both_sources(self, engine, sticky):
+        """Operator OPEN and protective trips drop the LV bus even when a source
+        (utility OR generator) is live."""
+        prim = _node("xfmr", "MV_LV_TRANSFORMER", v_out=480.0)
+        gen  = _node("gen",  "GENERATOR",         v_out=480.0)
+        sw   = _node("lv_switchgear_a", "LV_SWITCHGEAR", parent_id="xfmr",
+                     secondary_parent_id="gen", status_msg=sticky)
+        v, s = engine._compute_node(sw, {"xfmr": prim, "gen": gen, "lv_switchgear_a": sw})
+        assert (v, s) == (0.0, sticky)
+
+    # UPS — charge / discharge state machine. Parent = lv_switchgear (the LV
+    # transfer point) now that the ATS node is gone.
     def test_ups_charging_then_normal(self, engine):
-        parent = _node("ats", "ATS", v_out=480.0)
-        ups = _node("ups", "UPS", parent_id="ats", battery_level=98)
-        v, s = engine._compute_node(ups, {"ats": parent, "ups": ups})
+        parent = _node("lv_switchgear_a", "LV_SWITCHGEAR", v_out=480.0)
+        ups = _node("ups", "UPS", parent_id="lv_switchgear_a", battery_level=98)
+        v, s = engine._compute_node(ups, {"lv_switchgear_a": parent, "ups": ups})
         assert (v, s) == (480.0, "CHARGING") and ups["battery_level"] == 99
-        v, s = engine._compute_node(ups, {"ats": parent, "ups": ups})
+        v, s = engine._compute_node(ups, {"lv_switchgear_a": parent, "ups": ups})
         assert (v, s) == (480.0, "NORMAL") and ups["battery_level"] == 100
         # already at 100 — clamp, don't overflow
-        v, s = engine._compute_node(ups, {"ats": parent, "ups": ups})
+        v, s = engine._compute_node(ups, {"lv_switchgear_a": parent, "ups": ups})
         assert ups["battery_level"] == 100
 
     def test_ups_on_battery_then_fault(self, engine):
-        parent = _node("ats", "ATS", v_out=0.0)
-        ups = _node("ups", "UPS", parent_id="ats", battery_level=1)
-        v, s = engine._compute_node(ups, {"ats": parent, "ups": ups})
+        parent = _node("lv_switchgear_a", "LV_SWITCHGEAR", v_out=0.0)
+        ups = _node("ups", "UPS", parent_id="lv_switchgear_a", battery_level=1)
+        v, s = engine._compute_node(ups, {"lv_switchgear_a": parent, "ups": ups})
         assert (v, s) == (480.0, "ON_BATTERY") and ups["battery_level"] == 0
-        v, s = engine._compute_node(ups, {"ats": parent, "ups": ups})
+        v, s = engine._compute_node(ups, {"lv_switchgear_a": parent, "ups": ups})
         assert (v, s) == (0.0, "FAULT")
 
-    # COOLING
+    # COOLING — parent = lv_switchgear (mech branch, parallel to the UPS)
     def test_cooling_off_with_no_input(self, engine):
-        parent = _node("ats", "ATS", v_out=0.0)
-        n = _node("cool", "COOLING", parent_id="ats")
-        assert engine._compute_node(n, {"ats": parent, "cool": n}) == (0.0, "OFF")
+        parent = _node("lv_switchgear_a", "LV_SWITCHGEAR", v_out=0.0)
+        n = _node("cool", "COOLING", parent_id="lv_switchgear_a")
+        assert engine._compute_node(n, {"lv_switchgear_a": parent, "cool": n}) == (0.0, "OFF")
 
     # SERVER_RACK — single-fed from this side's UPS (no PATH_A/PATH_B).
     def test_server_rack_normal_when_ups_normal(self, engine):
