@@ -104,20 +104,20 @@ cp config.sample.toml config.toml
 
 ```toml
 [mqtt]
-host      = "192.168.4.1"
-port      = 1883
-keepalive = 60
+broker_host = "192.168.4.1"   # use "localhost" if running on the Pi itself
+broker_port = 1883
+keepalive   = 60
 
 [database]
-host     = "localhost"
-port     = 5432
-database = "sensor_data"
-user     = "postgres"
-password = "your_password"
+dsn = "host=localhost dbname=winter_river user=postgres password=your_password"
 
 [simulation]
 tick_rate = 1.0    # seconds per simulation tick
 ```
+
+If `python main.py` exits with “broker config not found,” run the copy command
+above on the Pi. Fresh clones do not include `broker/config.toml` because it can
+contain local passwords.
 
 **Optional** — add this section to enable InfluxDB writes:
 
@@ -155,7 +155,7 @@ The engine will:
 Run `scripts/init_db.sql` to initialise:
 
 ```bash
-psql -U postgres -d sensor_data -f scripts/init_db.sql
+psql -U postgres -d winter_river -f ../scripts/init_db.sql
 ```
 
 Key tables:

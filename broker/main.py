@@ -35,8 +35,53 @@ except ImportError:
 
 # ── CONFIGURATION ─────────────────────────────────────────────────────────────
 
-_cfg_path = os.path.join(os.path.dirname(__file__), "config.toml")
-_cfg = toml.load(_cfg_path)
+_BROKER_DIR = os.path.abspath(os.path.dirname(__file__))
+_DEFAULT_CFG_PATH = os.path.join(_BROKER_DIR, "config.toml")
+_SAMPLE_CFG_PATH = os.path.join(_BROKER_DIR, "config.sample.toml")
+
+
+def _load_config():
+    cfg_path = os.environ.get("WINTER_RIVER_CONFIG", _DEFAULT_CFG_PATH)
+    if not os.path.exists(cfg_path):
+        raise SystemExit(
+            "Winter River broker config not found:\n"
+            f"  {cfg_path}\n\n"
+            "Create a local config from the tracked sample, then set the "
+            "PostgreSQL password/DSN for this Pi:\n"
+            f"  cd {_BROKER_DIR}\n"
+            "  cp config.sample.toml config.toml\n"
+            "  nano config.toml\n\n"
+            "broker/config.toml is intentionally git-ignored so each Pi keeps "
+            "its own local credentials."
+        )
+
+    try:
+        cfg = toml.load(cfg_path)
+    except toml.TomlDecodeError as exc:
+        raise SystemExit(f"Invalid TOML in {cfg_path}: {exc}") from exc
+
+    required_keys = (
+        ("mqtt", "broker_host"),
+        ("mqtt", "broker_port"),
+        ("database", "dsn"),
+    )
+    missing = []
+    for section_name, key in required_keys:
+        section = cfg.get(section_name)
+        if not isinstance(section, dict) or key not in section:
+            missing.append(f"{section_name}.{key}")
+
+    if missing:
+        raise SystemExit(
+            "Winter River broker config is missing required key(s): "
+            f"{', '.join(missing)}\n"
+            f"Check {cfg_path} against the sample at {_SAMPLE_CFG_PATH}."
+        )
+
+    return cfg
+
+
+_cfg = _load_config()
 
 MQTT_BROKER = _cfg["mqtt"]["broker_host"]
 MQTT_PORT   = _cfg["mqtt"]["broker_port"]

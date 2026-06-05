@@ -680,3 +680,44 @@ def test_module_loads_with_seeded_config():
     """
     assert hasattr(broker_main, "WinterRiverEngine")
     assert broker_main.MQTT_PORT == 1883
+
+
+def test_load_config_missing_file_explains_pi_setup(monkeypatch, tmp_path):
+    missing_cfg = tmp_path / "config.toml"
+    monkeypatch.setenv("WINTER_RIVER_CONFIG", str(missing_cfg))
+
+    with pytest.raises(SystemExit) as excinfo:
+        broker_main._load_config()
+
+    msg = str(excinfo.value)
+    assert "Winter River broker config not found" in msg
+    assert "cp config.sample.toml config.toml" in msg
+    assert "git-ignored" in msg
+
+
+def test_load_config_rejects_legacy_schema(monkeypatch, tmp_path):
+    legacy_cfg = tmp_path / "config.toml"
+    legacy_cfg.write_text(
+        """
+[mqtt]
+host = "192.168.4.1"
+port = 1883
+
+[database]
+host = "localhost"
+port = 5432
+database = "winter_river"
+user = "postgres"
+password = "changeme"
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("WINTER_RIVER_CONFIG", str(legacy_cfg))
+
+    with pytest.raises(SystemExit) as excinfo:
+        broker_main._load_config()
+
+    msg = str(excinfo.value)
+    assert "mqtt.broker_host" in msg
+    assert "mqtt.broker_port" in msg
+    assert "database.dsn" in msg
