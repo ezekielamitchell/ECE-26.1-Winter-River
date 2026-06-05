@@ -94,8 +94,8 @@ lib_deps =
 
 ### Pi-side diagnostics
 ```bash
-./scripts/status.sh                                              # services + DHCP leases per node
-iw dev wlan0 station dump | grep -c Station                      # associated-station count (capacity ceiling check)
+./scripts/status.sh                                              # services + WiFi station count + DHCP + retained MQTT
+iw dev wlan0 station dump | grep -c Station                      # raw associated-station count (capacity ceiling check)
 nmcli -g 802-11-wireless.band connection show winter-river-hotspot  # must print 'bg' (2.4 GHz)
 dmesg | grep -i brcmfmac | tail                                  # driver association rejects / "no space for new sta"
 sudo journalctl -u mosquitto -n 50                               # broker health

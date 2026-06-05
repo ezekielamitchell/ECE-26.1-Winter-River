@@ -64,7 +64,7 @@ apt-get install -y \
     ntpsec ntpsec-ntpdate \
     postgresql postgresql-client libpq-dev \
     python3 python3-pip python3-venv \
-    wget gpg curl dirmngr
+    wget gpg curl dirmngr iw
 
 # ── InfluxDB 2 + Telegraf ────────────────────────────────────────────────────
 echo "Installing InfluxDB 2 and Telegraf..."

@@ -42,6 +42,44 @@ extract_state() {
     echo "$1" | grep -oE '"state":"[^"]*"|"status":"[^"]*"' | head -1 | cut -d'"' -f4
 }
 
+print_wifi_stations() {
+    if ! command -v iw &>/dev/null; then
+        yellow "  (iw not installed; cannot read WiFi association table)"
+        return
+    fi
+
+    local stations count
+    stations=$(iw dev "$IFACE" station dump 2>/dev/null || true)
+    if [ -z "$stations" ]; then
+        yellow "  (none associated at WiFi layer)"
+        return
+    fi
+
+    count=$(echo "$stations" | grep -c '^Station ' || true)
+    echo "  Count: $count"
+    echo "$stations" | awk '
+        /^Station / {
+            if (mac) {
+                printf "  %-17s signal=%-8s tx=%-12s rx=%-12s connected=%s\n", mac, signal, tx, rx, connected
+            }
+            mac=$2; signal="?"; tx="?"; rx="?"; connected="?"
+        }
+        /signal:/ { signal=$2 " " $3 }
+        /tx bitrate:/ { tx=$3 " " $4 }
+        /rx bitrate:/ { rx=$3 " " $4 }
+        /connected time:/ { connected=$3 " " $4 }
+        END {
+            if (mac) {
+                printf "  %-17s signal=%-8s tx=%-12s rx=%-12s connected=%s\n", mac, signal, tx, rx, connected
+            }
+        }
+    '
+
+    if [ "$count" -ge 8 ]; then
+        yellow "  Note: if more ESP32s are reboot-looping at this count, suspect Pi AP station capacity."
+    fi
+}
+
 # ── MQTT live tail mode ───────────────────────────────────────────────────────
 
 if [ "${1:-}" = "mqtt" ]; then
@@ -90,6 +128,11 @@ if nmcli connection show --active 2>/dev/null | grep -q "$CON_NAME"; then
 else
     red    "  ✘  NOT running — start with: sudo ./scripts/setup_hotspot.sh"
 fi
+echo ""
+
+# ── Associated WiFi stations (association table, before DHCP/MQTT) ───────────
+bold "Associated WiFi stations:"
+print_wifi_stations
 echo ""
 
 # ── Connected clients (DHCP leases) ──────────────────────────────────────────
