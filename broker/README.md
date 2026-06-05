@@ -124,12 +124,13 @@ contain local passwords.
 ```toml
 [influxdb]
 url    = "http://localhost:8086"
-token  = "my-super-secret-auth-token"
+token_env = "INFLUXDB_TOKEN"          # preferred; also checks INFLUX_TOKEN / INFLUXDB_ADMIN_TOKEN
+# token = "replace_with_real_influxdb_token"
 org    = "iot-project"
 bucket = "mqtt_metrics"
 ```
 
-If `[influxdb]` is absent or `influxdb-client` is not installed, the engine runs in MQTT-only mode without error.
+If `[influxdb]` is absent, no token is found, or `influxdb-client` is not installed, the engine runs in MQTT-only mode without error. On a Pi provisioned with `scripts/setup_pi.sh`, set `INFLUXDB_TOKEN` from the same token used for Grafana/Telegraf or replace `token` with the real InfluxDB token; leaving the sample token in place against an already-initialized InfluxDB will produce `401 unauthorized` writes.
 
 ---
 

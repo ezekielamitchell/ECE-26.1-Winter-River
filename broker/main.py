@@ -98,6 +98,13 @@ GEN_STARTUP_TICKS = 10
 # See _handle_weather_control.
 DEFAULT_WEATHER_PRESET = 1
 
+# Status topics published by the broker for Telegraf/Grafana. They intentionally
+# are not rows in the DB topology and must not be treated as ESP32 telemetry.
+VIRTUAL_STATUS_NODE_IDS = {"facility", "weather"}
+
+# Common environment variable names used by setup scripts and service defaults.
+INFLUX_TOKEN_ENV_VARS = ("INFLUXDB_TOKEN", "INFLUX_TOKEN", "INFLUXDB_ADMIN_TOKEN")
+
 # Mark a node OFFLINE if no telemetry arrives in this window. Covers silent
 # ESP32 hangs that don't fire the MQTT LWT — telemetry interval is 5 s, so
 # 3 missed cycles + slack catches a hung node without flapping under jitter.
@@ -108,6 +115,29 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 log = logging.getLogger("winter-river")
+
+
+def _resolve_influx_token(icfg):
+    """Resolve an InfluxDB token from env first, then config fallback."""
+    configured = icfg.get("token_env")
+    env_names = []
+    if isinstance(configured, str):
+        env_names.append(configured)
+    elif isinstance(configured, (list, tuple)):
+        env_names.extend(str(name) for name in configured)
+    env_names.extend(INFLUX_TOKEN_ENV_VARS)
+
+    seen = set()
+    for name in env_names:
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        token = os.environ.get(name)
+        if token:
+            return token
+
+    return icfg.get("token")
+
 
 # ── ENGINE ────────────────────────────────────────────────────────────────────
 
@@ -174,17 +204,24 @@ class WinterRiverEngine:
         self._influx_bucket    = None
         if HAS_INFLUX and "influxdb" in _cfg:
             icfg = _cfg["influxdb"]
-            try:
-                self._influx_client  = InfluxDBClient(
-                    url=icfg["url"], token=icfg["token"], org=icfg["org"]
+            token = _resolve_influx_token(icfg)
+            if not token:
+                log.warning(
+                    "InfluxDB config present but no token found; direct broker "
+                    "InfluxDB writes disabled"
                 )
-                self._influx_write_api = self._influx_client.write_api(
-                    write_options=SYNCHRONOUS
-                )
-                self._influx_bucket = icfg["bucket"]
-                log.info("InfluxDB connected to %s", icfg["url"])
-            except Exception as exc:
-                log.warning("InfluxDB init failed (continuing without): %s", exc)
+            else:
+                try:
+                    self._influx_client  = InfluxDBClient(
+                        url=icfg["url"], token=token, org=icfg["org"]
+                    )
+                    self._influx_write_api = self._influx_client.write_api(
+                        write_options=SYNCHRONOUS
+                    )
+                    self._influx_bucket = icfg["bucket"]
+                    log.info("InfluxDB connected to %s", icfg["url"])
+                except Exception as exc:
+                    log.warning("InfluxDB init failed (continuing without): %s", exc)
 
         log.info("Winter River Engine initialised")
 
@@ -225,11 +262,20 @@ class WinterRiverEngine:
             self._handle_weather_control(msg)
             return
 
+        parts = msg.topic.split("/")
+        if (
+            len(parts) == 3
+            and parts[0] == "winter-river"
+            and parts[2] == "status"
+            and parts[1] in VIRTUAL_STATUS_NODE_IDS
+        ):
+            return
+
         # No DB → no node_id validation possible → drop the message.
         if self.db is None:
             return
         try:
-            node_id = msg.topic.split("/")[1]
+            node_id = parts[1]
 
             # Reject messages from node_ids not in the topology cache. On miss,
             # refresh the cache once (covers re-seeding mid-session) before

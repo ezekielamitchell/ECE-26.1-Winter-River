@@ -20,7 +20,8 @@ level = "INFO"
 # Leave this section absent or commented to disable InfluxDB writes from broker.
 # NOTE: Telegraf also writes raw MQTT telemetry to InfluxDB independently.
 url    = "http://localhost:8086"
-token  = "my-super-secret-auth-token"   # change for production
+token_env = "INFLUXDB_TOKEN"           # preferred; also checks INFLUX_TOKEN and INFLUXDB_ADMIN_TOKEN
+# token = "replace_with_real_influxdb_token"  # fallback if no env var is set
 org    = "iot-project"
 bucket = "mqtt_metrics"
 

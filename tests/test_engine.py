@@ -458,6 +458,13 @@ def ingest_engine():
 
 
 class TestOnMessage:
+    @pytest.mark.parametrize("node_id", ["facility", "weather"])
+    def test_virtual_status_messages_bypass_db_validation(self, ingest_engine, node_id):
+        msg = _make_msg(f"winter-river/{node_id}/status", '{"status":"ONLINE"}')
+        ingest_engine.on_message(None, None, msg)
+        assert ingest_engine._exec_log == []
+        ingest_engine.db.commit.assert_not_called()
+
     def test_unknown_node_id_is_rejected_without_writes(self, ingest_engine):
         msg = _make_msg("winter-river/ghost/status", '{"status":"ONLINE"}')
         ingest_engine.on_message(None, None, msg)
@@ -721,3 +728,28 @@ password = "changeme"
     assert "mqtt.broker_host" in msg
     assert "mqtt.broker_port" in msg
     assert "database.dsn" in msg
+
+
+def test_resolve_influx_token_prefers_configured_env(monkeypatch):
+    for name in broker_main.INFLUX_TOKEN_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("WR_TEST_INFLUX_TOKEN", "from-env")
+    assert broker_main._resolve_influx_token({
+        "token_env": "WR_TEST_INFLUX_TOKEN",
+        "token": "from-config",
+    }) == "from-env"
+
+
+def test_resolve_influx_token_checks_setup_env_names(monkeypatch):
+    for name in broker_main.INFLUX_TOKEN_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("INFLUXDB_ADMIN_TOKEN", "from-grafana-env")
+    assert broker_main._resolve_influx_token({"token": "from-config"}) == \
+        "from-grafana-env"
+
+
+def test_resolve_influx_token_falls_back_to_config(monkeypatch):
+    for name in broker_main.INFLUX_TOKEN_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+    assert broker_main._resolve_influx_token({"token": "from-config"}) == \
+        "from-config"
