@@ -3,6 +3,8 @@
 Utility scripts for setting up and operating the Winter River IoT system on
 Raspberry Pi 5.
 
+> **Project status:** ✅ Completed and delivered to Amazon Web Services (AWS) as the ECE 26.1 senior capstone (June 2026). Archived in its final, as-delivered state; no longer under active development.
+
 ## Contents
 
 | File | Description |
@@ -90,6 +92,6 @@ Creates four tables and seeds all 24 active nodes:
 - **`historical_data`** — JSONB log of every incoming MQTT telemetry message.
 - **`facility_metrics`** — per-tick output of `broker/thermal.py` (PUE, hot aisle, airflow, pressures).
 
-Seeded chain per side: `utility → hv_mv_transformer → mv_switchgear → mv_lv_transformer → lv_switchgear → ups → server_rack_{1..4}`, with `generator` as `lv_switchgear`'s secondary parent (the utility↔generator transfer point) and `cooling` branching off `lv_switchgear` in parallel with ups.
+Seeded chain per side: `utility → hv_mv_transformer → mv_switchgear → mv_lv_transformer → lv_switchgear → ups → server_rack_a{1..4}` (Side A; `server_rack_b{1..4}` on Side B), with `generator` as `lv_switchgear`'s secondary parent (the utility↔generator transfer point) and `cooling` branching off `lv_switchgear` in parallel with ups.
 
 Seeds the static `nodes` topology for all 24 boards (12 per side) and an initial `live_status` row for each.

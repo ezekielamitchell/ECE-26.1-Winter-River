@@ -4,24 +4,29 @@ Offload the WiFi radio to a dedicated 2.4 GHz access point so the full fleet can
 connect at once. **No firmware changes** — nodes still reach the broker and NTP
 at `192.168.4.1`.
 
+> **Project status:** ✅ Completed and delivered to Amazon Web Services (AWS) as the ECE 26.1 senior capstone (June 2026). This is the recommended runbook for driving the **full 24-node fleet**, since the Pi 5's onboard WiFi reliably holds only ~8 nodes at once.
+
 ## Why
 
-The Raspberry Pi 5's onboard Broadcom radio (brcmfmac SoftAP) caps associated
-stations at **roughly half the fleet (~10–13)**. With 24 boards racing to
-associate, whichever side wins fills the slot table and **locks the other side
-out**, and the last-to-associate boards (the server racks, at the bottom of each
-side's boot chain) lose the race and reboot-loop. This is the hardware ceiling
-called out in `CLAUDE.md` Key Design Decisions #7 and #15 — *"an external
-AP/dongle is the next lever, not firmware."*
+The Raspberry Pi 5's onboard Broadcom radio (brcmfmac SoftAP) reliably holds
+only **about 8 associated stations** — roughly a third of the fleet — because the
+WiFi chip has limited on-chip RAM ([Raspberry Pi forum
+t=348157](https://forums.raspberrypi.com/viewtopic.php?t=348157)). With 24 boards
+racing to associate, the slot table fills and the surplus boards (the server
+racks, at the bottom of each side's boot chain) lose the race and reboot-loop.
+This is the hardware ceiling called out in `CLAUDE.md` Key Design Decisions #7
+and #15 — *"an external AP/dongle is the next lever, not firmware."*
 
 Confirm you're hitting it: `./scripts/status.sh` shows the **Associated WiFi
-stations: Count** stuck around 10–13, never 24. Powering on only ~8 boards →
+stations: Count** stuck around ~8, never 24. Powering on only ~8 boards →
 all connect; adding more → the surplus get rejected at the same threshold every
 time (a clean count ceiling, not random RF dropouts).
 
 The onboard cap lives in Broadcom's closed firmware — it **cannot** be raised
-past the hardware limit via `hostapd`/`wpa_supplicant` `max_num_sta`. The fix is
-more radio capacity.
+past the hardware limit via `hostapd`/`wpa_supplicant` `max_num_sta`. A cut-down
+`cyfmac43455-sdio-minimal.bin` firmware lifts it to ~19 (per the forum thread
+above) at the cost of features; for a reliable full-24 fleet the real fix is more
+radio capacity — an external AP.
 
 ## Topology (recommended)
 
@@ -90,12 +95,14 @@ This:
 Verify:
 
 ```bash
-./scripts/status.sh
+sudo ./scripts/setup_hotspot.sh status
 ```
 
-Expect the hotspot block to read **EXTERNAL AP (DHCP/MQTT/NTP on eth0)** and the
-station/lease count to climb toward 24 as boards join — including all eight
-`server_rack_*` nodes.
+Expect it to report **EXTERNAL AP (DHCP/MQTT/NTP on eth0)** and the station/lease
+count to climb toward 24 as boards join — including all eight `server_rack_*`
+nodes. (`./scripts/status.sh` only checks the onboard `winter-river-hotspot`
+profile, so in external mode it shows that profile as down — use
+`setup_hotspot.sh status` for the wired-mode view.)
 
 ## Switch back to onboard mode
 

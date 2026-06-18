@@ -4,6 +4,8 @@ This guide walks you through setting up Grafana for the Winter River tabletop
 data center simulator. It is written for a fresh Raspberry Pi install and keeps
 the steps simple enough to follow during a capstone demo prep session.
 
+> **Project status:** ✅ Completed and delivered to Amazon Web Services (AWS) as the ECE 26.1 senior capstone (June 2026). Archived in its final, as-delivered state; no longer under active development.
+
 The current Winter River monitoring stack runs as native Raspberry Pi services:
 
 - Mosquitto receives MQTT telemetry from ESP32 nodes.

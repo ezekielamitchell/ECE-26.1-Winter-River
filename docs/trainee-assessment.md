@@ -99,7 +99,7 @@ The instructor cuts power from the grid on Side A.
 - The `utility_a` screen now reads: `________________`
 - Watch `generator_a` for about 10 seconds. Its status changes to:
   `____________` → `____________`
-- Did the Side A servers (`rack_a1/a2/a3`) **stay running**?  `Yes / No`
+- Did the Side A servers (`rack_a1/a2/a3/a4`) **stay running**?  `Yes / No`
 
 > **What you just saw:** the **UPS battery** held the servers up for the few
 > seconds it took the **generator** to start. That's the backup chain working.
@@ -107,8 +107,8 @@ The instructor cuts power from the grid on Side A.
 ### Demo 2 — A whole side is lost
 The instructor knocks out **both** the grid **and** the generator on Side A.
 
-- The three **Side A** racks (`rack_a1/a2/a3`) now read: `________________`
-- The three **Side B** racks (`rack_b1/b2/b3`) read: `________________`
+- The four **Side A** racks (`rack_a1/a2/a3/a4`) now read: `________________`
+- The four **Side B** racks (`rack_b1/b2/b3/b4`) read: `________________`
 - In one sentence, why is Side B still fine?
 
   `__________________________________________________________`
@@ -204,7 +204,7 @@ mosquitto_pub -h 192.168.4.1 -t "winter-river/utility_a/control" -m "STATUS:GRID
 # TRIGGER
 mosquitto_pub -h 192.168.4.1 -t "winter-river/utility_a/control"   -m "STATUS:OUTAGE VOLT:0"
 mosquitto_pub -h 192.168.4.1 -t "winter-river/generator_a/control" -m "STATUS:FAULT RPM:0"
-# Expect: rack_a1/a2/a3 -> [FAULT] (no power); rack_b1/b2/b3 stay [NORMAL].
+# Expect: rack_a1/a2/a3/a4 -> [FAULT] (no power); rack_b1/b2/b3/b4 stay [NORMAL].
 # RECOVER
 mosquitto_pub -h 192.168.4.1 -t "winter-river/generator_a/control" -m "STATUS:STANDBY RPM:0 FUEL:85"
 mosquitto_pub -h 192.168.4.1 -t "winter-river/utility_a/control"   -m "STATUS:GRID_OK VOLT:230.0 FREQ:60.0"

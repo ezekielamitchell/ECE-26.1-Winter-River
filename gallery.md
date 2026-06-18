@@ -12,7 +12,7 @@ description: >-
 ### Field Deployment
 
 {% hint style="info" %}
-Photos from site visits, sensor deployments, and river monitoring setups along the target waterway.
+Photos from lab-bench bring-up, full-row baseplate assembly, and on-site capstone demos throughout the project lifecycle.
 {% endhint %}
 
 ***

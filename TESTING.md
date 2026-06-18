@@ -10,12 +10,14 @@ This runbook is intended for three moments:
 - Guided lab sessions where trainees operate the simulator.
 - Maintainer verification after firmware, broker, database, or dashboard changes.
 
+> **Project status:** ✅ Completed and delivered to Amazon Web Services (AWS) as the ECE 26.1 senior capstone (June 2026). This repository is archived in its final, as-delivered state and is no longer under active development. This runbook is retained for bring-up, demos, and any future maintainer.
+
 Related references:
 
-- [Deployment guide](docs/deployment.md)
-- [Communication protocols](docs/communication-protocols.md)
-- [2N redundancy guide](docs/2n-redundancy.md)
+- [Project overview, topology & power chain](README.md)
+- [External-AP runbook (full 24-node fleet)](deploy/EXTERNAL_AP.md)
 - [ESP32 troubleshooting](esp32-nodes/TROUBLESHOOTING.md)
+- [Capstone technical report (protocols & 2N detail)](docs/ECEGR4880%20Technical%20Report.pdf)
 
 ## Operating Rules
 
@@ -31,6 +33,11 @@ Related references:
   and letting the broker compute downstream state.
 - Before a public demo, rehearse the exact scenarios and recovery commands that
   will be shown.
+- **Concurrent-node ceiling:** on the Pi 5's onboard WiFi only ~8 ESP32 nodes
+  associate reliably at once (WiFi-chip RAM limit — ref
+  <https://forums.raspberrypi.com/viewtopic.php?t=348157>). For a full-24 bring-up
+  use an external access point ([deploy/EXTERNAL_AP.md](deploy/EXTERNAL_AP.md)). See
+  [ESP32 troubleshooting](esp32-nodes/TROUBLESHOOTING.md) condition A3.
 
 ## Run Record
 
@@ -48,6 +55,7 @@ WiFi SSID:
 Broker/database topology used:
 Physical nodes installed:
 Baseplate slots populated (of 24):
+Nodes connected concurrently (onboard WiFi caps ~8):
 Boards exceeding baseplate (none — 24 active = 24 slots):
 Firmware environments flashed:
 Grafana dashboard used:
@@ -1397,10 +1405,10 @@ Owner:
 Before handing the rig to a non-developer:
 
 - [ ] Part 1 pre-flight completed.
-- [ ] Part 2 smoke tests completed (including 2.9 BMS aggregator test).
+- [ ] Part 2 smoke tests completed (including 2.9 Grafana pipeline test).
 - [ ] At least Scenarios 0, 1, 4 (full side failure), 4b (single-rack
       failure), 9 (MV switchgear trip), 10 (cooling loss), 14 (broker loss),
-      and 18 (recovery) rehearsed today.
+      and 17 (full recovery) rehearsed today.
 - [ ] Recovery commands for rehearsed scenarios are queued or printed.
 - [ ] Grafana dashboard is open and showing live data.
 - [ ] Printed copy of this checklist is available.

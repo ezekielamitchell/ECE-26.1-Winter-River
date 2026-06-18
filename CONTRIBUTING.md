@@ -1,6 +1,8 @@
 # Contributing to ECE-26.1-Winter-River
 
-Thank you for your interest in contributing to this IoT environmental monitoring system! This document provides guidelines for contributing to the project.
+Thank you for your interest in contributing to this tabletop data center power-infrastructure training simulator! This document provides guidelines for contributing to the project.
+
+> **Project status:** Winter River was completed and delivered to Amazon Web Services (AWS) as the ECE 26.1 senior capstone (June 2026) and is archived in its final, as-delivered state. It is no longer under active development; this guide is retained for reference and for anyone forking the project.
 
 ## Table of Contents
 
@@ -70,9 +72,9 @@ pip install -r requirements-dev.txt  # Development dependencies
 #### ESP32 Development
 
 ```bash
-cd esp/node1
-pio run  # Build firmware
-pio test  # Run tests
+cd esp32-nodes
+pio run                 # Build all node firmware
+pio run -e utility_a    # Build a single node
 ```
 
 ## Development Process
@@ -102,13 +104,12 @@ git checkout -b feature/your-feature-name
 4. Run tests locally:
 
 ```bash
-# Python tests
-cd broker
+# Python tests (run from the repo root)
 pytest tests/
 
-# ESP32 tests
-cd esp/node1
-pio test
+# ESP32 firmware build
+cd esp32-nodes
+pio run
 ```
 
 5. Commit your changes with clear messages:
@@ -156,7 +157,7 @@ def process_sensor_data(data: dict, node_id: str) -> bool:
 
 ### C++ (ESP32)
 
-- Follow ESP-IDF style guidelines
+- Follow the Arduino-framework C++ conventions used in `esp32-nodes/lib/winter_river/`
 - Use meaningful variable names
 - Comment complex logic
 - Use const and constexpr where appropriate
@@ -188,33 +189,30 @@ float readTemperature() {
 
 ### Python Tests
 
-Run the full test suite:
+Run the full test suite (from the repo root):
 
 ```bash
-cd broker
 pytest tests/ -v
 ```
 
 Run with coverage:
 
 ```bash
-pytest tests/ --cov=src --cov-report=html
+pytest tests/ --cov=broker --cov-report=html
 ```
 
 ### ESP32 Tests
 
 ```bash
-cd esp/node1
+cd esp32-nodes
 pio test -v
 ```
 
-### Integration Tests
+### Integration / System Tests
 
-```bash
-# Ensure the native monitoring stack is running on the Pi (setup_pi.sh)
-# then run integration tests against the live services
-pytest tests/integration/
-```
+There is no separate `tests/integration/` suite. End-to-end verification is
+manual and documented in [TESTING.md](TESTING.md) — the full bring-up checklist
+and failure-scenario runbook (run on the Pi after `setup_pi.sh`).
 
 ## Pull Request Process
 
@@ -222,7 +220,7 @@ pytest tests/integration/
 
 2. **Test Thoroughly**: All tests must pass before submitting
 
-3. **Update CHANGELOG**: Add a summary of your changes
+3. **Summarize changes**: Clearly describe what changed and why in the PR description
 
 4. **Fill PR Template**: Provide clear description of changes and motivation
 
@@ -269,7 +267,7 @@ Add screenshots for UI changes
 ## Checklist
 - [ ] Tests pass locally
 - [ ] Documentation updated
-- [ ] CHANGELOG updated
+- [ ] PR description explains what changed and why
 - [ ] Code follows style guidelines
 - [ ] Commits are descriptive
 ```
@@ -303,7 +301,7 @@ What actually happens
 **Environment**
 - OS: [e.g., Raspberry Pi OS Bullseye]
 - Python Version: [e.g., 3.9.2]
-- ESP-IDF Version: [e.g., 4.4.2]
+- PlatformIO / Arduino-ESP32 version: [e.g., espressif32 @ 6.x]
 
 **Logs**
 ```text

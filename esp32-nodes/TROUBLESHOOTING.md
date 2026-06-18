@@ -69,9 +69,9 @@ lib_deps =
 ### A. WiFi association failures (`WiFi FAILED` / `WiFi LOST`)
 1. **AP not up yet** — the Pi boots in 30–60 s, an ESP32 in ~1 s. On a simultaneous cold start every node fails until the hotspot appears. **Power the Pi first.**
 2. **AP on 5 GHz / wrong band** — ESP32 is 2.4 GHz only; if the hotspot isn't `band=bg ch6` it is invisible to every node.
-3. **AP capacity ceiling** — the Pi's onboard radio reliably holds only ~8–10 stations in AP mode. With 24 nodes the station table saturates and associations get rejected/dropped. **Most likely cause when many nodes fail at once; not firmware-fixable.**
+3. **AP capacity ceiling** — the Pi's onboard radio reliably holds only **~8** stations in AP mode (limited WiFi-chip RAM; ref [Raspberry Pi forum t=348157](https://forums.raspberrypi.com/viewtopic.php?t=348157)). With 24 nodes the station table saturates and associations get rejected/dropped — so **only ~8 nodes run reliably at once.** **Most likely cause when many nodes fail at once; not firmware-fixable** — bring up all 24 via an external AP-capable adapter or a dedicated 2.4 GHz router (`band bg`, ch6), or a cut-down `cyfmac43455-sdio-minimal.bin` Pi firmware (~19 stations). See [../deploy/EXTERNAL_AP.md](../deploy/EXTERNAL_AP.md) for the external-AP runbook.
 4. **WPA-handshake thundering herd** — many boards associating in the same instant overwhelm the AP (partly mitigated by the per-board connect stagger).
-5. **SSID/password mismatch** — `SSID`/`PASSWORD` in `lib/winter_river/src/winter_river.h` must match `scripts/setup_hotspot.sh` exactly.
+5. **SSID/password mismatch** — `SSID`/`PASSWORD` in `lib/winter_river/src/winter_river.h` must match `../scripts/setup_hotspot.sh` exactly.
 6. **Security mismatch** — nodes require WPA-PSK (`setMinSecurity(WIFI_AUTH_WPA_PSK)`); a WPA3/SAE-only AP is rejected.
 7. **Weak signal / RF congestion** — low RSSI (distance, metal baseplate) or a busy channel 6.
 8. **DHCP failure** — associates but never gets an IP (dnsmasq down, lease pool exhausted, packets lost). `WiFi.status()` never reaches `WL_CONNECTED`, so it looks like an association failure.
@@ -89,7 +89,7 @@ lib_deps =
 7. **Port 1883 blocked** — firewall. Unlikely on a default Pi.
 
 ### C. Connects fine but looks dead (not a connect failure)
-1. **Unknown `node_id`** — the broker drops telemetry from IDs not seeded in the `nodes` table ("Ignoring MQTT message from unknown node_id"). OLED shows `MQTT:OK` but nothing flows downstream. Re-seed via `scripts/init_db.sql`.
+1. **Unknown `node_id`** — the broker drops telemetry from IDs not seeded in the `nodes` table ("Ignoring MQTT message from unknown node_id"). OLED shows `MQTT:OK` but nothing flows downstream. Re-seed via `../scripts/init_db.sql`.
 2. **Stale-node sweep** — a telemetry gap > 20 s (`STALE_NODE_THRESHOLD_SEC`) marks the node OFFLINE in the DB even while MQTT is alive.
 
 ### Pi-side diagnostics

@@ -2,6 +2,8 @@
 
 `broker/main.py` is the **WinterRiverEngine** — the central simulation brain for ECE 26.1 Winter River. It connects to Mosquitto, subscribes to all node telemetry, runs a topology-aware cascade simulation at 1 Hz, and publishes computed power states back to every node via MQTT control commands. Optionally it also writes every tick to InfluxDB for Grafana visualisation.
 
+> **Project status:** ✅ Completed and delivered to Amazon Web Services (AWS) as the ECE 26.1 senior capstone (June 2026). This engine is archived in its final, as-delivered state and is no longer under active development.
+
 ---
 
 ## Architecture
@@ -19,7 +21,7 @@ WinterRiverEngine (broker/main.py)
     ├── _load_topology()     PostgreSQL → in-memory node graph
     ├── _topo_sort()         Kahn's BFS — respects secondary_parent_id
     ├── _tick()              1 Hz cascade propagation loop
-    │     ├── node type handlers (12 types)
+    │     ├── node type handlers (9 types)
     │     ├── publish control commands → MQTT
     │     └── write_to_influx() → InfluxDB (optional)
     └── PostgreSQL live_status updates
@@ -33,6 +35,7 @@ WinterRiverEngine (broker/main.py)
 |------|----------|-----------|
 | `UTILITY` | `utility_a`, `utility_b` | Root nodes; `v_out` = 230 kV when `GRID_OK/SAG/SWELL`, 0 on `OUTAGE/FAULT/OFFLINE` |
 | `HV_MV_TRANSFORMER` | `hv_mv_transformer_a/b` | 230 kV → 34.5 kV step-down; passes when `NORMAL/WARNING`, 0 on `FAULT` |
+| `MV_SWITCHGEAR` | `mv_switchgear_a/b` | 34.5 kV MV-bus breaker (downstream of HV/MV xfmr); passes when fed, 0 on `OPEN/TRIPPED/FAULT` (sticky) or `NO_INPUT` (non-sticky). Feeds the MV/LV transformer. |
 | `LV_SWITCHGEAR` | `lv_switchgear_a/b` | **Utility↔generator transfer point** (absorbed the ATS role). Primary = MV/LV transformer (utility) path → `CLOSED`; secondary = generator → `GENERATOR`; `NO_INPUT` when both dead (non-sticky); `OPEN/TRIPPED/FAULT` sticky. Output feeds UPS + cooling in parallel. |
 | `MV_LV_TRANSFORMER` | `mv_lv_transformer_a/b` | 34.5 kV → 480 V; passes when `NORMAL/WARNING`, 0 on `FAULT` |
 | `GENERATOR` | `generator_a`, `generator_b` | Standby while utility is live; 10-tick startup delay on utility loss; 480 V when `RUNNING`. Feeds the LV switchgear's secondary input. |

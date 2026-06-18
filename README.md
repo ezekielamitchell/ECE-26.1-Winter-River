@@ -6,7 +6,11 @@
 
 <p align="center">Team: Leilani Gonzalez, Ton Dam Lam (Adam), William McDonald, Ezekiel A. Mitchell, Keshav Verma<br>{lgonzalez1, tlam, wmcdonald, emitchell4, kverma1}@seattleu.edu</p>
 
-<p align="center"><a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a> <a href="https://www.espressif.com/en/products/socs/esp32"><img src="https://img.shields.io/badge/platform-ESP32-green.svg" alt="Platform"></a> <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.9+-blue.svg" alt="Python"></a></p>
+<p align="center"><a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a> <a href="https://www.espressif.com/en/products/socs/esp32"><img src="https://img.shields.io/badge/platform-ESP32-green.svg" alt="Platform"></a> <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.9+-blue.svg" alt="Python"></a> <img src="https://img.shields.io/badge/status-completed%20%E2%80%A2%20delivered%20to%20AWS-success.svg" alt="Status"></p>
+
+***
+
+> **Status — Completed & delivered to AWS (June 2026).** Winter River was delivered to Amazon Web Services as the ECE 26.1 senior capstone and is archived in its final, as-delivered state — it is no longer under active development. One operational caveat carried into the final build: on the Raspberry Pi 5's onboard WiFi, only about **8 ESP32 nodes connect reliably at the same time** (see *[Hardware Note — Concurrent-Node Limit](#hardware-note--concurrent-node-limit-raspberry-pi-5-onboard-wifi)* below).
 
 ***
 
@@ -66,16 +70,30 @@ By combining physical modularity (plug-and-play components on a custom PCB basep
 | Simulation engine (`broker/main.py`) | Topological sort + cascade logic      | ✅ Achieved |
 | PostgreSQL schema (24 nodes)         | `secondary_parent_id`, block-redundant 2N | ✅ Achieved |
 
-### Spring Quarter 2026
+### Spring Quarter 2026 (Final Delivery)
 
 | Metric                          | Target                                      | Status     |
 | ------------------------------- | ------------------------------------------- | ---------- |
-| Full block-redundant 2N hardware| 24 physical ESP32 nodes (exact fit on 24-slot baseplate) | 🔲 Planned |
-| 3+ automated failure scenarios  | Utility loss, UPS switchover, cooling fault | 🔲 Planned |
-| Grafana dashboard deployed      | Real-time visualization at :3000            | 🔲 Planned |
-| InfluxDB / Telegraf integration | MQTT → InfluxDB live pipeline               | 🔲 Planned |
-| Documentation complete          | User + technical manuals                    | 🔲 Planned |
-| AWS delivery                    | Functional prototype delivered              | 🔲 Planned |
+| Full block-redundant 2N firmware/topology | 24 ESP32 nodes (≤8 concurrent on Pi onboard WiFi — see note) | ✅ Delivered |
+| 3+ automated failure scenarios  | Utility loss, UPS switchover, cooling fault | ✅ Delivered |
+| Grafana dashboard deployed      | Real-time visualization at :3000            | ✅ Delivered |
+| InfluxDB / Telegraf integration | MQTT → InfluxDB live pipeline               | ✅ Delivered |
+| Documentation complete          | README, CLAUDE.md, TESTING.md + technical report | ✅ Delivered |
+| AWS delivery                    | Functional prototype delivered to AWS (June 2026) | ✅ Delivered |
+
+> **Note on the hardware target:** the firmware, simulation engine, and database all support the full 24-node build, but the Raspberry Pi 5's onboard WiFi caps reliable operation at ~8 simultaneous nodes. Running all 24 at once requires an external access point — see the [Hardware Note](#hardware-note--concurrent-node-limit-raspberry-pi-5-onboard-wifi) below.
+
+***
+
+## Hardware Note — Concurrent-Node Limit (Raspberry Pi 5 Onboard WiFi)
+
+The full Winter River topology defines **24 ESP32 boards** (12 per side), and the firmware, simulation engine, and PostgreSQL schema all support all 24. In the **as-delivered** configuration, however, **only about 8 nodes connect and run reliably at the same time** — because every node associates to the Raspberry Pi 5's *onboard* WiFi in access-point mode.
+
+The Pi's onboard Broadcom/Cypress WiFi chip has limited on-chip RAM, and in AP (hotspot) mode the stock firmware reliably holds only **~8 associated stations**. Beyond that ceiling the station table saturates and further associations are rejected or dropped — which appears as `WiFi FAILED` / `WiFi LOST` across many boards at once (see [esp32-nodes/TROUBLESHOOTING.md](esp32-nodes/TROUBLESHOOTING.md), condition **A3**). This is a hardware/firmware limit of the Pi's radio, **not** a defect in the node firmware (which already staggers and jitters its connect/retry to avoid a thundering-herd handshake).
+
+**Reference:** Raspberry Pi forum — [onboard WiFi AP client limit](https://forums.raspberrypi.com/viewtopic.php?t=348157). Limited WiFi-chip RAM caps AP-mode stations at roughly 8; a cut-down `cyfmac43455-sdio-minimal.bin` firmware raises it to ~19, and anything beyond that calls for an external access point.
+
+**Running all 24 at once:** drive the nodes from an external AP-capable WiFi adapter or a dedicated 2.4 GHz router (`band bg`, channel 6) instead of the Pi's onboard radio. No firmware, broker, or database changes are required — only the access point changes. See **[deploy/EXTERNAL_AP.md](deploy/EXTERNAL_AP.md)** for the step-by-step runbook.
 
 ***
 
@@ -103,7 +121,8 @@ ECE-26.1-Winter-River/
 │   └── requirements-dev.txt           # Dev: pytest, black, flake8, mypy
 ├── deploy/                            # Raspberry Pi systemd units & setup
 │   ├── mosquitto_setup.sh             # Configures Mosquitto (TCP 1883, anonymous, persistence)
-│   └── winter-river-hotspot.service   # Systemd unit — Pi 2.4 GHz access point
+│   ├── winter-river-hotspot.service   # Systemd unit — Pi 2.4 GHz access point
+│   └── EXTERNAL_AP.md                 # Runbook: external AP for the full 24-node fleet (onboard WiFi caps ~8)
 ├── docs/
 │   ├── ECEGR4880 Technical Report.pdf # Capstone formal deliverable
 │   └── trainee-assessment.md          # Printable post-workshop test for non-technical trainees

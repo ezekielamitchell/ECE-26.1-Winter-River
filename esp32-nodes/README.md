@@ -4,6 +4,8 @@ PlatformIO firmware for the 24 ESP32 nodes in the ECE 26.1 Winter River simulato
 
 > **Slot budget:** the baseplate has 24 USB-C slots; this firmware tree defines 24 active boards (12 Side A + 12 Side B) — a perfect fit with no overflow.
 
+> **Project status:** ✅ Completed and delivered to Amazon Web Services (AWS) as the ECE 26.1 senior capstone (June 2026). This firmware is archived in its final, as-delivered state and is no longer under active development.
+
 ---
 
 ## Network Configuration
@@ -38,6 +40,18 @@ sudo systemctl start mosquitto
 ```
 
 > **2.4 GHz required:** ESP32 is 2.4 GHz-only. The hotspot is forced to `band bg` channel 6. If nodes fail to connect, verify with `nmcli -g 802-11-wireless.band connection show winter-river-hotspot` → must return `bg`.
+
+---
+
+## Concurrent-Node Limit (Raspberry Pi 5 Onboard WiFi)
+
+The full topology defines **24 ESP32 boards** (12 per side), and this firmware, the simulation engine, and the PostgreSQL schema all support all 24. In the **as-delivered** configuration, however, **only about 8 nodes connect and run reliably at the same time** — because every node associates to the Raspberry Pi 5's *onboard* WiFi in access-point mode.
+
+The Pi's onboard Broadcom/Cypress WiFi chip has limited on-chip RAM, and in AP (hotspot) mode the stock firmware reliably holds only **~8 associated stations**. Beyond that ceiling the station table saturates and further associations are rejected or dropped — which appears as `WiFi FAILED` / `WiFi LOST` across many boards at once (see [TROUBLESHOOTING.md](TROUBLESHOOTING.md), condition **A3**). This is a hardware/firmware limit of the Pi's radio, **not** a defect in the node firmware (which already staggers and jitters its connect/retry to avoid a thundering-herd handshake).
+
+**Reference:** Raspberry Pi forum — [onboard WiFi AP client limit](https://forums.raspberrypi.com/viewtopic.php?t=348157). Limited WiFi-chip RAM caps AP-mode stations at roughly 8; a cut-down `cyfmac43455-sdio-minimal.bin` firmware raises it to ~19, and anything beyond that calls for an external access point.
+
+**To run all 24 nodes at once,** drive them from an external AP-capable WiFi adapter or a dedicated 2.4 GHz router (`band bg`, channel 6) instead of the Pi's onboard radio. No firmware, broker, or database changes are required — only the access point changes. See **[../deploy/EXTERNAL_AP.md](../deploy/EXTERNAL_AP.md)** for the step-by-step runbook.
 
 ---
 
@@ -221,7 +235,7 @@ mosquitto_pub -h 192.168.4.1 -t "winter-river/utility_a/control" -m "STATUS:OUTA
 For per-node control commands, see the `README.md` inside each component type directory:
 
 - [`src/utility/README.md`](src/utility/README.md)
-- [`src/mv_switchgear/`](src/mv_switchgear/) (no per-component README yet — see `CLAUDE.md` §8 for the control schema)
+- [`src/mv_switchgear/README.md`](src/mv_switchgear/README.md)
 - [`src/hv_mv_transformer/README.md`](src/hv_mv_transformer/README.md)
 - [`src/lv_switchgear/README.md`](src/lv_switchgear/README.md)
 - [`src/mv_lv_transformer/README.md`](src/mv_lv_transformer/README.md)
