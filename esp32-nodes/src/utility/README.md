@@ -1,8 +1,8 @@
-# Utility Grid — `utility_a` / `utility_b`
+# Utility Grid: `utility_a` / `utility_b`
 
 ## Real-World Role
 
-The utility feed is the primary power source for a data center — high-voltage AC power delivered from the regional electrical grid (typically 115 kV–230 kV in North America) through a substation to the facility's point of common coupling (PCC). Utility power is the cheapest and most stable source under normal operating conditions, and reliability targets for Tier III/IV data centers require utility uptime of 99.982% or greater. Any sag, swell, or outage at this point cascades through the entire downstream power chain. Metering at this boundary is also used for utility billing and power quality compliance reporting.
+The utility feed is the primary power source for a data center: high-voltage AC power delivered from the regional electrical grid (typically 115 kV-230 kV in North America) through a substation to the facility's point of common coupling (PCC). Utility power is the cheapest and most stable source under normal operating conditions, and reliability targets for Tier III/IV data centers require utility uptime of 99.982% or greater. Any sag, swell, or outage at this point cascades through the entire downstream power chain. Metering at this boundary is also used for utility billing and power quality compliance reporting.
 
 ---
 
@@ -35,11 +35,11 @@ Topic: `winter-river/<node_id>/status`
 
 | State     | Meaning                                                             |
 |-----------|---------------------------------------------------------------------|
-| `GRID_OK` | Normal operation — voltage and frequency within nominal tolerances  |
-| `SAG`     | Voltage dropped to 88–90% of nominal (230 kV)                      |
+| `GRID_OK` | Normal operation, voltage and frequency within nominal tolerances  |
+| `SAG`     | Voltage dropped to 88-90% of nominal (230 kV)                      |
 | `SWELL`   | Voltage risen to 110%+ of nominal                                   |
-| `OUTAGE`  | Voltage at or near 0 — no power being delivered                     |
-| `FAULT`   | Frequency outside acceptable range (59.3–60.7 Hz)                  |
+| `OUTAGE`  | Voltage at or near 0, no power being delivered                     |
+| `FAULT`   | Frequency outside acceptable range (59.3-60.7 Hz)                  |
 
 ---
 
@@ -51,8 +51,8 @@ Topic: `winter-river/<node_id>/control`
 |------------------|-----------------|------------------------------------------------------------------------|
 | `STATUS:<state>` | `STATUS:OUTAGE` | Forces state; auto-adjusts voltage (OUTAGE → 0 kV, GRID_OK → 230 kV) |
 | `VOLT:<kv>`      | `VOLT:184.0`    | Sets output voltage; derives state from ratio vs. nominal              |
-| `FREQ:<hz>`      | `FREQ:58.8`     | Sets AC frequency; outside 59.3–60.7 Hz triggers FAULT                |
-| `LOAD:<pct>`     | `LOAD:45`       | Sets load percentage (display only — no downstream firmware effect)    |
+| `FREQ:<hz>`      | `FREQ:58.8`     | Sets AC frequency; outside 59.3-60.7 Hz triggers FAULT                |
+| `LOAD:<pct>`     | `LOAD:45`       | Sets load percentage (display only, no downstream firmware effect)    |
 
 ---
 
@@ -63,7 +63,7 @@ Topic: `winter-river/<node_id>/control`
 | `v_out` < 0.1 kV                      | `OUTAGE`        |
 | `v_out` < 207 kV (< 90% of 230 kV)   | `SAG`           |
 | `v_out` > 253 kV (> 110% of 230 kV)  | `SWELL`         |
-| `freq_hz` outside 59.3–60.7 Hz       | `FAULT`         |
+| `freq_hz` outside 59.3-60.7 Hz       | `FAULT`         |
 | All conditions nominal                | `GRID_OK`       |
 
 ---

@@ -9,7 +9,7 @@ Raspberry Pi 5.
 
 | File | Description |
 |------|-------------|
-| `setup_pi.sh` | Full Pi bootstrap — installs and configures every native service |
+| `setup_pi.sh` | Full Pi bootstrap, installs and configures every native service |
 | `setup_hotspot.sh` | Creates the `WinterRiver-AP` 2.4 GHz WiFi access point |
 | `status.sh` | Live node and service health check |
 | `init_db.sql` | Database schema for the digital twin (node topology and live status) |
@@ -20,7 +20,7 @@ Raspberry Pi 5.
 
 ### Full Pi Setup
 
-Run once on a fresh Raspberry Pi after cloning the repo. Re-running is safe —
+Run once on a fresh Raspberry Pi after cloning the repo. Re-running is safe;
 all steps are idempotent.
 
 ```bash
@@ -43,8 +43,8 @@ Performs end-to-end provisioning in this order:
 8. Copies `grafana/provisioning/` → `/etc/grafana/provisioning/`
 9. Copies `grafana/dashboards/` → `/var/lib/grafana/dashboards/`
 10. Writes `/etc/default/grafana-server` with admin credentials and token, restarts Grafana
-11. Calls `deploy/mosquitto_setup.sh` — configures Mosquitto with TCP `:1883` and WebSocket `:9001`
-12. Calls `setup_hotspot.sh start` — brings up the `WinterRiver-AP` WiFi AP
+11. Calls `deploy/mosquitto_setup.sh`: configures Mosquitto with TCP `:1883` and WebSocket `:9001`
+12. Calls `setup_hotspot.sh start`: brings up the `WinterRiver-AP` WiFi AP
 13. Configures NTP to serve time to the `192.168.4.0/24` subnet (used by ESP32 nodes)
 14. Enables all services for auto-boot via systemd
 
@@ -87,10 +87,10 @@ psql -U <user> -d <database> -f scripts/init_db.sql
 
 Creates four tables and seeds all 24 active nodes:
 
-- **`nodes`** — static topology (12 Side A + 12 Side B), parent/child links, voltage ratios. `secondary_parent_id` carries the LV switchgear's generator (backup) feed.
-- **`live_status`** — current digital twin state (presence, voltage in/out, status_msg, battery_level, gen_timer) — one row per node.
-- **`historical_data`** — JSONB log of every incoming MQTT telemetry message.
-- **`facility_metrics`** — per-tick output of `broker/thermal.py` (PUE, hot aisle, airflow, pressures).
+- **`nodes`:** static topology (12 Side A + 12 Side B), parent/child links, voltage ratios. `secondary_parent_id` carries the LV switchgear's generator (backup) feed.
+- **`live_status`:** current digital twin state (presence, voltage in/out, status_msg, battery_level, gen_timer), one row per node.
+- **`historical_data`:** JSONB log of every incoming MQTT telemetry message.
+- **`facility_metrics`:** per-tick output of `broker/thermal.py` (PUE, hot aisle, airflow, pressures).
 
 Seeded chain per side: `utility → hv_mv_transformer → mv_switchgear → mv_lv_transformer → lv_switchgear → ups → server_rack_a{1..4}` (Side A; `server_rack_b{1..4}` on Side B), with `generator` as `lv_switchgear`'s secondary parent (the utility↔generator transfer point) and `cooling` branching off `lv_switchgear` in parallel with ups.
 

@@ -10,7 +10,7 @@
 
 ***
 
-> **Status — Completed & delivered to AWS (June 2026).** Winter River was delivered to Amazon Web Services as the ECE 26.1 senior capstone and is archived in its final, as-delivered state — it is no longer under active development. One operational caveat carried into the final build: on the Raspberry Pi 5's onboard WiFi, only about **8 ESP32 nodes connect reliably at the same time** (see *[Hardware Note — Concurrent-Node Limit](#hardware-note--concurrent-node-limit-raspberry-pi-5-onboard-wifi)* below).
+> **Status: Completed & delivered to AWS (June 2026).** Winter River was delivered to Amazon Web Services as the ECE 26.1 senior capstone and is archived in its final, as-delivered state; it is no longer under active development. One operational caveat carried into the final build: on the Raspberry Pi 5's onboard WiFi, only about **8 ESP32 nodes connect reliably at the same time** (see *[Hardware Note: Concurrent-Node Limit](#hardware-note--concurrent-node-limit-raspberry-pi-5-onboard-wifi)* below).
 
 ***
 
@@ -20,7 +20,7 @@
 
 The project addresses a growing industry need: as of 2025, the U.S. operates over 5,400 active data centers with data center employment growing 60% from 2016 to 2023, yet qualified personnel continue to fall short of demand. More than half of U.S. data center operators report difficulty hiring qualified candidates, particularly for specialized skills in power distribution, thermal management, and infrastructure systems.
 
-Winter River provides a physical, interactive learning environment where students, new engineers, and operations staff can experiment with data center configurations, observe system interdependencies, and practice emergency response scenarios in a safe, controlled setting. Each component module simulates real data center equipment — from utility power and generators through HV/MV and MV/LV transformers, their downstream switchgear (the LV switchgear doubling as the utility↔generator transfer point), UPS units, and 8 single-fed server racks — creating an accurate representation of **block-redundant 2N** power distribution where Side A and Side B are two fully independent chains feeding 4 racks each.
+Winter River provides a physical, interactive learning environment where students, new engineers, and operations staff can experiment with data center configurations, observe system interdependencies, and practice emergency response scenarios in a safe, controlled setting. Each component module simulates real data center equipment, from utility power and generators through HV/MV and MV/LV transformers, their downstream switchgear (the LV switchgear doubling as the utility↔generator transfer point), UPS units, and 8 single-fed server racks, creating an accurate representation of **block-redundant 2N** power distribution where Side A and Side B are two fully independent chains feeding 4 racks each.
 
 The system leverages embedded IoT architecture with ESP32 microcontrollers in each component, MQTT communication protocols, and a Raspberry Pi 5 central controller to enable real-time simulation of power flow, thermal conditions, and system failures. Visual feedback through OLED displays on each component and an optional dashboard interface provides immediate understanding of system states and cascading effects.
 
@@ -34,7 +34,7 @@ By combining physical modularity (plug-and-play components on a custom PCB basep
 * ESP32-Based Smart Components: Each data center component (generators, switchgear, transformers, UPS, server racks) contains an ESP32-WROOM-32 microcontroller with an integrated OLED display showing real-time operational parameters (voltage, current, power consumption, temperature, fault status).
 * MQTT Publish-Subscribe Communication: Industry-standard MQTT protocol enables scalable, low-bandwidth communication between all components. ESP32 nodes publish sensor data and receive commands through a central Mosquitto broker, mirroring real industrial IoT architectures.
 * Raspberry Pi 5 Simulation Engine: Central controller calculates and broadcasts system-wide power flow, thermal conditions, and failure propagation in real-time. Implements 2N redundancy logic, cumulative rack loading calculations, and coordinated failure scenarios.
-* Block-Redundant 2N Topology: Two fully independent power chains (Side A and Side B), each feeding 4 single-sided server racks. Side-A failure kills all 4 side-A racks while side-B continues — modelling the side/block redundancy used in many real hyperscale halls.
+* Block-Redundant 2N Topology: Two fully independent power chains (Side A and Side B), each feeding 4 single-sided server racks. Side-A failure kills all 4 side-A racks while side-B continues, modelling the side/block redundancy used in many real hyperscale halls.
 * Scenario-Based Training: Automated failure scenarios including utility power loss with generator startup delays, UPS switchover events, cooling system failures with progressive thermal warnings, overload conditions leading to circuit breaker trips, and component removal/hot-swap detection.
 
 ***
@@ -62,7 +62,7 @@ By combining physical modularity (plug-and-play components on a custom PCB basep
 
 | Metric                               | Target                                | Status     |
 | ------------------------------------ | ------------------------------------- | ---------- |
-| Proof-of-concept nodes operational   | 6–12 ESP32 nodes with MQTT            | ✅ Achieved |
+| Proof-of-concept nodes operational   | 6-12 ESP32 nodes with MQTT            | ✅ Achieved |
 | PCB design completed and ordered     | Custom power distribution PCB         | ✅ Achieved |
 | Firmware architecture established    | Shared `winter_river` ESP32 helper + active node matrix | ✅ Achieved |
 | Mosquitto MQTT broker running on Pi  | port 1883, anonymous, persistence     | ✅ Achieved |
@@ -74,26 +74,26 @@ By combining physical modularity (plug-and-play components on a custom PCB basep
 
 | Metric                          | Target                                      | Status     |
 | ------------------------------- | ------------------------------------------- | ---------- |
-| Full block-redundant 2N firmware/topology | 24 ESP32 nodes (≤8 concurrent on Pi onboard WiFi — see note) | ✅ Delivered |
+| Full block-redundant 2N firmware/topology | 24 ESP32 nodes (≤8 concurrent on Pi onboard WiFi, see note) | ✅ Delivered |
 | 3+ automated failure scenarios  | Utility loss, UPS switchover, cooling fault | ✅ Delivered |
 | Grafana dashboard deployed      | Real-time visualization at :3000            | ✅ Delivered |
 | InfluxDB / Telegraf integration | MQTT → InfluxDB live pipeline               | ✅ Delivered |
 | Documentation complete          | README, CLAUDE.md, TESTING.md + technical report | ✅ Delivered |
 | AWS delivery                    | Functional prototype delivered to AWS (June 2026) | ✅ Delivered |
 
-> **Note on the hardware target:** the firmware, simulation engine, and database all support the full 24-node build, but the Raspberry Pi 5's onboard WiFi caps reliable operation at ~8 simultaneous nodes. Running all 24 at once requires an external access point — see the [Hardware Note](#hardware-note--concurrent-node-limit-raspberry-pi-5-onboard-wifi) below.
+> **Note on the hardware target:** the firmware, simulation engine, and database all support the full 24-node build, but the Raspberry Pi 5's onboard WiFi caps reliable operation at ~8 simultaneous nodes. Running all 24 at once requires an external access point; see the [Hardware Note](#hardware-note--concurrent-node-limit-raspberry-pi-5-onboard-wifi) below.
 
 ***
 
-## Hardware Note — Concurrent-Node Limit (Raspberry Pi 5 Onboard WiFi)
+## Hardware Note: Concurrent-Node Limit (Raspberry Pi 5 Onboard WiFi)
 
-The full Winter River topology defines **24 ESP32 boards** (12 per side), and the firmware, simulation engine, and PostgreSQL schema all support all 24. In the **as-delivered** configuration, however, **only about 8 nodes connect and run reliably at the same time** — because every node associates to the Raspberry Pi 5's *onboard* WiFi in access-point mode.
+The full Winter River topology defines **24 ESP32 boards** (12 per side), and the firmware, simulation engine, and PostgreSQL schema all support all 24. In the **as-delivered** configuration, however, **only about 8 nodes connect and run reliably at the same time**, because every node associates to the Raspberry Pi 5's *onboard* WiFi in access-point mode.
 
-The Pi's onboard Broadcom/Cypress WiFi chip has limited on-chip RAM, and in AP (hotspot) mode the stock firmware reliably holds only **~8 associated stations**. Beyond that ceiling the station table saturates and further associations are rejected or dropped — which appears as `WiFi FAILED` / `WiFi LOST` across many boards at once (see [esp32-nodes/TROUBLESHOOTING.md](esp32-nodes/TROUBLESHOOTING.md), condition **A3**). This is a hardware/firmware limit of the Pi's radio, **not** a defect in the node firmware (which already staggers and jitters its connect/retry to avoid a thundering-herd handshake).
+The Pi's onboard Broadcom/Cypress WiFi chip has limited on-chip RAM, and in AP (hotspot) mode the stock firmware reliably holds only **~8 associated stations**. Beyond that ceiling the station table saturates and further associations are rejected or dropped, which appears as `WiFi FAILED` / `WiFi LOST` across many boards at once (see [esp32-nodes/TROUBLESHOOTING.md](esp32-nodes/TROUBLESHOOTING.md), condition **A3**). This is a hardware/firmware limit of the Pi's radio, **not** a defect in the node firmware (which already staggers and jitters its connect/retry to avoid a thundering-herd handshake).
 
-**Reference:** Raspberry Pi forum — [onboard WiFi AP client limit](https://forums.raspberrypi.com/viewtopic.php?t=348157). Limited WiFi-chip RAM caps AP-mode stations at roughly 8; a cut-down `cyfmac43455-sdio-minimal.bin` firmware raises it to ~19, and anything beyond that calls for an external access point.
+**Reference:** Raspberry Pi forum: [onboard WiFi AP client limit](https://forums.raspberrypi.com/viewtopic.php?t=348157). Limited WiFi-chip RAM caps AP-mode stations at roughly 8; a cut-down `cyfmac43455-sdio-minimal.bin` firmware raises it to ~19, and anything beyond that calls for an external access point.
 
-**Running all 24 at once:** drive the nodes from an external AP-capable WiFi adapter or a dedicated 2.4 GHz router (`band bg`, channel 6) instead of the Pi's onboard radio. No firmware, broker, or database changes are required — only the access point changes. See **[deploy/EXTERNAL_AP.md](deploy/EXTERNAL_AP.md)** for the step-by-step runbook.
+**Running all 24 at once:** drive the nodes from an external AP-capable WiFi adapter or a dedicated 2.4 GHz router (`band bg`, channel 6) instead of the Pi's onboard radio. No firmware, broker, or database changes are required; only the access point changes. See **[deploy/EXTERNAL_AP.md](deploy/EXTERNAL_AP.md)** for the step-by-step runbook.
 
 ***
 
@@ -121,7 +121,7 @@ ECE-26.1-Winter-River/
 │   └── requirements-dev.txt           # Dev: pytest, black, flake8, mypy
 ├── deploy/                            # Raspberry Pi systemd units & setup
 │   ├── mosquitto_setup.sh             # Configures Mosquitto (TCP 1883, anonymous, persistence)
-│   ├── winter-river-hotspot.service   # Systemd unit — Pi 2.4 GHz access point
+│   ├── winter-river-hotspot.service   # Systemd unit, Pi 2.4 GHz access point
 │   └── EXTERNAL_AP.md                 # Runbook: external AP for the full 24-node fleet (onboard WiFi caps ~8)
 ├── docs/
 │   ├── ECEGR4880 Technical Report.pdf # Capstone formal deliverable
@@ -131,14 +131,14 @@ ECE-26.1-Winter-River/
 │   ├── lib/
 │   │   └── winter_river/              # Shared WiFi/MQTT/NTP/OLED/topic helper library
 │   └── src/
-│       ├── utility/                   # ①  230 kV grid feed — Side A + B chain roots
+│       ├── utility/                   # ①  230 kV grid feed, Side A + B chain roots
 │       ├── hv_mv_transformer/         # ②  230 kV → 34.5 kV step-down (first on-site)
 │       ├── mv_switchgear/             # ③  34.5 kV MV-bus disconnect (downstream of HV/MV xfmr)
 │       ├── mv_lv_transformer/         # ④  34.5 kV → 480 V step-down
 │       ├── lv_switchgear/             # ⑤  480 V LV bus + utility↔generator transfer point
-│       ├── generator/                 # ⑥  Backup diesel gen, 480 V — feeds lv_switchgear secondary
-│       ├── ups/                       # ⑦  UPS — battery %, charge state, ON_BATTERY
-│       ├── cooling/                   # ⑧  CRAC/CRAH — fan bank (55 fans/side, 110 total)
+│       ├── generator/                 # ⑥  Backup diesel gen, 480 V, feeds lv_switchgear secondary
+│       ├── ups/                       # ⑦  UPS, battery %, charge state, ON_BATTERY
+│       ├── cooling/                   # ⑧  CRAC/CRAH, fan bank (55 fans/side, 110 total)
 │       └── server_rack/               # ⑨-⑫ Four 48 V DC racks per side (single shared source + build_flags)
 ├── grafana/                           # Docker monitoring stack
 │   ├── docker-compose.yml             # InfluxDB 2.7 + Grafana + Telegraf
@@ -148,7 +148,7 @@ ECE-26.1-Winter-River/
 │   └── .env.sample                    # Credential template (copy → grafana/.env)
 ├── images/
 ├── scripts/
-│   ├── setup_pi.sh                    # Run first — full Pi provisioning
+│   ├── setup_pi.sh                    # Run first, full Pi provisioning
 │   ├── setup_hotspot.sh               # Start/stop/status for NetworkManager AP
 │   ├── status.sh                      # Live node & service health check
 │   └── init_db.sql                    # PostgreSQL schema (24 nodes seeded)
@@ -161,7 +161,7 @@ The active ESP32 firmware now shares a common local PlatformIO library at `esp32
 
 This keeps the node matrix consistent across both power paths while making schema updates and bug fixes much cheaper to apply repo-wide.
 
-### Power Chain (Side A — 12 nodes)
+### Power Chain (Side A: 12 nodes)
 
 | #    | Node                     | Role                                             | Voltage                    |
 | ---- | ------------------------ | ------------------------------------------------ | -------------------------- |
@@ -175,11 +175,11 @@ This keeps the node matrix consistent across both power paths while making schem
 | ⑧    | `cooling_a`              | CRAC/CRAH fan bank (55 fans on this side)        | 480 V AC                   |
 | ⑨-⑫ | `server_rack_a{1..4}`    | 48 V DC IT racks (single-fed from `ups_a`)       | 48 V DC                    |
 
-Side B mirrors Side A exactly with `_b` suffix on all node IDs (12 nodes per side, 24 total). There are no shared nodes — sides are fully independent.
+Side B mirrors Side A exactly with `_b` suffix on all node IDs (12 nodes per side, 24 total). There are no shared nodes; sides are fully independent.
 
 ### Broker-synthesized
 
-`facility/status` and `weather/status` are published by `broker/main.py` every tick from live node state — no ESP32 firmware and no DB row.
+`facility/status` and `weather/status` are published by `broker/main.py` every tick from live node state; they have no ESP32 firmware and no DB row.
 
 ### Key Configuration Files
 
@@ -190,9 +190,9 @@ Side B mirrors Side A exactly with `_b` suffix on all node IDs (12 nodes per sid
 | `scripts/init_db.sql`                 | PostgreSQL schema (24-node seed data, `secondary_parent_id` = LV switchgear's generator feed) |
 | `deploy/mosquitto_setup.sh`           | Configures Mosquitto (TCP 1883, anonymous, persistence on)           |
 | `deploy/winter-river-hotspot.service` | Systemd unit for the Pi 2.4 GHz AP                                   |
-| `scripts/setup_pi.sh`                 | Run first — provisions the entire Pi stack end-to-end                |
+| `scripts/setup_pi.sh`                 | Run first, provisions the entire Pi stack end-to-end                |
 | `scripts/status.sh`                   | Checks all nodes + Pi services at a glance                           |
-| `grafana/telegraf.conf`               | Telegraf config — MQTT consumer → InfluxDB v2 bridge                 |
+| `grafana/telegraf.conf`               | Telegraf config, MQTT consumer → InfluxDB v2 bridge                 |
 | `grafana/.env.sample`                 | Credential template; copy to `grafana/.env` before setup             |
 
 <br>

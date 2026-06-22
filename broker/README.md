@@ -1,6 +1,6 @@
-# Broker — Python Simulation Engine
+# Broker: Python Simulation Engine
 
-`broker/main.py` is the **WinterRiverEngine** — the central simulation brain for ECE 26.1 Winter River. It connects to Mosquitto, subscribes to all node telemetry, runs a topology-aware cascade simulation at 1 Hz, and publishes computed power states back to every node via MQTT control commands. Optionally it also writes every tick to InfluxDB for Grafana visualisation.
+`broker/main.py` is the **WinterRiverEngine**, the central simulation brain for ECE 26.1 Winter River. It connects to Mosquitto, subscribes to all node telemetry, runs a topology-aware cascade simulation at 1 Hz, and publishes computed power states back to every node via MQTT control commands. Optionally it also writes every tick to InfluxDB for Grafana visualisation.
 
 > **Project status:** ✅ Completed and delivered to Amazon Web Services (AWS) as the ECE 26.1 senior capstone (June 2026). This engine is archived in its final, as-delivered state and is no longer under active development.
 
@@ -19,7 +19,7 @@ Mosquitto MQTT broker (192.168.4.1:1883)
     ▼
 WinterRiverEngine (broker/main.py)
     ├── _load_topology()     PostgreSQL → in-memory node graph
-    ├── _topo_sort()         Kahn's BFS — respects secondary_parent_id
+    ├── _topo_sort()         Kahn's BFS, respects secondary_parent_id
     ├── _tick()              1 Hz cascade propagation loop
     │     ├── node type handlers (9 types)
     │     ├── publish control commands → MQTT
@@ -40,14 +40,14 @@ WinterRiverEngine (broker/main.py)
 | `MV_LV_TRANSFORMER` | `mv_lv_transformer_a/b` | 34.5 kV → 480 V; passes when `NORMAL/WARNING`, 0 on `FAULT` |
 | `GENERATOR` | `generator_a`, `generator_b` | Standby while utility is live; 10-tick startup delay on utility loss; 480 V when `RUNNING`. Feeds the LV switchgear's secondary input. |
 | `UPS` | `ups_a`, `ups_b` | Parent = lv_switchgear; passes voltage with battery tracking; feeds the side's 4 server_racks |
-| `COOLING` | `cooling_a/b` | Parent = lv_switchgear (mech branch, rides the transfer). Fan bank (55 fans/side, 110 total) — drives broker thermal model |
+| `COOLING` | `cooling_a/b` | Parent = lv_switchgear (mech branch, rides the transfer). Fan bank (55 fans/side, 110 total); drives broker thermal model |
 | `SERVER_RACK` | `server_rack_a1..a4`, `server_rack_b1..b4` | Single-fed from this side's UPS; `NORMAL` when UPS is on grid or recharging (`CHARGING`), `DEGRADED` only while UPS is `ON_BATTERY`, `FAULT` when UPS is down. Side-A failure kills all 4 side-A racks. |
 
 ---
 
 ## Topological Sort
 
-The engine uses **Kahn's BFS algorithm** so cascade propagation always visits parents before children — even with the dual-parent structure of the LV switchgear transfer point (primary = MV/LV transformer, secondary = generator).
+The engine uses **Kahn's BFS algorithm** so cascade propagation always visits parents before children, even with the dual-parent structure of the LV switchgear transfer point (primary = MV/LV transformer, secondary = generator).
 
 ```python
 def _topo_sort(self, nodes):
@@ -68,19 +68,19 @@ Each tick:    → gen_timer decrements, state = STARTING, v_out = 0
 Timer = 0     → state = RUNNING, v_out = 480 V
 ```
 
-This means the LV switchgear output drops to 0 V (`NO_INPUT`) for ~10 seconds before it transfers to the generator (`GENERATOR`) — exactly matching a real data centre emergency scenario where the UPS must carry the load during the gap.
+This means the LV switchgear output drops to 0 V (`NO_INPUT`) for ~10 seconds before it transfers to the generator (`GENERATOR`), exactly matching a real data centre emergency scenario where the UPS must carry the load during the gap.
 
 ---
 
 ## Block-Redundant 2N
 
 Side A and Side B are two fully independent power chains. There is no shared
-rectifier — each side feeds its own 4 server racks single-sided. Redundancy
+rectifier; each side feeds its own 4 server racks single-sided. Redundancy
 is at the *block* level: if Side A loses utility AND its generator fails,
 all 4 side-A racks go FAULT; Side B continues unaffected.
 
 Each side is "up" iff its UPS (`ups_a` / `ups_b`) is present and producing
-voltage — there is no shared convergence point to roll the two sides together.
+voltage; there is no shared convergence point to roll the two sides together.
 
 ---
 
@@ -122,7 +122,7 @@ If `python main.py` exits with “broker config not found,” run the copy comma
 above on the Pi. Fresh clones do not include `broker/config.toml` because it can
 contain local passwords.
 
-**Optional** — add this section to enable InfluxDB writes:
+**Optional:** add this section to enable InfluxDB writes:
 
 ```toml
 [influxdb]
@@ -206,7 +206,7 @@ Full command reference: see each component's README in `esp32-nodes/src/<type>/R
 The thermal model's outdoor weather can be changed at runtime over MQTT. The
 broker **always boots at preset 1 (Virginia Summer)** for deterministic startup;
 weather is no longer read from `config.toml`. Publish to `winter-river/weather/control`
-to change it — the broker republishes `weather/status` immediately and the next
+to change it; the broker republishes `weather/status` immediately and the next
 tick recomputes facility temps from the new weather.
 
 | Token | Effect |
@@ -214,7 +214,7 @@ tick recomputes facility temps from the new weather.
 | `PRESET:<1-6>` | Select a preset, clearing any custom overrides |
 | `RESET` | Return to preset 1 (the startup default) |
 | `OUTDOOR_F:<f>` | Override outdoor dry-bulb temperature (°F) |
-| `RH_PCT:<f>` | Override relative humidity (clamped 0–100) |
+| `RH_PCT:<f>` | Override relative humidity (clamped 0-100) |
 
 Presets: `1` Virginia Summer · `2` Eastern Oregon Winter · `3` Ohio Spring ·
 `4` Arizona Summer · `5` Stockholm Winter · `6` Singapore Monsoon.
@@ -227,7 +227,7 @@ mosquitto_pub -h 192.168.4.1 -t "winter-river/weather/control" -m "RESET"
 
 Tokens are space-delimited and applied in order, so a compound command selects a
 preset then overrides one field (the `weather/status` payload then carries
-`"custom": true`). Invalid commands are logged and ignored — the current weather
+`"custom": true`). Invalid commands are logged and ignored; the current weather
 is left unchanged. Commands must be **non-retained** (retained messages are
 ignored) so a restart truly returns to preset 1; runtime weather is never persisted.
 
@@ -247,6 +247,6 @@ flake8 main.py
 # Type check
 mypy main.py
 
-# Tests (stubs — add to tests/)
+# Tests (stubs: add to tests/)
 pytest
 ```

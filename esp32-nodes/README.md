@@ -1,8 +1,8 @@
-# ESP32 Nodes — Firmware Reference
+# ESP32 Nodes: Firmware Reference
 
 PlatformIO firmware for the 24 ESP32 nodes in the ECE 26.1 Winter River simulator. Each node simulates one component in a block-redundant 2N data-centre power chain, publishes JSON telemetry every 5 seconds, subscribes to MQTT control commands, and drives an SSD1306 128×64 OLED display.
 
-> **Slot budget:** the baseplate has 24 USB-C slots; this firmware tree defines 24 active boards (12 Side A + 12 Side B) — a perfect fit with no overflow.
+> **Slot budget:** the baseplate has 24 USB-C slots; this firmware tree defines 24 active boards (12 Side A + 12 Side B), a perfect fit with no overflow.
 
 > **Project status:** ✅ Completed and delivered to Amazon Web Services (AWS) as the ECE 26.1 senior capstone (June 2026). This firmware is archived in its final, as-delivered state and is no longer under active development.
 
@@ -45,13 +45,13 @@ sudo systemctl start mosquitto
 
 ## Concurrent-Node Limit (Raspberry Pi 5 Onboard WiFi)
 
-The full topology defines **24 ESP32 boards** (12 per side), and this firmware, the simulation engine, and the PostgreSQL schema all support all 24. In the **as-delivered** configuration, however, **only about 8 nodes connect and run reliably at the same time** — because every node associates to the Raspberry Pi 5's *onboard* WiFi in access-point mode.
+The full topology defines **24 ESP32 boards** (12 per side), and this firmware, the simulation engine, and the PostgreSQL schema all support all 24. In the **as-delivered** configuration, however, **only about 8 nodes connect and run reliably at the same time**, because every node associates to the Raspberry Pi 5's *onboard* WiFi in access-point mode.
 
-The Pi's onboard Broadcom/Cypress WiFi chip has limited on-chip RAM, and in AP (hotspot) mode the stock firmware reliably holds only **~8 associated stations**. Beyond that ceiling the station table saturates and further associations are rejected or dropped — which appears as `WiFi FAILED` / `WiFi LOST` across many boards at once (see [TROUBLESHOOTING.md](TROUBLESHOOTING.md), condition **A3**). This is a hardware/firmware limit of the Pi's radio, **not** a defect in the node firmware (which already staggers and jitters its connect/retry to avoid a thundering-herd handshake).
+The Pi's onboard Broadcom/Cypress WiFi chip has limited on-chip RAM, and in AP (hotspot) mode the stock firmware reliably holds only **~8 associated stations**. Beyond that ceiling the station table saturates and further associations are rejected or dropped, which appears as `WiFi FAILED` / `WiFi LOST` across many boards at once (see [TROUBLESHOOTING.md](TROUBLESHOOTING.md), condition **A3**). This is a hardware/firmware limit of the Pi's radio, **not** a defect in the node firmware (which already staggers and jitters its connect/retry to avoid a thundering-herd handshake).
 
-**Reference:** Raspberry Pi forum — [onboard WiFi AP client limit](https://forums.raspberrypi.com/viewtopic.php?t=348157). Limited WiFi-chip RAM caps AP-mode stations at roughly 8; a cut-down `cyfmac43455-sdio-minimal.bin` firmware raises it to ~19, and anything beyond that calls for an external access point.
+**Reference:** Raspberry Pi forum: [onboard WiFi AP client limit](https://forums.raspberrypi.com/viewtopic.php?t=348157). Limited WiFi-chip RAM caps AP-mode stations at roughly 8; a cut-down `cyfmac43455-sdio-minimal.bin` firmware raises it to ~19, and anything beyond that calls for an external access point.
 
-**To run all 24 nodes at once,** drive them from an external AP-capable WiFi adapter or a dedicated 2.4 GHz router (`band bg`, channel 6) instead of the Pi's onboard radio. No firmware, broker, or database changes are required — only the access point changes. See **[../deploy/EXTERNAL_AP.md](../deploy/EXTERNAL_AP.md)** for the step-by-step runbook.
+**To run all 24 nodes at once,** drive them from an external AP-capable WiFi adapter or a dedicated 2.4 GHz router (`band bg`, channel 6) instead of the Pi's onboard radio. No firmware, broker, or database changes are required; only the access point changes. See **[../deploy/EXTERNAL_AP.md](../deploy/EXTERNAL_AP.md)** for the step-by-step runbook.
 
 ---
 
@@ -68,16 +68,16 @@ The Pi's onboard Broadcom/Cypress WiFi chip has limited on-chip RAM, and in AP (
 | ⑤   | `lv_switchgear_a`      | `lv_switchgear/lv_switchgear_a/`         | 480 V LV bus (transfer pt) |
 | ⑥   | `generator_a`          | `generator/generator_a/`                 | 480 V (standby)            |
 | ⑦   | `ups_a`                | `ups/ups_a/`                             | 480 V AC                   |
-| ⑧   | `cooling_a`            | `cooling/cooling_a/`                     | 480 V (fan bank — 55 fans) |
+| ⑧   | `cooling_a`            | `cooling/cooling_a/`                     | 480 V (fan bank, 55 fans) |
 | ⑨-⑫ | `server_rack_a{1..4}`  | `server_rack/` (single shared source)    | 48 V DC                    |
 
-### Side B (12 nodes — mirror of Side A)
+### Side B (12 nodes: mirror of Side A)
 
 All `_a` suffixes replaced with `_b`. Component type directories are identical.
 
 ### Broker-synthesized
 
-`facility/status` and `weather/status` are published by `broker/main.py` from live state every tick — they have no ESP32 firmware and no DB row.
+`facility/status` and `weather/status` are published by `broker/main.py` from live state every tick; they have no ESP32 firmware and no DB row.
 
 `weather/control` is an operator input handled by the broker (not a node): publish
 to it to change the thermal model's outdoor conditions at runtime. The broker boots
@@ -105,7 +105,7 @@ generator ──────────↗  (lv_switchgear secondary feed / tra
 ```
 
 The LV switchgear is the utility↔generator transfer point (there is no separate
-ATS node). Sides are fully independent (block-redundant 2N — no shared
+ATS node). Sides are fully independent (block-redundant 2N, no shared
 rectifier). Side-A failure kills all 4 side-A racks; side-B continues.
 
 ---
@@ -116,7 +116,7 @@ Each node uses two topics:
 
 ```
 winter-river/<node_id>/status    # Node publishes telemetry (JSON, retained, every 5s)
-winter-river/<node_id>/control   # Node subscribes — receives commands from engine
+winter-river/<node_id>/control   # Node subscribes, receives commands from engine
 ```
 
 The LWT message is also published to `winter-river/<node_id>/status` (retained OFFLINE) so any subscriber immediately sees disconnected nodes.
@@ -128,11 +128,11 @@ The LWT message is also published to `winter-river/<node_id>/status` (retained O
 Every node registers a retained LWT at connect time, then immediately publishes a retained ONLINE message:
 
 ```cpp
-// LWT — broker publishes this if node drops
+// LWT: broker publishes this if node drops
 String lwt_msg = "{\"node\":\"utility_a\",\"status\":\"OFFLINE\"}";
 mqtt.connect(node_id, lwt_topic.c_str(), 1, true, lwt_msg.c_str());
 
-// ONLINE override — published immediately after connect
+// ONLINE override: published immediately after connect
 String online_msg = "{\"ts\":\"14:32:01\",\"node\":\"utility_a\",\"status\":\"ONLINE\"}";
 mqtt.publish(status_topic.c_str(), online_msg.c_str(), true);
 ```
@@ -200,13 +200,13 @@ pio device monitor
 | Control topic | Every node must subscribe to `winter-river/<node_id>/control` and provide a callback for `wr::begin()` |
 | Telemetry interval | Use `wr::TELEMETRY_INTERVAL_MS` |
 | NTP | Use `wr::timestamp()` from the shared helper |
-| OLED driver | `Adafruit SSD1306` only — never `LiquidCrystal_I2C` |
+| OLED driver | `Adafruit SSD1306` only, never `LiquidCrystal_I2C` |
 
 ---
 
 ## Libraries
 
-Declared in the shared `[env]` block in `platformio.ini` — available to all environments:
+Declared in the shared `[env]` block in `platformio.ini`, available to all environments:
 
 | Library | Purpose |
 |---------|---------|

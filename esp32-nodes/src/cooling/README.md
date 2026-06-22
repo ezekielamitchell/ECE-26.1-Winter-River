@@ -1,8 +1,8 @@
-# Cooling System — `cooling_a` / `cooling_b`
+# Cooling System: `cooling_a` / `cooling_b`
 
 ## Real-World Role
 
-Computer Room Air Conditioning (CRAC) and Computer Room Air Handling (CRAH) units are the primary mechanical cooling loads in a data center, typically consuming 30–40% of total facility power. Modern facilities target supply air temperatures of 64–77°F (18–25°C) at the server inlet per ASHRAE A1/A2 thermal guidelines. Cooling failures are among the most time-critical incidents in data center operations — without active cooling, server inlet temperatures can exceed thermal shutdown thresholds within minutes at high rack density. Redundant cooling (N+1 or 2N) with automatic failover between units is standard practice in Tier III/IV facilities.
+Computer Room Air Conditioning (CRAC) and Computer Room Air Handling (CRAH) units are the primary mechanical cooling loads in a data center, typically consuming 30-40% of total facility power. Modern facilities target supply air temperatures of 64-77°F (18-25°C) at the server inlet per ASHRAE A1/A2 thermal guidelines. Cooling failures are among the most time-critical incidents in data center operations; without active cooling, server inlet temperatures can exceed thermal shutdown thresholds within minutes at high rack density. Redundant cooling (N+1 or 2N) with automatic failover between units is standard practice in Tier III/IV facilities.
 
 ---
 
@@ -42,7 +42,7 @@ Topic: `winter-river/<node_id>/status`
 |------------|---------------------------------------------------------------|
 | `NORMAL`   | Operating within design parameters; supply temp in range      |
 | `DEGRADED` | Supply temperature elevated but unit functional               |
-| `FAULT`    | Supply temperature critical — active risk to server hardware  |
+| `FAULT`    | Supply temperature critical, active risk to server hardware  |
 | `OFF`      | No input power; unit not operating                            |
 
 ---

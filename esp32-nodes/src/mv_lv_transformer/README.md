@@ -1,8 +1,8 @@
-# MV/LV Transformer — `mv_lv_transformer_a` / `mv_lv_transformer_b`
+# MV/LV Transformer: `mv_lv_transformer_a` / `mv_lv_transformer_b`
 
 ## Real-World Role
 
-The MV/LV transformer steps down medium-voltage grid power to the 480 V building distribution level used by downstream power conditioning equipment. In hyperscale and enterprise facilities these are typically dry-type or liquid-filled units rated 500 kVA–5 MVA. Transformer health is monitored via winding temperature sensors because insulation degradation is the primary failure mode — most manufacturers rate winding insulation up to 150°C but set alarm thresholds at 120–140°C to preserve service life. A failed transformer takes the entire utility power path offline until the unit is repaired or a bypass is established.
+The MV/LV transformer steps down medium-voltage grid power to the 480 V building distribution level used by downstream power conditioning equipment. In hyperscale and enterprise facilities these are typically dry-type or liquid-filled units rated 500 kVA-5 MVA. Transformer health is monitored via winding temperature sensors because insulation degradation is the primary failure mode; most manufacturers rate winding insulation up to 150°C but set alarm thresholds at 120-140°C to preserve service life. A failed transformer takes the entire utility power path offline until the unit is repaired or a bypass is established.
 
 ---
 
@@ -34,9 +34,9 @@ Topic: `winter-river/<node_id>/status`
 
 | State     | Meaning                                                              |
 |-----------|----------------------------------------------------------------------|
-| `NORMAL`  | Healthy — load and temperature within rated limits                   |
-| `WARNING` | Elevated load (> 75%) or elevated temperature (> 149°F) — watch     |
-| `FAULT`   | Critical — transformer de-energised or protection relay triggered    |
+| `NORMAL`  | Healthy, load and temperature within rated limits                   |
+| `WARNING` | Elevated load (> 75%) or elevated temperature (> 149°F), watch     |
+| `FAULT`   | Critical, transformer de-energised or protection relay triggered    |
 
 ---
 

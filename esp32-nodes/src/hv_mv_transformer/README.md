@@ -1,4 +1,4 @@
-# HV/MV Transformer — `hv_mv_transformer_a` / `hv_mv_transformer_b`
+# HV/MV Transformer: `hv_mv_transformer_a` / `hv_mv_transformer_b`
 
 ## Real-World Role
 
@@ -36,7 +36,7 @@ The broker (`broker/main.py`) treats this node like the existing
 | State     | Meaning                                                       |
 |-----------|---------------------------------------------------------------|
 | `NORMAL`  | Healthy step-down operation                                   |
-| `WARNING` | Elevated temperature or load — still passing voltage          |
+| `WARNING` | Elevated temperature or load, still passing voltage          |
 | `FAULT`   | Transformer de-energised; downstream MV switchgear loses feed |
 
 ---

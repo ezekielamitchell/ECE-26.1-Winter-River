@@ -1,8 +1,8 @@
-# Server Rack — `server_rack_{a1..a4,b1..b4}`
+# Server Rack: `server_rack_{a1..a4,b1..b4}`
 
 ## Real-World Role
 
-Server racks are the IT load — the reason the entire power and cooling infrastructure exists. Winter River models 8 racks total (4 per side). Each rack is **single-fed from its side's UPS** (no shared rectifier, no rack-level 2N): a side failure kills all 4 of that side's racks at once. Redundancy lives at the side (block) level, not per-rack. Hot-aisle temperature is driven by the broker thermal model (`broker/thermal.py`) and pushed to each rack's `TEMP:<f>` control every tick.
+Server racks are the IT load: the reason the entire power and cooling infrastructure exists. Winter River models 8 racks total (4 per side). Each rack is **single-fed from its side's UPS** (no shared rectifier, no rack-level 2N): a side failure kills all 4 of that side's racks at once. Redundancy lives at the side (block) level, not per-rack. Hot-aisle temperature is driven by the broker thermal model (`broker/thermal.py`) and pushed to each rack's `TEMP:<f>` control every tick.
 
 ---
 
@@ -37,7 +37,7 @@ Topic: `winter-river/<node_id>/status`
 | `state`    | string | NORMAL   | Rack health state                          |
 | `voltage`  | int    | 48       | Rated DC voltage (V)                       |
 
-There is no `path_a` / `path_b` field — the shared rectifier (and its dual feeds) was removed when the topology shifted to block-redundant 2N.
+There is no `path_a` / `path_b` field; the shared rectifier (and its dual feeds) was removed when the topology shifted to block-redundant 2N.
 
 ---
 
@@ -49,7 +49,7 @@ There is no `path_a` / `path_b` field — the shared rectifier (and its dual fee
 | `DEGRADED` | UPS `ON_BATTERY`, OR inlet > 85 °F, OR CPU > 80 %                   |
 | `FAULT`    | UPS dead, OR inlet > 95 °F, OR CPU > 95 %                           |
 
-The UPS-driven state is set by `broker/main.py`: the rack is `DEGRADED` only while its parent UPS is `ON_BATTERY`, and `FAULT` when the UPS is dead — it returns to `NORMAL` once the side is back on utility/generator power, even while the UPS is still `CHARGING` its battery. Thermal / CPU thresholds are evaluated locally in the firmware.
+The UPS-driven state is set by `broker/main.py`: the rack is `DEGRADED` only while its parent UPS is `ON_BATTERY`, and `FAULT` when the UPS is dead; it returns to `NORMAL` once the side is back on utility/generator power, even while the UPS is still `CHARGING` its battery. Thermal / CPU thresholds are evaluated locally in the firmware.
 
 ---
 
@@ -65,7 +65,7 @@ Topic: `winter-river/<node_id>/control`
 | `INPUT:<v>`      | `INPUT:480`       | Broker sends 480 when fed, 0 when UPS is dead         |
 | `STATUS:<state>` | `STATUS:DEGRADED` | Force state string (used for manual fault injection)  |
 
-`TEMP` is normally driven by `broker/thermal.py`'s hot-aisle output — see `winter-river/facility/status` for the model state.
+`TEMP` is normally driven by `broker/thermal.py`'s hot-aisle output; see `winter-river/facility/status` for the model state.
 
 ---
 

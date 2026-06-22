@@ -1,8 +1,8 @@
-# Uninterruptible Power Supply (UPS) — `ups_a` / `ups_b`
+# Uninterruptible Power Supply (UPS): `ups_a` / `ups_b`
 
 ## Real-World Role
 
-The UPS is the critical bridge between utility or generator power and sensitive IT equipment. It conditions incoming AC, maintains battery energy storage, and provides seamless ride-through during the gap between utility failure and generator pickup — typically 10–30 seconds. Enterprise data centers use double-conversion (online) designs where all power flows through inverters continuously, eliminating any transfer time. Battery runtime targets are typically 10–20 minutes at full load to cover generator start, stabilisation, and a safety margin for extended outages.
+The UPS is the critical bridge between utility or generator power and sensitive IT equipment. It conditions incoming AC, maintains battery energy storage, and provides seamless ride-through during the gap between utility failure and generator pickup, typically 10-30 seconds. Enterprise data centers use double-conversion (online) designs where all power flows through inverters continuously, eliminating any transfer time. Battery runtime targets are typically 10-20 minutes at full load to cover generator start, stabilisation, and a safety margin for extended outages.
 
 ---
 
@@ -14,8 +14,7 @@ The UPS is the critical bridge between utility or generator power and sensitive 
 | `ups_b` | B    | 480 V AC      | `lv_switchgear_b` | `server_rack_b1`, `server_rack_b2`, `server_rack_b3`, `server_rack_b4` |
 
 Each UPS is fed from its side's LV switchgear (the utility↔generator transfer
-point) and single-feeds the 4 server_racks on its side. No shared rectifier —
-sides are fully independent (block-redundant 2N). The racks handle their own
+point) and single-feeds the 4 server_racks on its side. No shared rectifier exists; sides are fully independent (block-redundant 2N). The racks handle their own
 AC→DC conversion internally.
 
 ---
@@ -42,8 +41,8 @@ Topic: `winter-river/<node_id>/status`
 |--------------|-------------------------------------------------------------|
 | `NORMAL`     | AC input present, battery fully charged, output nominal     |
 | `CHARGING`   | AC input present, battery recovering from a discharge event |
-| `ON_BATTERY` | AC input lost — output sustained by battery discharge       |
-| `FAULT`      | Battery depleted or input critically low — output at risk   |
+| `ON_BATTERY` | AC input lost, output sustained by battery discharge       |
+| `FAULT`      | Battery depleted or input critically low, output at risk   |
 
 ---
 
@@ -53,7 +52,7 @@ Topic: `winter-river/<node_id>/control`
 
 | Command          | Example             | Effect                                               |
 |------------------|---------------------|------------------------------------------------------|
-| `BATT:<pct>`     | `BATT:15`           | Set battery state of charge (0–100)                  |
+| `BATT:<pct>`     | `BATT:15`           | Set battery state of charge (0-100)                  |
 | `LOAD:<pct>`     | `LOAD:70`           | Set output load percentage                           |
 | `INPUT:<v>`      | `INPUT:0`           | Set AC input voltage; triggers ON_BATTERY below 440V |
 | `STATUS:<state>` | `STATUS:ON_BATTERY` | Force state string                                   |
@@ -71,7 +70,7 @@ Topic: `winter-river/<node_id>/control`
 
 > These auto-thresholds are a **standalone fallback**. When `broker/main.py` is
 > driving the sim it sends an explicit `STATUS:` every tick and that takes
-> precedence — the firmware applies the table above only when a control message
+> precedence; the firmware applies the table above only when a control message
 > carried no `STATUS:` token (the `status_set` gate). This stops the broker's
 > `CHARGING` from being re-pinned to `ON_BATTERY` while the battery is still
 > below 25 %.

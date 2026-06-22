@@ -1,4 +1,4 @@
-# MV Switchgear — `mv_switchgear_a` / `mv_switchgear_b`
+# MV Switchgear: `mv_switchgear_a` / `mv_switchgear_b`
 
 ## Real-World Role
 
@@ -6,7 +6,7 @@ The MV switchgear is the medium-voltage protection and isolation stage that sits
 on the **34.5 kV bus**, immediately downstream of the HV/MV step-down
 transformer. It houses the main MV breaker, metering CTs/PTs, and protective
 relays (overcurrent, ground fault, differential). In commercial data centers,
-MV switchgear is typically rated 5 kV–38 kV and provides the first switchable
+MV switchgear is typically rated 5 kV-38 kV and provides the first switchable
 point of isolation on-site: operators can open it to drop the entire downstream
 chain for maintenance or in response to a fault, without touching the utility
 service entrance. Tripping it de-energises everything from the MV/LV transformer
@@ -51,13 +51,13 @@ Topic: `winter-river/<node_id>/status`
 
 | State      | Meaning                                                        |
 |------------|----------------------------------------------------------------|
-| `CLOSED`   | Normal — main breaker closed, MV bus energised from the HV/MV transformer |
-| `NO_INPUT` | No upstream feed (HV/MV transformer dead) — **not sticky**, re-closes when re-energised |
-| `OPEN`     | Main breaker opened by the operator — sticky                   |
-| `TRIPPED`  | Protective relay triggered a fault trip — sticky               |
-| `FAULT`    | Overcurrent / overload detected — sticky                       |
+| `CLOSED`   | Normal, main breaker closed, MV bus energised from the HV/MV transformer |
+| `NO_INPUT` | No upstream feed (HV/MV transformer dead), **not sticky**, re-closes when re-energised |
+| `OPEN`     | Main breaker opened by the operator, sticky                   |
+| `TRIPPED`  | Protective relay triggered a fault trip, sticky               |
+| `FAULT`    | Overcurrent / overload detected, sticky                       |
 
-`OPEN`, `TRIPPED`, and `FAULT` are sticky — they survive re-energisation until
+`OPEN`, `TRIPPED`, and `FAULT` are sticky; they survive re-energisation until
 cleared with an explicit `CLOSE` / `STATUS:CLOSED` control. `NO_INPUT` is the
 non-sticky "unfed" label, so the breaker re-closes automatically once the
 upstream chain comes back (this is what lets a utility outage recover cleanly).

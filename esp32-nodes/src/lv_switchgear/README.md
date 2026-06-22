@@ -1,15 +1,15 @@
-# LV Switchgear — `lv_switchgear_a` / `lv_switchgear_b`
+# LV Switchgear: `lv_switchgear_a` / `lv_switchgear_b`
 
 ## Real-World Role
 
 The LV switchgear is the low-voltage protection, isolation, and **source-transfer**
 stage on the **480 V bus**, immediately downstream of the MV/LV step-down
-transformer. It is the utility↔generator transfer point for the side — the role a
+transformer. It is the utility↔generator transfer point for the side, which is the role a
 separate automatic transfer switch (ATS) used to play in this model. Its
 **primary** input is the MV/LV-transformer (utility-derived) path; its
 **secondary** input is the standby generator. It prefers the utility path and
 transfers to the generator when the LV bus loses its transformer feed. Its output
-energises the side's UPS (IT path) and cooling (mech path) in parallel — so
+energises the side's UPS (IT path) and cooling (mech path) in parallel, so
 opening or tripping it drops the whole side. In real installations this is a
 low-voltage switchboard with a main breaker, a generator tie breaker, branch
 breakers, and metering.
@@ -59,14 +59,14 @@ Topic: `winter-river/<node_id>/status`
 
 | State       | Meaning                                                                 |
 |-------------|--------------------------------------------------------------------------|
-| `CLOSED`    | Normal — main breaker closed on the utility (MV/LV transformer) path; 480 V LV bus energised |
-| `GENERATOR` | Transferred to the standby generator (utility path lost, generator running) — bus still 480 V |
-| `NO_INPUT`  | Both sources dead (no transformer feed, generator not running) — **not sticky** |
-| `OPEN`      | Main breaker opened by the operator — sticky; drops the whole side       |
-| `TRIPPED`   | Protective relay triggered a fault trip — sticky                         |
-| `FAULT`     | Overcurrent / overload detected — sticky                                 |
+| `CLOSED`    | Normal, main breaker closed on the utility (MV/LV transformer) path; 480 V LV bus energised |
+| `GENERATOR` | Transferred to the standby generator (utility path lost, generator running), bus still 480 V |
+| `NO_INPUT`  | Both sources dead (no transformer feed, generator not running), **not sticky** |
+| `OPEN`      | Main breaker opened by the operator, sticky; drops the whole side       |
+| `TRIPPED`   | Protective relay triggered a fault trip, sticky                         |
+| `FAULT`     | Overcurrent / overload detected, sticky                                 |
 
-`OPEN`, `TRIPPED`, and `FAULT` are sticky — they hold the bus dead (blocking
+`OPEN`, `TRIPPED`, and `FAULT` are sticky; they hold the bus dead (blocking
 **both** sources) until cleared with an explicit `CLOSE` / `STATUS:CLOSED`
 control. `NO_INPUT` is **not** sticky: it is just the "no live source" label, so
 the bus re-energises the moment the utility path or the generator returns. (That
@@ -146,7 +146,7 @@ mosquitto_sub -h 192.168.4.1 -t "winter-river/lv_switchgear_a/status" -v
 mosquitto_pub -h 192.168.4.1 -t "winter-river/utility_a/control" -m "STATUS:OUTAGE"
 mosquitto_pub -h 192.168.4.1 -t "winter-river/utility_a/control" -m "STATUS:GRID_OK"
 
-# Open the LV main breaker — drops the WHOLE side (ups + cooling), generator
+# Open the LV main breaker: drops the WHOLE side (ups + cooling), generator
 # included, since the generator ties in behind this switchgear. Sticky.
 mosquitto_pub -h 192.168.4.1 -t "winter-river/lv_switchgear_a/control" -m "OPEN"
 
