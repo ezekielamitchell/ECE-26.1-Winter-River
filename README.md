@@ -33,9 +33,9 @@ By combining physical modularity (plug-and-play components on a custom PCB basep
 * Modular Plug-and-Play Architecture: Custom PCB baseplate with USB-C connectors at each node location enables quick reconfiguration of data center topologies. Components attach and detach like breadboard circuits, supporting experimentation with different redundancy configurations and power paths.
 * ESP32-Based Smart Components: Each data center component (generators, switchgear, transformers, UPS, server racks) contains an ESP32-WROOM-32 microcontroller with an integrated OLED display showing real-time operational parameters (voltage, current, power consumption, temperature, fault status).
 * MQTT Publish-Subscribe Communication: Industry-standard MQTT protocol enables scalable, low-bandwidth communication between all components. ESP32 nodes publish sensor data and receive commands through a central Mosquitto broker, mirroring real industrial IoT architectures.
-* Raspberry Pi 5 Simulation Engine: Central controller calculates and broadcasts system-wide power flow, thermal conditions, and failure propagation in real-time. Implements 2N redundancy logic, cumulative rack loading calculations, and coordinated failure scenarios.
+* Raspberry Pi 5 Simulation Engine: Central controller calculates and broadcasts system-wide power flow, thermal conditions, and failure propagation in real-time. Implements block-level redundancy logic, UPS battery behavior, generator timing, and thermal calculations.
 * Block-Redundant 2N Topology: Two fully independent power chains (Side A and Side B), each feeding 4 single-sided server racks. Side-A failure kills all 4 side-A racks while side-B continues, modelling the side/block redundancy used in many real hyperscale halls.
-* Scenario-Based Training: Automated failure scenarios including utility power loss with generator startup delays, UPS switchover events, cooling system failures with progressive thermal warnings, overload conditions leading to circuit breaker trips, and component removal/hot-swap detection.
+* Scenario-Based Training: Repeatable demonstrations include utility loss with generator startup delay, UPS battery bridging, physical component removal through MQTT LWT, and cooling fan-capacity loss.
 
 ***
 
@@ -52,7 +52,7 @@ By combining physical modularity (plug-and-play components on a custom PCB basep
 | Component Types        | 24 modules (12 Side A + 12 Side B)            | Utility, HV/MV transformer, MV switchgear, MV/LV transformer, LV switchgear (utility↔generator transfer point), generator, UPS, cooling, 4× server_rack per side. |
 | Simulation Features    | Real-time system states                       | Power flow, thermal modeling, failure propagation, hot-swap detection                                                         |
 | Development Platform   | PlatformIO + Python                           | ESP32 firmware, Raspberry Pi controller scripts, GitHub CI/CD                                                                 |
-| Visualization          | Grafana Dashboard                             | Real-time metrics, system topology view, historical data analysis                                                             |
+| Visualization          | Grafana Dashboard                             | Supplemental numeric telemetry and history; delivered dashboards have incomplete node and string-state coverage               |
 
 ***
 
@@ -75,9 +75,9 @@ By combining physical modularity (plug-and-play components on a custom PCB basep
 | Metric                          | Target                                      | Status     |
 | ------------------------------- | ------------------------------------------- | ---------- |
 | Full block-redundant 2N firmware/topology | 24 ESP32 nodes (≤8 concurrent on Pi onboard WiFi, see note) | ✅ Delivered |
-| 3+ automated failure scenarios  | Utility loss, UPS switchover, cooling fault | ✅ Delivered |
-| Grafana dashboard deployed      | Real-time visualization at :3000            | ✅ Delivered |
-| InfluxDB / Telegraf integration | MQTT → InfluxDB live pipeline               | ✅ Delivered |
+| Failure-scenario training       | Utility loss, node removal, cooling loss    | ✅ Delivered with the as-delivered limits below |
+| Grafana dashboard stack         | Real-time visualization at :3000            | ⚠ Delivered with incomplete panels |
+| InfluxDB / Telegraf integration | MQTT → InfluxDB live pipeline               | ⚠ Numeric telemetry works; string-state parsing needs correction |
 | Documentation complete          | README, CLAUDE.md, TESTING.md + technical report | ✅ Delivered |
 | AWS delivery                    | Functional prototype delivered to AWS (June 2026) | ✅ Delivered |
 
@@ -94,6 +94,34 @@ The Pi's onboard Broadcom/Cypress WiFi chip has limited on-chip RAM, and in AP (
 **Reference:** Raspberry Pi forum: [onboard WiFi AP client limit](https://forums.raspberrypi.com/viewtopic.php?t=348157). Limited WiFi-chip RAM caps AP-mode stations at roughly 8; a cut-down `cyfmac43455-sdio-minimal.bin` firmware raises it to ~19, and anything beyond that calls for an external access point.
 
 **Running all 24 at once:** drive the nodes from an external AP-capable WiFi adapter or a dedicated 2.4 GHz router (`band bg`, channel 6) instead of the Pi's onboard radio. No firmware, broker, or database changes are required; only the access point changes. See **[deploy/EXTERNAL_AP.md](deploy/EXTERNAL_AP.md)** for the step-by-step runbook.
+
+## As-Delivered Software Boundaries
+
+Winter River is archived in the state delivered in June 2026. These boundaries
+matter when operating or teaching from the repository:
+
+* The Python simulation engine is installed by `scripts/setup_pi.sh`, but it is
+  not registered as a systemd service. Start `broker/main.py` manually before a
+  scenario session.
+* Utility commands are operator-owned and reliably drive the utility-loss demo.
+  The broker publishes control commands to every non-utility node once per
+  second, so a one-shot manual `STATUS` command to a generator, switchgear,
+  transformer, UPS, or rack can be overwritten before the node reports it.
+  The final runbook uses physical node removal or a broker-authoritative database
+  state change for those scenarios.
+* A transformer firmware `FAULT` label does not force the broker-computed output
+  voltage to zero in the delivered engine. Physically removing the transformer
+  is the reliable way to demonstrate loss of that power path.
+* The native Telegraf/InfluxDB pipeline records numeric MQTT telemetry. The
+  tracked Telegraf configuration does not preserve JSON string fields such as
+  `state` and `status`, so the state-based Grafana panels need parser correction.
+  `broker-overview.json` is also a placeholder and the node dashboard does not
+  contain all 24 node panels. OLED and raw MQTT are therefore the primary demo
+  evidence; Grafana is supplemental.
+* `docs/ECEGR4880 Technical Report.pdf` is a March 2026 milestone report. It
+  documents an earlier PDU/rectifier and rack-redundancy concept, not the final
+  24-node block-redundant topology. This README and `TESTING.md` describe the
+  delivered topology.
 
 ***
 
@@ -140,8 +168,8 @@ ECE-26.1-Winter-River/
 │       ├── ups/                       # ⑦  UPS, battery %, charge state, ON_BATTERY
 │       ├── cooling/                   # ⑧  CRAC/CRAH, fan bank (55 fans/side, 110 total)
 │       └── server_rack/               # ⑨-⑫ Four 48 V DC racks per side (single shared source + build_flags)
-├── grafana/                           # Docker monitoring stack
-│   ├── docker-compose.yml             # InfluxDB 2.7 + Grafana + Telegraf
+├── grafana/                           # Native systemd monitoring configuration
+│   ├── docker-compose.yml             # Deprecated Docker reference only
 │   ├── telegraf.conf                  # MQTT consumer → InfluxDB v2 bridge
 │   ├── provisioning/                  # Auto-provisioned datasources & dashboards
 │   ├── dashboards/                    # Dashboard JSON exports
